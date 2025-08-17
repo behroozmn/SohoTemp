@@ -1,8 +1,9 @@
-
 # Step1
+
 `install Debian 12` with all configuration
 
 # Step2
+
 After boot OS install this packages
 
 ```shell
@@ -18,8 +19,23 @@ sudo /sbin/usermod -aG sudo user
 sudo shutdown -r now
 ```
 
-
 # DRF
+
+File: `setting.py`
+
+```python
+INSTALL_APPS = [..., 'rest_framework', ...]
+```
+
+File: `urls.py`
+
+```python
+from django.urls import path, include
+
+urlpatterns = [
+    path('api/auth/', include('rest_framework.urls'))
+]
+```
 
 ```shell
 # (.venv)
@@ -31,7 +47,59 @@ python3 manage.py makemigrations
 python3 manage.py migrate
 ```
 
+```shell
+python3 manage.py createsuperuser
+```
 
+
+# Swagger
+
+```shell
+pip install drf-spectacular
+```
+
+File: `Setting.py`
+
+* `INSTALL_APPS=[... , 'drf_spectacular' ,...]` # Swagget
+
+  ```python
+  REST_FRAMEWORK = {
+      'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+      #     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.BasicAuthentication'],
+      #     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']
+  }
+  
+  SPECTACULAR_SETTINGS = {
+      'TITLE': 'Your Project API',
+      'DESCRIPTION': 'Your project description',
+      'VERSION': '1.0.0',
+      'SERVE_INCLUDE_SCHEMA': False,
+  }
+  ```
+
+File: `urls.py`
+
+```python
+from django.contrib import admin
+from . import views
+from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('api/auth/', include('rest_framework.urls')),
+
+    # YOUR PATTERNS
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+
+    # Optional UI:
+    path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('memory', views.memory),
+    path('cpu', views.cpu),
+    path('network', views.network),
+    path('disk', views.disk),
+]
+```
 
 # ZFS(.deb)
 
