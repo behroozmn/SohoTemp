@@ -60,6 +60,8 @@ pip install drf-spectacular
 
 File: `Setting.py`
 
+ALLOWED_HOSTS = ['*'] # behroozMohamadinasab
+
 * `INSTALL_APPS=[... , 'drf_spectacular' ,...]` # Swagget
 
   ```python
