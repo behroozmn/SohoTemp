@@ -19,7 +19,17 @@ sudo shutdown -r now
 ```
 
 
+# DRF
 
+```shell
+# (.venv)
+pip install djangorestframework
+pip install markdown
+pip install django-filter 
+pip install psutil
+python3 manage.py makemigrations
+python3 manage.py migrate
+```
 
 
 
