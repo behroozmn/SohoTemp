@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework', # behroozMohamadinasab
     'drf_spectacular', # behroozMohamadinasab
+    'rest_framework.authtoken',
 ]
 
 MIDDLEWARE = [
@@ -128,8 +129,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.BasicAuthentication'],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']
+    # 'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.BasicAuthentication'], # behrooz:[For Basic authentication]
+    # 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'] # behrooz:[For Basic authentication]
+
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'], # behrooz:[For Token authentication]
+    'DEFAULT_PERMISSION_CLASSES':     ['rest_framework.permissions.IsAuthenticated'] # behrooz:[For Token authentication]
 }
 
 SPECTACULAR_SETTINGS = {
