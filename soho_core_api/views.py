@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
-from PythonLibraries.hardware import Memory ,CPU ,Network ,Disk
+from pylibs.hardware import Memory ,CPU ,Network ,Disk
 
 
 def index(myrequest):
