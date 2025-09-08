@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# فارسی: این ماژول یک کلاس سطح‌بالا برای مدیریت ZFS با libzfs و fallback ایمن به CLI ارائه می‌دهد.
+# FA: این ماژول یک کلاس سطح‌بالا برای مدیریت ZFS با libzfs و fallback ایمن به CLI ارائه می‌دهد.
 # EN: This module provides a high-level ZFS manager using libzfs with safe CLI fallbacks.
 
 import libzfs  # required by user request: use libzfs binding
@@ -14,21 +14,21 @@ from typing import Dict, List, Optional, Iterable, Tuple, Any
 
 def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return a DRF-friendly success envelope."""
-    # فارسی: پاسخ موفق استاندارد برای بازگشت به DRF.
+    # FA: پاسخ موفق استاندارد برای بازگشت به DRF.
     # EN: Standard success envelope to return in DRF responses.
     return {"ok": True, "error": None, "data": data, "meta": meta or {}}
 
 
 def fail(message: str, code: str = "zfs_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return a DRF-friendly failure envelope."""
-    # فارسی: پاسخ خطا با پیام و کُد منطقی.
+    # FA: پاسخ خطا با پیام و کُد منطقی.
     # EN: Failure envelope with human-readable message and logical code.
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
 
 
 class ZFSError(Exception):
     """Domain exception for ZFS manager."""
-    # فارسی: استثنای دامنه‌ای مخصوص ZFS برای تفکیک خطاها.
+    # FA: استثنای دامنه‌ای مخصوص ZFS برای تفکیک خطاها.
     # EN: Domain-specific exception for clear error separation.
     pass
 
@@ -45,7 +45,7 @@ class ZFSManager:
 
     def __init__(self, dry_run: bool = False, run_timeout: int = 180) -> None:
         """Initialize manager with libzfs, dry-run mode and CLI timeout."""
-        # فارسی: اتصال libzfs برقرار می‌شود؛ dry_run برای تست بدون اعمال تغییر؛ run_timeout برای محدود کردن اجرای CLI.
+        # FA: اتصال libzfs برقرار می‌شود؛ dry_run برای تست بدون اعمال تغییر؛ run_timeout برای محدود کردن اجرای CLI.
         # EN: Initialize libzfs; dry_run to simulate actions; run_timeout limits CLI execution time.
 
         self.zfs = libzfs.ZFS()
@@ -56,7 +56,7 @@ class ZFSManager:
 
     def _run(self, args: List[str], stdin: Optional[bytes] = None) -> Tuple[str, str]:
         """Run a CLI command safely (no shell=True), return (stdout, stderr)."""
-        # فارسی: اجرای امن CLI با آرگومان‌های لیستی جهت جلوگیری از تزریق؛ پشتیبانی از ورودی باینری.
+        # FA: اجرای امن CLI با آرگومان‌های لیستی جهت جلوگیری از تزریق؛ پشتیبانی از ورودی باینری.
         # EN: Safe CLI execution with list args to avoid injection; supports binary stdin.
         cmd_str = " ".join(shlex.quote(a) for a in args)
         if self.dry_run:
@@ -73,7 +73,7 @@ class ZFSManager:
 
     def _get_dataset(self, name: str) -> libzfs.ZFSDataset:
         """Return dataset object or raise ZFSError."""
-        # فارسی: تلاش برای گرفتن دیتاست از libzfs؛ در صورت نبود، خطا می‌دهیم.
+        # FA: تلاش برای گرفتن دیتاست از libzfs؛ در صورت نبود، خطا می‌دهیم.
         # EN: Try fetching dataset via libzfs; raise if not found.
         try:
             return self.zfs.get_dataset(name)
@@ -82,7 +82,7 @@ class ZFSManager:
 
     def _get_pool(self, name: str) -> libzfs.ZFSPool:
         """Return pool object or raise ZFSError."""
-        # فارسی: در بین poolها جستجو می‌کنیم و نام مطابق را بازمی‌گردانیم.
+        # FA: در بین poolها جستجو می‌کنیم و نام مطابق را بازمی‌گردانیم.
         # EN: Iterate pools and return the matching one by name.
         for pool in self.zfs.pools:
             if pool.name == name:
@@ -91,7 +91,7 @@ class ZFSManager:
 
     def _safe_prop_value(self, v: Any) -> Any:
         """Normalize libzfs property object to plain value if needed."""
-        # فارسی: برخی bindingها شیء Property برمی‌گردانند؛ value را استخراج می‌کنیم.
+        # FA: برخی bindingها شیء Property برمی‌گردانند؛ value را استخراج می‌کنیم.
         # EN: Some bindings return Property objects; extract .value when present.
         return getattr(v, "value", v)
 
@@ -99,7 +99,7 @@ class ZFSManager:
 
     def list_pools(self) -> Dict[str, Any]:
         """List zpool names."""
-        # فارسی: نام تمام zpoolها را از libzfs می‌گیریم.
+        # FA: نام تمام zpoolها را از libzfs می‌گیریم.
         # EN: Get all zpool names via libzfs.
         try:
             return ok([p.name for p in self.zfs.pools])
@@ -108,7 +108,7 @@ class ZFSManager:
 
     def pool_status(self, pool: str) -> Dict[str, Any]:
         """Basic pool status: name/state/health/guid and a few props."""
-        # فارسی: وضعیت ساده‌ی یک zpool به‌همراه چند property مهم.
+        # FA: وضعیت ساده‌ی یک zpool به‌همراه چند property مهم.
         # EN: Simple zpool status with a few important properties.
         try:
             p = self._get_pool(pool)
@@ -131,7 +131,7 @@ class ZFSManager:
 
     def pool_status_verbose(self, pool: str) -> Dict[str, Any]:
         """Return raw output of `zpool status -v <pool>`."""
-        # فارسی: خروجی کامل برای عیب‌یابی دقیق؛ برای پارس بعدی ذخیره کنید.
+        # FA: خروجی کامل برای عیب‌یابی دقیق؛ برای پارس بعدی ذخیره کنید.
         # EN: Full verbose status; store/parse downstream as needed.
         try:
             out, _ = self._run(["zpool", "status", "-v", pool])
@@ -141,7 +141,7 @@ class ZFSManager:
 
     def pool_iostat(self, pool: Optional[str] = None, samples: int = 1, interval: int = 1) -> Dict[str, Any]:
         """Return raw output of `zpool iostat -v` (optionally for one pool)."""
-        # فارسی: نمونه‌ای از آمار I/O برای تحلیل لحظه‌ای.
+        # FA: نمونه‌ای از آمار I/O برای تحلیل لحظه‌ای.
         # EN: One-shot I/O stats snapshot for quick visibility.
         try:
             args = ["zpool", "iostat", "-v"]
@@ -156,7 +156,7 @@ class ZFSManager:
     def list_datasets(self, pool: Optional[str] = None,
                       types: Iterable[str] = ("filesystem", "volume", "snapshot")) -> Dict[str, Any]:
         """List datasets with type."""
-        # فارسی: لیست دیتاست‌ها (fs/zvol/snapshot) به‌صورت ساده.
+        # FA: لیست دیتاست‌ها (fs/zvol/snapshot) به‌صورت ساده.
         # EN: List datasets filtered by type (fs/zvol/snapshot).
         try:
             args = ["zfs", "list", "-H", "-o", "name,type", "-t", ",".join(types), "-r"]
@@ -176,7 +176,7 @@ class ZFSManager:
 
     def get_props(self, target: str) -> Dict[str, Any]:
         """Return all visible properties of a dataset as a dict."""
-        # فارسی: دریافت همهٔ propertyها؛ ابتدا libzfs سپس CLI.
+        # FA: دریافت همهٔ propertyها؛ ابتدا libzfs سپس CLI.
         # EN: Fetch all properties; try libzfs then fallback to CLI.
         try:
             try:
@@ -206,7 +206,7 @@ class ZFSManager:
                     force: bool = False, altroot: Optional[str] = None,
                     ashift: Optional[int] = None) -> Dict[str, Any]:
         """Create a zpool using CLI (safe arg building)."""
-        # فارسی: ساخت zpool با گروه‌های vdev؛ از -o ها و گزینه‌ها پشتیبانی می‌شود.
+        # FA: ساخت zpool با گروه‌های vdev؛ از -o ها و گزینه‌ها پشتیبانی می‌شود.
         # EN: Create zpool with vdev groups; supports -o properties and options.
         try:
             args = ["zpool", "create"]
@@ -229,7 +229,7 @@ class ZFSManager:
 
     def destroy_pool(self, name: str, force: bool = False) -> Dict[str, Any]:
         """Destroy a zpool."""
-        # فارسی: حذف کامل zpool؛ با احتیاط استفاده شود.
+        # FA: حذف کامل zpool؛ با احتیاط استفاده شود.
         # EN: Destroy zpool; dangerous—use carefully.
         try:
             args = ["zpool", "destroy"]
@@ -244,7 +244,7 @@ class ZFSManager:
     def import_pool(self, name: Optional[str] = None,
                     dir_hint: Optional[str] = None, readonly: bool = False) -> Dict[str, Any]:
         """Import a zpool (optionally read-only)."""
-        # فارسی: ایمپورت یک zpool از مسیر خاص یا حالت فقط‌خواندنی.
+        # FA: ایمپورت یک zpool از مسیر خاص یا حالت فقط‌خواندنی.
         # EN: Import a zpool from a search dir or as read-only.
         try:
             args = ["zpool", "import"]
@@ -261,7 +261,7 @@ class ZFSManager:
 
     def export_pool(self, name: str, force: bool = False) -> Dict[str, Any]:
         """Export a zpool."""
-        # فارسی: خروج یک zpool برای انتقال به سیستم دیگر.
+        # FA: خروج یک zpool برای انتقال به سیستم دیگر.
         # EN: Export a zpool to move/use on another system.
         try:
             args = ["zpool", "export"]
@@ -275,7 +275,7 @@ class ZFSManager:
 
     def scrub_pool(self, name: str, stop: bool = False) -> Dict[str, Any]:
         """Start or stop a scrub."""
-        # فارسی: شروع یا توقف scrub برای بررسی و ترمیم خطاهای silent.
+        # FA: شروع یا توقف scrub برای بررسی و ترمیم خطاهای silent.
         # EN: Start/stop scrub to detect/correct silent errors.
         try:
             args = ["zpool", "scrub"]
@@ -289,7 +289,7 @@ class ZFSManager:
 
     def clear_pool(self, name: str, device: Optional[str] = None) -> Dict[str, Any]:
         """Clear error counters on a pool/device."""
-        # فارسی: پاک‌سازی شمارنده‌های خطا در کل pool یا یک دیسک خاص.
+        # FA: پاک‌سازی شمارنده‌های خطا در کل pool یا یک دیسک خاص.
         # EN: Clear error counters for pool or a specific device.
         try:
             args = ["zpool", "clear", name]
@@ -302,7 +302,7 @@ class ZFSManager:
 
     def features(self, pool: str) -> Dict[str, Any]:
         """List feature@* flags for a pool."""
-        # فارسی: ویژگی‌های فعال/غیرفعال شدهٔ pool را از zpool get استخراج می‌کنیم.
+        # FA: ویژگی‌های فعال/غیرفعال شدهٔ pool را از zpool get استخراج می‌کنیم.
         # EN: Extract feature flags from `zpool get`.
         try:
             out, _ = self._run(["zpool", "get", "-H", "-o", "name,property,value,source", "all", pool])
@@ -322,7 +322,7 @@ class ZFSManager:
     def create_dataset(self, name: str, properties: Optional[Dict[str, str]] = None,
                        dataset_type: str = "filesystem") -> Dict[str, Any]:
         """Create a filesystem or a zvol (volume)."""
-        # فارسی: ساخت filesystem یا zvol؛ برای zvol باید volsize تعیین شود.
+        # FA: ساخت filesystem یا zvol؛ برای zvol باید volsize تعیین شود.
         # EN: Create filesystem or zvol; zvol requires 'volsize'.
         try:
             args = ["zfs", "create", "-p"]
@@ -340,7 +340,7 @@ class ZFSManager:
 
     def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:
         """Destroy a dataset (optionally recursive/force)."""
-        # فارسی: حذف dataset با انتخاب حذف بازگشتی یا اجباری.
+        # FA: حذف dataset با انتخاب حذف بازگشتی یا اجباری.
         # EN: Destroy dataset with optional recursive/force flags.
         try:
             args = ["zfs", "destroy"]
@@ -356,7 +356,7 @@ class ZFSManager:
 
     def set_props(self, target: str, properties: Dict[str, str]) -> Dict[str, Any]:
         """Set properties on a dataset (attempt libzfs, fallback CLI)."""
-        # فارسی: تلاش برای ست‌کردن property با libزfs؛ درصورت نیاز با CLI.
+        # FA: تلاش برای ست‌کردن property با libزfs؛ درصورت نیاز با CLI.
         # EN: Set properties via libzfs when possible; fallback to CLI.
         try:
             ds = self._get_dataset(target)
@@ -384,7 +384,7 @@ class ZFSManager:
 
     def snapshot(self, name: str, recursive: bool = False, props: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """Create a snapshot <dataset>@<snap>."""
-        # فارسی: ایجاد snapshot برای نسخه‌برداری سریع.
+        # FA: ایجاد snapshot برای نسخه‌برداری سریع.
         # EN: Create snapshot for point-in-time copy.
         try:
             args = ["zfs", "snapshot"]
@@ -401,7 +401,7 @@ class ZFSManager:
 
     def list_snapshots(self, dataset: Optional[str] = None) -> Dict[str, Any]:
         """List snapshots (name, creation, used, refer)."""
-        # فارسی: فهرست snapshotها با چند فیلد کاربردی.
+        # FA: فهرست snapshotها با چند فیلد کاربردی.
         # EN: Return snapshots with a few useful columns.
         try:
             target = dataset or ""
@@ -418,7 +418,7 @@ class ZFSManager:
 
     def bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:
         """Create a bookmark from a snapshot."""
-        # فارسی: بوکمارک سبک‌تر از snapshot است و برای replication مناسب است.
+        # FA: بوکمارک سبک‌تر از snapshot است و برای replication مناسب است.
         # EN: Bookmark is a lightweight snapshot pointer, handy for replication.
         try:
             out, _ = self._run(["zfs", "bookmark", snapshot, bookmark])
@@ -428,7 +428,7 @@ class ZFSManager:
 
     def list_bookmarks(self, dataset: Optional[str] = None) -> Dict[str, Any]:
         """List bookmarks under dataset (or all)."""
-        # فارسی: لیست نام بوکمارک‌ها برای مدیریت و پاک‌سازی.
+        # FA: لیست نام بوکمارک‌ها برای مدیریت و پاک‌سازی.
         # EN: List bookmark names for management/cleanup.
         try:
             args = ["zfs", "list", "-H", "-o", "name", "-t", "bookmark"]
@@ -442,7 +442,7 @@ class ZFSManager:
 
     def clone(self, snapshot: str, target: str, properties: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """Clone a snapshot into a new dataset."""
-        # فارسی: ایجاد کلون سریع از snapshot برای تست یا شاخهٔ داده.
+        # FA: ایجاد کلون سریع از snapshot برای تست یا شاخهٔ داده.
         # EN: Fast clone from snapshot for testing/branching.
         try:
             args = ["zfs", "clone"]
@@ -457,7 +457,7 @@ class ZFSManager:
 
     def promote(self, dataset: str) -> Dict[str, Any]:
         """Promote a clone to a normal dataset."""
-        # فارسی: قطع وابستگی کلون از والد با promote.
+        # FA: قطع وابستگی کلون از والد با promote.
         # EN: Break clone dependency via promote.
         try:
             out, _ = self._run(["zfs", "promote", dataset])
@@ -467,7 +467,7 @@ class ZFSManager:
 
     def rename(self, src: str, dst: str, recursive: bool = False) -> Dict[str, Any]:
         """Rename a dataset (optionally recursive)."""
-        # فارسی: تغییر نام دیتاست با امکان بازگشتی.
+        # FA: تغییر نام دیتاست با امکان بازگشتی.
         # EN: Rename dataset with optional recursion.
         try:
             args = ["zfs", "rename"]
@@ -482,7 +482,7 @@ class ZFSManager:
     def rollback(self, dataset: str, to_snapshot: Optional[str] = None,
                  destroy_more_recent: bool = False) -> Dict[str, Any]:
         """Rollback dataset to a snapshot."""
-        # فارسی: بازگشت به snapshot مشخص یا آخرین snapshot.
+        # FA: بازگشت به snapshot مشخص یا آخرین snapshot.
         # EN: Rollback to a specific or latest snapshot.
         try:
             args = ["zfs", "rollback"]
@@ -499,7 +499,7 @@ class ZFSManager:
 
     def mount(self, dataset: str) -> Dict[str, Any]:
         """Mount a filesystem dataset."""
-        # فارسی: سوارکردن دیتاست در mountpoint تعریف‌شده.
+        # FA: سوارکردن دیتاست در mountpoint تعریف‌شده.
         # EN: Mount dataset at its defined mountpoint.
         try:
             out, _ = self._run(["zfs", "mount", dataset])
@@ -509,7 +509,7 @@ class ZFSManager:
 
     def unmount(self, dataset: str, force: bool = False) -> Dict[str, Any]:
         """Unmount a dataset."""
-        # فارسی: پیاده‌کردن دیتاست؛ در صورت نیاز با force.
+        # FA: پیاده‌کردن دیتاست؛ در صورت نیاز با force.
         # EN: Unmount dataset; can force if needed.
         try:
             args = ["zfs", "unmount"]
@@ -525,31 +525,31 @@ class ZFSManager:
 
     def set_quota(self, dataset: str, size: str) -> Dict[str, Any]:
         """Set dataset quota (e.g., '100G' or 'none')."""
-        # فارسی: تعیین quota برای محدودیت فضای قابل‌دید کاربر.
+        # FA: تعیین quota برای محدودیت فضای قابل‌دید کاربر.
         # EN: Set user-visible quota limit.
         return self.set_props(dataset, {"quota": size})
 
     def set_refquota(self, dataset: str, size: str) -> Dict[str, Any]:
         """Set referenced quota."""
-        # فارسی: محدودیت فضا بر اساس فضای referenced.
+        # FA: محدودیت فضا بر اساس فضای referenced.
         # EN: Quota based on referenced space.
         return self.set_props(dataset, {"refquota": size})
 
     def set_reservation(self, dataset: str, size: str) -> Dict[str, Any]:
         """Set reservation."""
-        # فارسی: رزروکردن فضا به‌صورت تضمین‌شده.
+        # FA: رزروکردن فضا به‌صورت تضمین‌شده.
         # EN: Guarantee space via reservation.
         return self.set_props(dataset, {"reservation": size})
 
     def set_refreservation(self, dataset: str, size: str) -> Dict[str, Any]:
         """Set referenced reservation."""
-        # فارسی: رزرو بر اساس referenced space.
+        # FA: رزرو بر اساس referenced space.
         # EN: Referenced-space reservation.
         return self.set_props(dataset, {"refreservation": size})
 
     def list_user_quotas(self, dataset: str) -> Dict[str, Any]:
         """List user/group space and quotas."""
-        # فارسی: نمایش quota کاربر و گروه برای مدیریت سهمیه‌ها.
+        # FA: نمایش quota کاربر و گروه برای مدیریت سهمیه‌ها.
         # EN: Show user/group space usage and quotas.
         try:
             out_u, _ = self._run(["zfs", "userspace", "-H", "-o", "name,used,quota", dataset])
@@ -574,19 +574,19 @@ class ZFSManager:
 
     def enable_compression(self, dataset: str, algo: str = "lz4") -> Dict[str, Any]:
         """Enable compression (lz4/zstd/gzip/off)."""
-        # فارسی: فعال‌سازی فشرده‌سازی با الگوریتم دلخواه.
+        # FA: فعال‌سازی فشرده‌سازی با الگوریتم دلخواه.
         # EN: Turn on compression with desired algorithm.
         return self.set_props(dataset, {"compression": algo})
 
     def enable_dedup(self, dataset: str, mode: str = "on") -> Dict[str, Any]:
         """Enable deduplication (on/verify/off)."""
-        # فارسی: فعال‌سازی dedup برای کاهش مصرف فضا.
+        # FA: فعال‌سازی dedup برای کاهش مصرف فضا.
         # EN: Enable deduplication to reduce space usage.
         return self.set_props(dataset, {"dedup": mode})
 
     def set_record_or_volblock(self, dataset: str, size: str = "128K") -> Dict[str, Any]:
         """Set recordsize or volblocksize depending on dataset type."""
-        # فارسی: اگر zvol باشد volblocksize وگرنه recordsize را ست می‌کنیم.
+        # FA: اگر zvol باشد volblocksize وگرنه recordsize را ست می‌کنیم.
         # EN: Use volblocksize for zvol else recordsize for filesystem.
         props = self.get_props(dataset)
         if not props["ok"]:
@@ -598,13 +598,13 @@ class ZFSManager:
 
     def set_mountpoint(self, dataset: str, path: str) -> Dict[str, Any]:
         """Set mountpoint for a filesystem dataset."""
-        # فارسی: تعیین مسیر mountpoint دیتاست.
+        # FA: تعیین مسیر mountpoint دیتاست.
         # EN: Set dataset's mountpoint path.
         return self.set_props(dataset, {"mountpoint": path})
 
     def set_atime(self, dataset: str, mode: str = "off") -> Dict[str, Any]:
         """Toggle atime (on/off)."""
-        # فارسی: خاموش/روشن کردن atime برای کاهش I/O.
+        # FA: خاموش/روشن کردن atime برای کاهش I/O.
         # EN: Toggle atime to reduce extra writes.
         return self.set_props(dataset, {"atime": mode})
 
@@ -614,7 +614,7 @@ class ZFSManager:
              compressed: bool = True, resume_token: Optional[str] = None,
              output_file: Optional[str] = None) -> Dict[str, Any]:
         """Generate a send stream (prefer writing to file for large streams)."""
-        # فارسی: تولید استریم برای replication؛ پیشنهاد می‌شود به فایل نوشته شود.
+        # FA: تولید استریم برای replication؛ پیشنهاد می‌شود به فایل نوشته شود.
         # EN: Produce replication stream; prefer writing to a file.
         try:
             args = ["zfs", "send"]
@@ -650,7 +650,7 @@ class ZFSManager:
     def receive(self, target: str, input_file: Optional[str] = None, stdin_bytes: Optional[bytes] = None,
                 force: bool = False, nomount: bool = False, verbose: bool = False) -> Dict[str, Any]:
         """Receive a send stream into target dataset."""
-        # فارسی: دریافت استریم روی مقصد؛ از فایل یا stdin.
+        # FA: دریافت استریم روی مقصد؛ از فایل یا stdin.
         # EN: Receive stream into target; from file or stdin.
         try:
             if input_file and stdin_bytes:
@@ -679,7 +679,7 @@ class ZFSManager:
 
     def diff(self, older: str, newer: str) -> Dict[str, Any]:
         """Return `zfs diff` output between two points."""
-        # فارسی: مقایسه تغییرات بین دو snapshot/dataset.
+        # FA: مقایسه تغییرات بین دو snapshot/dataset.
         # EN: Compare changes between two snapshots/datasets.
         try:
             out, _ = self._run(["zfs", "diff", older, newer])
@@ -689,7 +689,7 @@ class ZFSManager:
 
     def history(self, dataset_or_pool: Optional[str] = None) -> Dict[str, Any]:
         """Return ZFS command history for a pool/dataset or global."""
-        # فارسی: تاریخچه عملیات برای بررسی تغییرات.
+        # FA: تاریخچه عملیات برای بررسی تغییرات.
         # EN: Operation history to audit changes.
         try:
             if dataset_or_pool:
@@ -713,7 +713,7 @@ class ZFSManager:
           - datasets under each pool (props, snapshots, bookmarks)
           - global snapshots summary
         """
-        # فارسی: جمع‌آوری نمای کامل وضعیت سیستم فایل ZFS برای داشبورد/مانیتورینگ.
+        # FA: جمع‌آوری نمای کامل وضعیت سیستم فایل ZFS برای داشبورد/مانیتورینگ.
         # EN: Build a comprehensive JSON view for dashboards/monitoring.
         try:
             full: Dict[str, Any] = {"pools": []}
