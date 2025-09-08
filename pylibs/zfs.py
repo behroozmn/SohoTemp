@@ -1,124 +1,256 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3  # شِبانگ (shebang) به سیستم‌عامل می‌گوید این فایل با مفسر python3 اجرا شود؛ در اسکریپت‌ها کاربرد دارد.
+# -*- coding: utf-8 -*-  # تعیین کُدگذاری فایل روی UTF-8 تا کاراکترهای فارسی در کامنت‌ها و داک‌استرینگ‌ها درست تفسیر شوند.
 
-# FA: این ماژول یک کلاس سطح‌بالا برای مدیریت ZFS با libzfs و fallback ایمن به CLI ارائه می‌دهد.
-# EN: This module provides a high-level ZFS manager using libzfs with safe CLI fallbacks.
+"""
+FA (توضیح ماژول):
+این ماژول یک کلاس سطح‌بالا به نام ZFSManager فراهم می‌کند که با استفاده از کتابخانهٔ رسمی libzfs
+و در جاهایی که API کامل در دسترس نیست با fallback ایمن به CLIهای رسمی (zfs/zpool) عملیات روی ZFS را انجام می‌دهد.
+طراحی کلاس به‌صورت JSON-Ready است تا در فریم‌ورک Django REST Framework (DRF) به‌سادگی به عنوان خروجی View/APIView برگردانده شود.
+تمام متدهای عمومی، دیکشنری‌هایی برمی‌گردانند که دارای کلیدهای ok/error/data/meta هستند و مستقیماً قابل استفاده در Response() می‌باشند.
 
-import libzfs  # required by user request: use libzfs binding
-import subprocess
-import shlex
-from typing import Dict, List, Optional, Iterable, Tuple, Any
+- رویکرد: ابتدا سعی در استفاده از libzfs برای کارهای introspection و set/get property، و هرجا لازم باشد
+  اجرای امن CLI بدون shell=True برای جلوگیری از تزریق فرمان.
+- مخاطب: توسعه‌دهندگان مبتدی تا پیشرفته؛ برای مبتدی‌ها داک‌استرینگ‌ها و کامنت‌های فارسی مفصل ارائه شده است.
+- ملاحظات امنیتی: عمیات مخرب مانند destroy و rollback خطرناک‌اند؛ در محیط تولید باید احراز هویت/مجوزدهی مناسب در DRF اعمال شود.
+- سازگاری: بسته به پلتفرم (FreeBSD/OpenZFS on Linux) ممکن است برخی پراپرتی‌ها متفاوت باشند؛ کد با مدیریت خطا و fallback سعی در سازگاری دارد.
 
+EN (module quick note):
+High-level ZFS manager for use with Django REST Framework. Methods return JSON-serializable dicts.
+Uses libzfs primarily and falls back to zfs/zpool CLI where necessary.
+"""
 
-# --------------------------- JSON envelopes ---------------------------
-
-def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Return a DRF-friendly success envelope."""
-    # FA: پاسخ موفق استاندارد برای بازگشت به DRF.
-    # EN: Standard success envelope to return in DRF responses.
-    return {"ok": True, "error": None, "data": data, "meta": meta or {}}
-
-
-def fail(message: str, code: str = "zfs_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Return a DRF-friendly failure envelope."""
-    # FA: پاسخ خطا با پیام و کُد منطقی.
-    # EN: Failure envelope with human-readable message and logical code.
-    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
-
-
-class ZFSError(Exception):
-    """Domain exception for ZFS manager."""
-    # FA: استثنای دامنه‌ای مخصوص ZFS برای تفکیک خطاها.
-    # EN: Domain-specific exception for clear error separation.
-    pass
+import libzfs  # ایمپورت binding رسمی libzfs برای دسترسی مستقیم به ساختارها و پراپرتی‌های ZFS.
+import subprocess  # اجرای امن فرمان‌های سیستمی (zfs/zpool) وقتی API کامل نیست یا برای گزارش خام.
+import shlex  # کوئوت و توکِنایز ایمن آرگومان‌ها برای جلوگیری از تزریق فرمان.
+from typing import Dict, List, Optional, Iterable, Tuple, Any  # تایپ‌هینت‌ها برای خوانایی و ابزارهای استاتیک‌آنالایزر.
 
 
-class ZFSManager:
+# --------------------------- JSON envelopes ---------------------------  # الگوی یکسان پاسخ برای DRF (موفق/ناموفق).
+
+def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:  # تابع کمکی برای ساخت پاسخ موفق استاندارد.
     """
-    High-level ZFS manager using libzfs and safe CLI fallbacks.
+    FA:
+    توضیح: این تابع یک پوشش (envelope) استاندارد برای پاسخ موفق تولید می‌کند تا به‌صورت مستقیم در DRF استفاده شود.
+    ورودی‌ها:
+      - data (Any): هر دادهٔ قابل‌سریالایز به JSON که می‌خواهید به کلاینت برگردانید؛ می‌تواند عدد/رشته/دیکشنری/لیست و ...
+      - meta (dict|None): اطلاعات جانبی (metadata) اختیاری مثل منبع داده، نسخه، زمان‌بندی کش و ...
+    خروجی:
+      - dict: دیکشنری با ساختار {"ok": True, "error": None, "data": data, "meta": meta or {}}
+    خطاها:
+      - ندارد؛ این تابع فقط ساختار خروجی را می‌چیند.
+    نکته:
+      - این الگو با Response() در DRF سازگار است و سریالایز می‌شود.
 
-    dry_run=True برای تستِ بدون تغییر
+    EN (summary): Build a success envelope for DRF-friendly responses.
+    """
+    return {"ok": True, "error": None, "data": data, "meta": meta or {}}  # برگرداندن ساختار استاندارد پاسخ موفق.
 
-    - All public methods return JSON-serializable dicts (friendly to DRF Response()).
-    - Uses libzfs for discovery/property ops; uses `zfs`/`zpool` CLI for gaps (send/recv, create pool, etc.).
+
+def fail(message: str, code: str = "zfs_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:  # تابع کمکی برای ساخت پاسخ خطا.
+    """
+    FA:
+    توضیح: این تابع ساختار یک پاسخ خطا را ایجاد می‌کند تا خطاها به‌صورت یکنواخت به کلاینت بازگردند.
+    ورودی‌ها:
+      - message (str): پیام خطای قابل‌خواندن برای انسان که توضیح دهد چه رخ داده است.
+      - code (str): کُد منطقی/ماشینی خطا (برای تشخیص برنامه‌نویسان؛ مثل "invalid_request", "not_found", "zfs_error").
+      - extra (dict|None): اطلاعات تکمیلی خطا (trace، فرمان اجراشده، stdout/stderr) در صورت لزوم.
+    خروجی:
+      - dict: دیکشنری با ساختار {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
+    خطاها:
+      - ندارد؛ فقط یک ساختار ثابت تولید می‌شود.
+
+    EN (summary): Build an error envelope for DRF-friendly responses.
+    """
+    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}  # برگرداندن ساختار استاندارد پاسخ خطا.
+
+
+class ZFSError(Exception):  # استثنای اختصاصی دامنهٔ ZFS برای تمایز خطاها در لاجیک برنامه.
+    """
+    FA:
+    توضیح: استثنای دامنه‌ای برای مدیریت یک‌دست خطاهای مرتبط با عملیات ZFS.
+    چرا؟ برای اینکه بتوانیم خطاهای مربوط به ZFS را از سایر خطاها جدا کنیم و در handlerهای DRF واکنش مناسب نشان دهیم.
+    ورودی‌ها/خروجی:
+      - مانند Exception استاندارد پایتون؛ می‌توانید پیام (str) یا استثنای اصلی را پاس بدهید.
+    خطاها:
+      - ندارد؛ صرفاً برای تمایز نوع استثناء استفاده می‌شود.
+
+    EN (summary): Domain-specific exception to distinguish ZFS-related errors.
+    """
+    pass  # بدنه‌ای لازم نیست؛ فقط تایپ سفارشی است.
+
+
+class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروجی JSON-Ready و fallback به CLI.
+    """
+    FA:
+    هدف: ارائهٔ API سطح‌بالا برای مدیریت ZFS که:
+      1) تا جای ممکن از libzfs برای کارهای داخل حافظه (introspection و set/get properties) استفاده کند.
+      2) در جاهایی که API پوشش ندارد (مثل send/receive یا create pool)، با اجرای امن CLI (zfs/zpool) کار را انجام دهد.
+      3) تمام خروجی‌ها را به‌صورت JSON-Ready برگرداند تا با DRF به‌راحتی قابل مصرف باشد.
+    مخاطب: توسعه‌دهندگان مبتدی تا پیشرفته. توضیحات فارسی و انگلیسی ساده در Docstring و کامنت‌ها فراهم شده است.
+    نکات مهم:
+      - پارامتر dry_run: اگر True باشد، فرمان‌های تغییر دهندهٔ وضعیت اجرا نمی‌شوند و فقط رشتهٔ فرمان باز می‌گردد (برای تست امن).
+      - پارامتر run_timeout: محدودیت زمانی اجرای فرمان‌های CLI (ثانیه).
+      - برای عملیات خطرناک (destroy, rollback) حتماً احراز هویت و مجوزدهی سمت API را جدی بگیرید.
+    خروجی متدها:
+      - همگی ساختاری دارای کلیدهای ok/error/data/meta برمی‌گردانند که مستقیماً در DRF Response() قابل استفاده است.
+
+    EN (summary):
+      High-level manager for ZFS with libzfs + safe CLI fallback. All public methods return JSON-serializable envelopes.
     """
 
-    def __init__(self, dry_run: bool = False, run_timeout: int = 180) -> None:
-        """Initialize manager with libzfs, dry-run mode and CLI timeout."""
-        # FA: اتصال libzfs برقرار می‌شود؛ dry_run برای تست بدون اعمال تغییر؛ run_timeout برای محدود کردن اجرای CLI.
-        # EN: Initialize libzfs; dry_run to simulate actions; run_timeout limits CLI execution time.
+    def __init__(self, dry_run: bool = False, run_timeout: int = 180) -> None:  # سازندهٔ کلاس با تنظیمات اجرایی.
+        """
+        FA:
+        توضیح: سازندهٔ کلاس که اتصال به libzfs را برقرار می‌کند و تنظیمات پایه را می‌گیرد.
+        ورودی‌ها:
+          - dry_run (bool): اگر True باشد، عملیات تغییر حالت سیستم (مثل create/destroy) اجرا نمی‌شود و فقط لاگ/خروجی ساختگی تولید می‌شود.
+          - run_timeout (int): محدودیت زمانی (ثانیه) برای اجرای فرمان‌های CLI؛ از hang شدن فرآیند جلوگیری می‌کند.
+        خروجی:
+          - None: فقط نمونه را مقداردهی می‌کند.
+        خطاها:
+          - در صورت مشکل در ایجاد نمونه libzfs.ZFS ممکن است استثناء از libzfs رخ دهد.
 
-        self.zfs = libzfs.ZFS()
-        self.dry_run = dry_run
-        self.run_timeout = run_timeout
+        EN:
+          Initialize manager: create libzfs.ZFS(), set dry_run and timeout.
+        """
+        self.zfs = libzfs.ZFS()  # ایجاد نمونهٔ اصلی libzfs برای دسترسی به poolها و datasetها.
+        self.dry_run = dry_run  # ذخیرهٔ وضعیت dry-run برای استفاده در متدهای تغییر حالت.
+        self.run_timeout = run_timeout  # ذخیرهٔ محدودیت زمانی اجرای CLI برای همهٔ فراخوانی‌های _run.
 
-    # --------------------------- internal helpers ---------------------------
+    # --------------------------- internal helpers ---------------------------  # توابع کمکی داخلی؛ خارج از API عمومی.
 
-    def _run(self, args: List[str], stdin: Optional[bytes] = None) -> Tuple[str, str]:
-        """Run a CLI command safely (no shell=True), return (stdout, stderr)."""
-        # FA: اجرای امن CLI با آرگومان‌های لیستی جهت جلوگیری از تزریق؛ پشتیبانی از ورودی باینری.
-        # EN: Safe CLI execution with list args to avoid injection; supports binary stdin.
-        cmd_str = " ".join(shlex.quote(a) for a in args)
-        if self.dry_run:
-            return f"[DRY-RUN] {cmd_str}", ""
+    def _run(self, args: List[str], stdin: Optional[bytes] = None) -> Tuple[str, str]:  # اجرای امن فرمان CLI با آرگومان‌های لیستی.
+        """
+        FA:
+        توضیح: این متد داخلی فرمان‌های CLI مثل zfs/zpool را به‌صورت ایمن اجرا می‌کند.
+        چرا ایمن؟ چون از لیست آرگومان (بدون shell=True) استفاده می‌کند تا از تزریق فرمان جلوگیری شود.
+        ورودی‌ها:
+          - args (List[str]): لیست آرگومان‌ها، مثلاً ["zfs", "list", "-H"].
+          - stdin (bytes|None): در صورت نیاز، دادهٔ ورودی باینری برای فرمان‌هایی مثل `zfs receive`.
+        خروجی:
+          - (stdout:str, stderr:str): خروجی و خطای استاندارد به‌صورت رشته (UTF-8 decoded).
+        خطاها:
+          - ZFSError: اگر اجرای فرمان با non-zero exit code تمام شود یا Timeout/OSError رخ دهد.
+        نکات:
+          - اگر dry_run=True باشد، فرمان اجرا نمی‌شود و به‌جای آن یک خروجی ساختگی با برچسب [DRY-RUN] برگردانده می‌شود.
+          - timeout از hang شدن جلوگیری می‌کند.
+
+        EN:
+          Safe subprocess.run wrapper. Returns decoded stdout/stderr or raises ZFSError.
+        """
+        cmd_str = " ".join(shlex.quote(a) for a in args)  # ساخت نسخهٔ رشته‌ای امن برای لاگ/اشکال‌زدایی.
+        if self.dry_run:  # اگر در حالت dry-run هستیم، اجرا نکن و خروجی ساختگی بده.
+            return f"[DRY-RUN] {cmd_str}", ""  # برگرداندن stdout ساختگی و stderr خالی.
         try:
-            proc = subprocess.run(args, input=stdin, capture_output=True, timeout=self.run_timeout, check=False)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ZFSError(f"Command failed: {cmd_str} ({exc})") from exc
-        if proc.returncode != 0:
-            raise ZFSError(
+            proc = subprocess.run(  # اجرای فرمان به‌صورت امن بدون shell؛ کنترل timeout و capture خروجی‌ها.
+                args, input=stdin, capture_output=True, timeout=self.run_timeout, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:  # مدیریت خطاهای سیستم‌عامل و تایم‌اوت.
+            raise ZFSError(f"Command failed: {cmd_str} ({exc})") from exc  # تبدیل خطا به ZFSError برای لایهٔ بالاتر.
+        if proc.returncode != 0:  # اگر کد خروج غیر صفر بود یعنی خطا رخ داده است.
+            raise ZFSError(  # پرتاب استثناء با جزئیات stdout/stderr برای تشخیص بهتر.
                 f"Command failed: {cmd_str}\nstdout: {proc.stdout.decode(errors='ignore')}\nstderr: {proc.stderr.decode(errors='ignore')}"
             )
-        return proc.stdout.decode(errors="ignore"), proc.stderr.decode(errors="ignore")
+        return proc.stdout.decode(errors="ignore"), proc.stderr.decode(errors="ignore")  # برگرداندن خروجی‌های متنی.
 
-    def _get_dataset(self, name: str) -> libzfs.ZFSDataset:
-        """Return dataset object or raise ZFSError."""
-        # FA: تلاش برای گرفتن دیتاست از libzfs؛ در صورت نبود، خطا می‌دهیم.
-        # EN: Try fetching dataset via libzfs; raise if not found.
+    def _get_dataset(self, name: str) -> libzfs.ZFSDataset:  # دریافت شیء دیتاست از libzfs.
+        """
+        FA:
+        توضیح: تلاش برای دریافت یک دیتاست با نام مشخص از libzfs.
+        ورودی:
+          - name (str): نام کامل dataset (مثل "tank/data" یا "tank/vol1").
+        خروجی:
+          - libzfs.ZFSDataset: شیء دیتاست در صورت موفقیت.
+        خطاها:
+          - ZFSError: اگر دیتاست پیدا نشود یا libzfs خطا دهد.
+
+        EN:
+          Get dataset object by name or raise ZFSError.
+        """
         try:
-            return self.zfs.get_dataset(name)
-        except libzfs.ZFSException as exc:
+            return self.zfs.get_dataset(name)  # فراخوانی مستقیم API libzfs برای دریافت دیتاست.
+        except libzfs.ZFSException as exc:  # تبدیل خطای libzfs به ZFSError با پیام واضح.
             raise ZFSError(f"Dataset not found: {name}") from exc
 
-    def _get_pool(self, name: str) -> libzfs.ZFSPool:
-        """Return pool object or raise ZFSError."""
-        # FA: در بین poolها جستجو می‌کنیم و نام مطابق را بازمی‌گردانیم.
-        # EN: Iterate pools and return the matching one by name.
-        for pool in self.zfs.pools:
-            if pool.name == name:
-                return pool
-        raise ZFSError(f"Pool not found: {name}")
+    def _get_pool(self, name: str) -> libzfs.ZFSPool:  # دریافت شیء zpool بر اساس نام.
+        """
+        FA:
+        توضیح: در بین zpoolها پیمایش می‌کند و pool با نام داده‌شده را برمی‌گرداند.
+        ورودی:
+          - name (str): نام zpool (مثل "tank").
+        خروجی:
+          - libzfs.ZFSPool: شیء pool اگر یافت شود.
+        خطاها:
+          - ZFSError: اگر pool با نام مشخص وجود نداشته باشد.
 
-    def _safe_prop_value(self, v: Any) -> Any:
-        """Normalize libzfs property object to plain value if needed."""
-        # FA: برخی bindingها شیء Property برمی‌گردانند؛ value را استخراج می‌کنیم.
-        # EN: Some bindings return Property objects; extract .value when present.
-        return getattr(v, "value", v)
+        EN:
+          Iterate pools and return matching ZFSPool or raise ZFSError.
+        """
+        for pool in self.zfs.pools:  # پیمایش لیست poolها از libzfs.
+            if pool.name == name:  # بررسی تطابق نام.
+                return pool  # بازگرداندن pool مورد نظر.
+        raise ZFSError(f"Pool not found: {name}")  # اگر چیزی پیدا نشد، خطا.
 
-    # --------------------------- discovery & listing ---------------------------
+    def _safe_prop_value(self, v: Any) -> Any:  # نرمال‌سازی مقدار پراپرتی libzfs به مقدار ساده.
+        """
+        FA:
+        توضیح: برخی bindingها به‌جای مقدار خام، یک شیء Property برمی‌گردانند؛ این تابع در صورت وجود صفت value آن را استخراج می‌کند.
+        ورودی:
+          - v (Any): مقدار/شیء پراپرتی.
+        خروجی:
+          - Any: مقدار سادهٔ قابل سریالایز (در صورت وجود v.value همان را برمی‌گرداند وگرنه v را).
+        خطاها:
+          - ندارد.
 
-    def list_pools(self) -> Dict[str, Any]:
-        """List zpool names."""
-        # FA: نام تمام zpoolها را از libzfs می‌گیریم.
-        # EN: Get all zpool names via libzfs.
+        EN:
+          Return v.value when available; otherwise return v.
+        """
+        return getattr(v, "value", v)  # اگر v.value موجود بود، همان را؛ وگرنه خود v.
+
+    # --------------------------- discovery & listing ---------------------------  # متدهای لیست و وضعیت.
+
+    def list_pools(self) -> Dict[str, Any]:  # لیست نام تمام zpoolها.
+        """
+        FA:
+        توضیح: نام تمام zpoolهای موجود در سیستم را از libzfs می‌خواند.
+        ورودی:
+          - ندارد.
+        خروجی:
+          - dict(JSON-Ready): {"ok": True, "data": ["tank", "backup", ...], ...}
+        خطاها:
+          - در صورت مشکل در libzfs، خروجی fail(...) با پیام خطا برمی‌گردد.
+
+        EN:
+          List zpool names using libzfs.
+        """
         try:
-            return ok([p.name for p in self.zfs.pools])
+            return ok([p.name for p in self.zfs.pools])  # استخراج نام‌ها و برگرداندن در قالب JSON.
         except Exception as exc:
-            return fail(str(exc))
+            return fail(str(exc))  # بسته‌بندی خطا در قالب یکنواخت JSON.
 
-    def pool_status(self, pool: str) -> Dict[str, Any]:
-        """Basic pool status: name/state/health/guid and a few props."""
-        # FA: وضعیت ساده‌ی یک zpool به‌همراه چند property مهم.
-        # EN: Simple zpool status with a few important properties.
+    def pool_status(self, pool: str) -> Dict[str, Any]:  # وضعیت سادهٔ یک zpool.
+        """
+        FA:
+        توضیح: وضعیت پایهٔ یک zpool شامل نام، state، health، guid و تعدادی پراپرتی رایج را برمی‌گرداند.
+        ورودی:
+          - pool (str): نام zpool (مثلاً "tank").
+        خروجی:
+          - dict(JSON-Ready): شامل فیلدهای کلیدی و dict پراپرتی‌ها.
+        خطاها:
+          - ZFSError: اگر pool پیدا نشود؛ در خروجی fail(...) بازتاب می‌یابد.
+
+        EN:
+          Basic zpool status and a few properties.
+        """
         try:
-            p = self._get_pool(pool)
-            extras = {}
-            for prop in ("ashift", "autoexpand", "autoreplace", "autotrim", "listsnapshots"):
+            p = self._get_pool(pool)  # بازیابی شیء pool.
+            extras = {}  # دیکشنری برای پراپرتی‌های اضافه.
+            for prop in ("ashift", "autoexpand", "autoreplace", "autotrim", "listsnapshots"):  # پراپرتی‌های متداول.
                 try:
-                    if hasattr(p, "get_prop"):
-                        extras[prop] = str(self._safe_prop_value(p.get_prop(prop)))
+                    if hasattr(p, "get_prop"):  # اگر API گرفتن پراپرتی وجود دارد.
+                        extras[prop] = str(self._safe_prop_value(p.get_prop(prop)))  # مقداردهی با نرمال‌سازی.
                 except Exception:
-                    pass
+                    pass  # اگر خطایی شد، صرف‌نظر؛ گزارش پایه همچنان مفید است.
             return ok({
                 "name": p.name,
                 "state": str(getattr(p, "state", "")),
@@ -129,66 +261,109 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def pool_status_verbose(self, pool: str) -> Dict[str, Any]:
-        """Return raw output of `zpool status -v <pool>`."""
-        # FA: خروجی کامل برای عیب‌یابی دقیق؛ برای پارس بعدی ذخیره کنید.
-        # EN: Full verbose status; store/parse downstream as needed.
+    def pool_status_verbose(self, pool: str) -> Dict[str, Any]:  # FA: خروجی خام zpool status -v برای عیب‌یابی.
+        """
+        FA:
+        توضیح: خروجی کامل و خام `zpool status -v` را بازمی‌گرداند که برای عیب‌یابی دقیق (device errors, checksum, ...) کاربرد دارد.
+        ورودی:
+          - pool (str): نام zpool.
+        خروجی:
+          - dict(JSON-Ready): {"ok": True, "data": {"raw": "<full text>"}}
+        خطاها:
+          - ZFSError: در صورت خطا در اجرای CLI.
+
+        EN:
+          Return raw `zpool status -v` for troubleshooting.
+        """
         try:
-            out, _ = self._run(["zpool", "status", "-v", pool])
-            return ok({"raw": out})
+            out, _ = self._run(["zpool", "status", "-v", pool])  # FA: اجرای امن فرمان status -v.
+            return ok({"raw": out})  # FA: بازگرداندن متن خام برای پارس بعدی در کلاینت/سرویس.
         except Exception as exc:
             return fail(str(exc))
 
-    def pool_iostat(self, pool: Optional[str] = None, samples: int = 1, interval: int = 1) -> Dict[str, Any]:
-        """Return raw output of `zpool iostat -v` (optionally for one pool)."""
-        # FA: نمونه‌ای از آمار I/O برای تحلیل لحظه‌ای.
-        # EN: One-shot I/O stats snapshot for quick visibility.
+    def pool_iostat(self, pool: Optional[str] = None, samples: int = 1, interval: int = 1) -> Dict[str, Any]:  # FA: نمونهٔ I/O stats.
+        """
+        FA:
+        توضیح: یک عکس لحظه‌ای از آمار I/O با `zpool iostat -v` می‌گیرد. برای پایش سریع کاراست.
+        ورودی‌ها:
+          - pool (str|None): اگر None باشد همهٔ poolها؛ در غیراینصورت فقط همان pool.
+          - samples (int): تعداد نمونه‌گیری‌ها (عدد 1 یعنی یکبار).
+          - interval (int): فاصلهٔ نمونه‌گیری برحسب ثانیه.
+        خروجی:
+          - dict(JSON-Ready): {"ok": True, "data": {"raw": "<iostat text>"}}
+        خطاها:
+          - ZFSError: در صورت خطا در اجرای CLI.
+
+        EN:
+          Return raw `zpool iostat -v` output.
+        """
         try:
-            args = ["zpool", "iostat", "-v"]
-            if pool:
+            args = ["zpool", "iostat", "-v"]  # FA: ساخت آرگومان پایه برای iostat مفصل.
+            if pool:  # FA: اگر نام pool داده شده باشد، اضافه کن.
                 args.append(pool)
-            args += [str(samples), str(interval)]
-            out, _ = self._run(args)
+            args += [str(samples), str(interval)]  # FA: افزودن پارامترهای نمونه و بازه.
+            out, _ = self._run(args)  # FA: اجرای امن CLI.
             return ok({"raw": out})
         except Exception as exc:
             return fail(str(exc))
 
     def list_datasets(self, pool: Optional[str] = None,
-                      types: Iterable[str] = ("filesystem", "volume", "snapshot")) -> Dict[str, Any]:
-        """List datasets with type."""
-        # FA: لیست دیتاست‌ها (fs/zvol/snapshot) به‌صورت ساده.
-        # EN: List datasets filtered by type (fs/zvol/snapshot).
+                      types: Iterable[str] = ("filesystem", "volume", "snapshot")) -> Dict[str, Any]:  # FA: لیست دیتاست‌ها با نوع.
+        """
+        FA:
+        توضیح: فهرست دیتاست‌ها (filesystem, volume(zvol), snapshot) را به همراه نوعشان بازمی‌گرداند.
+        ورودی‌ها:
+          - pool (str|None): اگر مشخص شود، فقط دیتاست‌های زیر آن pool لیست می‌شوند.
+          - types (Iterable[str]): مجموعهٔ نوع‌ها برای فیلتر (پیش‌فرض: همهٔ سه نوع رایج).
+        خروجی:
+          - dict(JSON-Ready): لیستی از {"name": "...", "type": "filesystem|volume|snapshot"}.
+        خطاها:
+          - ZFSError: در صورت خطا در اجرای CLI یا پارس خروجی.
+
+        EN:
+          List datasets with their type, optionally filtered by pool and types.
+        """
         try:
-            args = ["zfs", "list", "-H", "-o", "name,type", "-t", ",".join(types), "-r"]
+            args = ["zfs", "list", "-H", "-o", "name,type", "-t", ",".join(types), "-r"]  # FA: لیست با خروجی tab-separated.
             if pool:
-                args.append(pool)
-            out, _ = self._run(args)
-            items: List[Dict[str, str]] = []
-            for line in out.splitlines():
+                args.append(pool)  # FA: محدودکردن به یک pool خاص.
+            out, _ = self._run(args)  # FA: اجرای فرمان.
+            items: List[Dict[str, str]] = []  # FA: آماده‌سازی لیست نتیجه.
+            for line in out.splitlines():  # FA: پیمایش هر خط از خروجی.
                 if not line.strip():
-                    continue
-                name_i, type_i = line.split("\t")
-                if pool is None or name_i.split("/")[0] == pool:
-                    items.append({"name": name_i, "type": type_i})
+                    continue  # FA: خط خالی را رد کن.
+                name_i, type_i = line.split("\t")  # FA: جدا کردن نام و نوع بر اساس tab.
+                if pool is None or name_i.split("/")[0] == pool:  # FA: در صورت نبود فیلتر pool، همه را می‌پذیریم.
+                    items.append({"name": name_i, "type": type_i})  # FA: افزودن به نتیجه.
             return ok(items)
         except Exception as exc:
             return fail(str(exc))
 
-    def get_props(self, target: str) -> Dict[str, Any]:
-        """Return all visible properties of a dataset as a dict."""
-        # FA: دریافت همهٔ propertyها؛ ابتدا libzfs سپس CLI.
-        # EN: Fetch all properties; try libzfs then fallback to CLI.
+    def get_props(self, target: str) -> Dict[str, Any]:  # FA: گرفتن همهٔ پراپرتی‌ها برای یک دیتاست.
+        """
+        FA:
+        توضیح: تمام پراپرتی‌های قابل مشاهدهٔ یک دیتاست را (ترجیحاً با libzfs و در غیر اینصورت با CLI) بازمی‌گرداند.
+        ورودی:
+          - target (str): نام دیتاست (مانند "tank/data" یا "tank/vol").
+        خروجی:
+          - dict(JSON-Ready): map پراپرتی به مقدار آن (همه رشته).
+        خطاها:
+          - ZFSError: در صورت خطا در libzfs یا اجرای CLI.
+
+        EN:
+          Get all visible properties for a dataset (libzfs first, fallback CLI).
+        """
         try:
             try:
-                ds = self._get_dataset(target)
-                result: Dict[str, Any] = {}
-                if hasattr(ds, "properties"):
-                    for k, v in ds.properties.items():
-                        result[k] = str(self._safe_prop_value(v))
+                ds = self._get_dataset(target)  # FA: تلاش از libzfs.
+                result: Dict[str, Any] = {}  # FA: نتیجهٔ پراپرتی‌ها.
+                if hasattr(ds, "properties"):  # FA: در برخی bindingها dict-مانند است.
+                    for k, v in ds.properties.items():  # FA: پیمایش کلید/مقدار.
+                        result[k] = str(self._safe_prop_value(v))  # FA: نرمال‌سازی مقدار.
                     return ok(result)
             except ZFSError:
-                pass
-            out, _ = self._run(["zfs", "get", "-H", "-o", "property,value", "all", target])
+                pass  # FA: اگر libzfs شکست خورد، به CLI می‌رویم.
+            out, _ = self._run(["zfs", "get", "-H", "-o", "property,value", "all", target])  # FA: خواندن همهٔ پراپرتی‌ها با CLI.
             props: Dict[str, Any] = {}
             for line in out.splitlines():
                 if not line.strip():
@@ -199,38 +374,64 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- pool operations ---------------------------
+    # --------------------------- pool operations ---------------------------  # FA: متدهای ساخت/حذف/وضعیت pool.
 
     def create_pool(self, name: str, vdevs: List[List[str]],
                     properties: Optional[Dict[str, str]] = None,
                     force: bool = False, altroot: Optional[str] = None,
-                    ashift: Optional[int] = None) -> Dict[str, Any]:
-        """Create a zpool using CLI (safe arg building)."""
-        # FA: ساخت zpool با گروه‌های vdev؛ از -o ها و گزینه‌ها پشتیبانی می‌شود.
-        # EN: Create zpool with vdev groups; supports -o properties and options.
+                    ashift: Optional[int] = None) -> Dict[str, Any]:  # FA: ساخت zpool جدید با CLI.
+        """
+        FA:
+        توضیح: یک zpool جدید می‌سازد. برای vdevها باید آرایه‌ای از گروه‌ها بدهید (مثلاً [["mirror","/dev/sdb","/dev/sdc"], ["raidz1",...]]).
+        ورودی‌ها:
+          - name (str): نام zpool (مثلاً "tank").
+          - vdevs (List[List[str]]): گروه‌های vdev به همان ترتیبی که در CLI می‌دهید (مانند mirror/raidz/diskها).
+          - properties (dict|None): پراپرتی‌های سطح pool (مثل {"autoexpand": "on"}).
+          - force (bool): افزودن فلگ -f برای ایجاد اجباری.
+          - altroot (str|None): استفاده از -R <path> برای روت جایگزین.
+          - ashift (int|None): ست کردن ashift با -o ashift=N (برای سایز بلاک فیزیکی دیسک).
+        خروجی:
+          - dict(JSON-Ready): شامل وضعیت ساخت و متن stdout.
+        خطاها:
+          - ZFSError: اگر اجرای CLI شکست بخورد (مثلاً دیسک‌ها در استفاده باشند).
+
+        EN:
+          Create a zpool using CLI. Provide vdev groups just like zpool create syntax.
+        """
         try:
-            args = ["zpool", "create"]
+            args = ["zpool", "create"]  # FA: آغاز آرگومان‌های ساخت pool.
             if force:
-                args.append("-f")
+                args.append("-f")  # FA: فلگ اجباری.
             if altroot:
-                args += ["-R", altroot]
+                args += ["-R", altroot]  # FA: تنظیم روت جایگزین.
             if ashift is not None:
-                args += ["-o", f"ashift={ashift}"]
+                args += ["-o", f"ashift={ashift}"]  # FA: پراپرتی ashift.
             if properties:
                 for k, v in properties.items():
-                    args += ["-o", f"{k}={v}"]
-            args.append(name)
+                    args += ["-o", f"{k}={v}"]  # افزودن سایر پراپرتی‌ها.
+            args.append(name)  # FA: نام pool.
             for grp in vdevs:
-                args += grp
-            out, _ = self._run(args)
+                args += grp  # FA: افزودن گروه vdevها دقیقا به ترتیب.
+            out, _ = self._run(args)  # FA: اجرای ساخت.
             return ok({"created": True, "pool": name, "stdout": out})
         except Exception as exc:
             return fail(str(exc))
 
-    def destroy_pool(self, name: str, force: bool = False) -> Dict[str, Any]:
-        """Destroy a zpool."""
-        # FA: حذف کامل zpool؛ با احتیاط استفاده شود.
-        # EN: Destroy zpool; dangerous—use carefully.
+    def destroy_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # FA: حذف zpool (خطرناک).
+        """
+        FA:
+        توضیح: یک zpool را به‌طور کامل حذف می‌کند. بسیار خطرناک است و همهٔ داده‌ها از دست می‌رود.
+        ورودی‌ها:
+          - name (str): نام pool که باید حذف شود.
+          - force (bool): استفاده از -f برای اجبار.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات با stdout.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Destroy a zpool (dangerous!).
+        """
         try:
             args = ["zpool", "destroy"]
             if force:
@@ -242,10 +443,22 @@ class ZFSManager:
             return fail(str(exc))
 
     def import_pool(self, name: Optional[str] = None,
-                    dir_hint: Optional[str] = None, readonly: bool = False) -> Dict[str, Any]:
-        """Import a zpool (optionally read-only)."""
-        # FA: ایمپورت یک zpool از مسیر خاص یا حالت فقط‌خواندنی.
-        # EN: Import a zpool from a search dir or as read-only.
+                    dir_hint: Optional[str] = None, readonly: bool = False) -> Dict[str, Any]:  # FA: ایمپورت pool.
+        """
+        FA:
+        توضیح: ایمپورت یک zpool از دیسک‌ها. می‌توانید مسیر جستجو بدهید یا حالت فقط‌خواندنی تنظیم کنید.
+        ورودی‌ها:
+          - name (str|None): نام pool برای ایمپورت؛ اگر None باشد لیست ایمپورت‌ها را نشان می‌دهد/همه را ایمپورت می‌کند.
+          - dir_hint (str|None): استفاده از -d <dir> برای مشخص کردن مسیر جستجو.
+          - readonly (bool): اگر True باشد -o readonly=on اعمال می‌شود.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات با stdout.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Import a zpool (optionally readonly and with -d search dir).
+        """
         try:
             args = ["zpool", "import"]
             if dir_hint:
@@ -259,10 +472,21 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def export_pool(self, name: str, force: bool = False) -> Dict[str, Any]:
-        """Export a zpool."""
-        # FA: خروج یک zpool برای انتقال به سیستم دیگر.
-        # EN: Export a zpool to move/use on another system.
+    def export_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # FA: اکسپورت pool.
+        """
+        FA:
+        توضیح: zpool را از سیستم جاری خارج (export) می‌کند تا در سیستم دیگری import شود.
+        ورودی‌ها:
+          - name (str): نام pool.
+          - force (bool): استفاده از -f برای اجبار در خروج.
+        خروجی:
+          - dict(JSON-Ready): وضعیت عملیات با stdout.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Export a zpool (prepare to move/attach on another host).
+        """
         try:
             args = ["zpool", "export"]
             if force:
@@ -273,10 +497,21 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def scrub_pool(self, name: str, stop: bool = False) -> Dict[str, Any]:
-        """Start or stop a scrub."""
-        # FA: شروع یا توقف scrub برای بررسی و ترمیم خطاهای silent.
-        # EN: Start/stop scrub to detect/correct silent errors.
+    def scrub_pool(self, name: str, stop: bool = False) -> Dict[str, Any]:  # FA: شروع/توقف scrub.
+        """
+        FA:
+        توضیح: اسکراب را برای بررسی و اصلاح silent errorها در pool آغاز یا متوقف می‌کند.
+        ورودی‌ها:
+          - name (str): نام pool.
+          - stop (bool): اگر True باشد scrub متوقف می‌شود وگرنه شروع می‌گردد.
+        خروجی:
+          - dict(JSON-Ready): شامل وضعیت "started"/"stopped".
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Start or stop zpool scrub.
+        """
         try:
             args = ["zpool", "scrub"]
             if stop:
@@ -287,10 +522,21 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def clear_pool(self, name: str, device: Optional[str] = None) -> Dict[str, Any]:
-        """Clear error counters on a pool/device."""
-        # FA: پاک‌سازی شمارنده‌های خطا در کل pool یا یک دیسک خاص.
-        # EN: Clear error counters for pool or a specific device.
+    def clear_pool(self, name: str, device: Optional[str] = None) -> Dict[str, Any]:  # FA: پاک‌سازی شمارنده‌های خطا.
+        """
+        FA:
+        توضیح: شمارنده‌های خطا را در سطح pool یا یک وسیلهٔ خاص پاک می‌کند (zpool clear).
+        ورودی‌ها:
+          - name (str): نام pool.
+          - device (str|None): نام وسیلهٔ مشخص برای پاک‌سازی هدفمند (اختیاری).
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات با stdout.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Clear error counters on pool/device.
+        """
         try:
             args = ["zpool", "clear", name]
             if device:
@@ -300,10 +546,20 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def features(self, pool: str) -> Dict[str, Any]:
-        """List feature@* flags for a pool."""
-        # FA: ویژگی‌های فعال/غیرفعال شدهٔ pool را از zpool get استخراج می‌کنیم.
-        # EN: Extract feature flags from `zpool get`.
+    def features(self, pool: str) -> Dict[str, Any]:  # FA: لیست feature@* ها.
+        """
+        FA:
+        توضیح: با استفاده از `zpool get all` فهرست feature@* و وضعیتشان را استخراج می‌کند.
+        ورودی:
+          - pool (str): نام pool.
+        خروجی:
+          - dict(JSON-Ready): لیستی از {"property": "feature@xyz", "value": "enabled/active/...","source":"..."}.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          List ZFS feature flags for the given pool.
+        """
         try:
             out, _ = self._run(["zpool", "get", "-H", "-o", "name,property,value,source", "all", pool])
             rows: List[Dict[str, str]] = []
@@ -317,13 +573,25 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- dataset operations ---------------------------
+    # --------------------------- dataset operations ---------------------------  # FA: متدهای مدیریت دیتاست/زول.
 
     def create_dataset(self, name: str, properties: Optional[Dict[str, str]] = None,
-                       dataset_type: str = "filesystem") -> Dict[str, Any]:
-        """Create a filesystem or a zvol (volume)."""
-        # FA: ساخت filesystem یا zvol؛ برای zvol باید volsize تعیین شود.
-        # EN: Create filesystem or zvol; zvol requires 'volsize'.
+                       dataset_type: str = "filesystem") -> Dict[str, Any]:  # FA: ایجاد filesystem یا zvol.
+        """
+        FA:
+        توضیح: یک دیتاست جدید می‌سازد؛ اگر نوع "volume" انتخاب شود، باید حتماً پراپرتی "volsize" تعیین شود.
+        ورودی‌ها:
+          - name (str): نام کامل دیتاست (مانند "tank/data" یا "tank/vms/vol01").
+          - properties (dict|None): پراپرتی‌های اولیه (مثلاً compression, mountpoint, volsize, volblocksize).
+          - dataset_type (str): "filesystem" یا "volume". پیش‌فرض "filesystem".
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ ساخت با stdout.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI (مانند نبودن volsize برای volume).
+
+        EN:
+          Create a filesystem or zvol. For zvol, 'volsize' is required.
+        """
         try:
             args = ["zfs", "create", "-p"]
             if dataset_type == "volume":
@@ -338,10 +606,22 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:
-        """Destroy a dataset (optionally recursive/force)."""
-        # FA: حذف dataset با انتخاب حذف بازگشتی یا اجباری.
-        # EN: Destroy dataset with optional recursive/force flags.
+    def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:  # FA: حذف دیتاست.
+        """
+        FA:
+        توضیح: دیتاست را حذف می‌کند؛ با گزینهٔ recursive می‌توانید فرزندان/اسنپ‌شات‌ها را هم حذف کنید.
+        ورودی‌ها:
+          - name (str): نام دیتاست.
+          - recursive (bool): افزودن -r برای حذف بازگشتی.
+          - force (bool): افزودن -f برای اجبار.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات با stdout.
+        خطاها:
+          - ZFSError: در صورت خطا در اجرای CLI.
+
+        EN:
+          Destroy dataset; optionally recursive/force.
+        """
         try:
             args = ["zfs", "destroy"]
             if recursive:
@@ -354,10 +634,21 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def set_props(self, target: str, properties: Dict[str, str]) -> Dict[str, Any]:
-        """Set properties on a dataset (attempt libzfs, fallback CLI)."""
-        # FA: تلاش برای ست‌کردن property با libزfs؛ درصورت نیاز با CLI.
-        # EN: Set properties via libzfs when possible; fallback to CLI.
+    def set_props(self, target: str, properties: Dict[str, str]) -> Dict[str, Any]:  # FA: ست‌کردن پراپرتی‌ها.
+        """
+        FA:
+        توضیح: پراپرتی‌های یک دیتاست را تنظیم می‌کند؛ ابتدا سعی با libzfs و در صورت نیاز با CLI.
+        ورودی‌ها:
+          - target (str): نام دیتاست هدف.
+          - properties (dict): نگاشت کلید-مقدار پراپرتی‌ها (مثل {"compression":"zstd","atime":"off"}).
+        خروجی:
+          - dict(JSON-Ready): پراپرتی‌هایی که تغییر کرده‌اند.
+        خطاها:
+          - ZFSError: اگر تنظیم با خطا مواجه شود (مثلاً مقدار نامعتبر).
+
+        EN:
+          Set dataset properties (libzfs first, fallback to CLI).
+        """
         try:
             ds = self._get_dataset(target)
             changed: Dict[str, str] = {}
@@ -382,10 +673,22 @@ class ZFSManager:
             except Exception as exc2:
                 return fail(str(exc2))
 
-    def snapshot(self, name: str, recursive: bool = False, props: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """Create a snapshot <dataset>@<snap>."""
-        # FA: ایجاد snapshot برای نسخه‌برداری سریع.
-        # EN: Create snapshot for point-in-time copy.
+    def snapshot(self, name: str, recursive: bool = False, props: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # FA: ساخت snapshot.
+        """
+        FA:
+        توضیح: یک snapshot به فرم <dataset>@<snap> ایجاد می‌کند؛ می‌توانید recursive و پراپرتی‌های لازم را بدهید.
+        ورودی‌ها:
+          - name (str): نام اسنپ‌شات مثل "tank/data@before-deploy".
+          - recursive (bool): اگر True، روی زیرمجموعه‌ها هم اعمال می‌شود (-r).
+          - props (dict|None): پراپرتی‌های اختیاری در زمان snapshot (با -o key=value).
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ ساخت.
+        خطاها:
+          - ZFSError: خطای اجرای CLI.
+
+        EN:
+          Create a snapshot.
+        """
         try:
             args = ["zfs", "snapshot"]
             if recursive:
@@ -399,10 +702,20 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def list_snapshots(self, dataset: Optional[str] = None) -> Dict[str, Any]:
-        """List snapshots (name, creation, used, refer)."""
-        # FA: فهرست snapshotها با چند فیلد کاربردی.
-        # EN: Return snapshots with a few useful columns.
+    def list_snapshots(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # FA: فهرست snapshotها.
+        """
+        FA:
+        توضیح: لیست snapshotها را با ستون‌های مفید (name, creation, used, refer) بازمی‌گرداند.
+        ورودی:
+          - dataset (str|None): اگر None باشد، همهٔ snapshotهای سیستم لیست می‌شوند.
+        خروجی:
+          - dict(JSON-Ready): لیستی از اسنپ‌شات‌ها با اطلاعات پایه.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          List snapshots with basic columns.
+        """
         try:
             target = dataset or ""
             out, _ = self._run(["zfs", "list", "-H", "-o", "name,creation,used,refer", "-t", "snapshot", "-r", target])
@@ -416,20 +729,41 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:
-        """Create a bookmark from a snapshot."""
-        # FA: بوکمارک سبک‌تر از snapshot است و برای replication مناسب است.
-        # EN: Bookmark is a lightweight snapshot pointer, handy for replication.
+    def bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:  # FA: ساخت bookmark از snapshot.
+        """
+        FA:
+        توضیح: یک bookmark سبک از snapshot می‌سازد که برای ریپلیکیشن و مرجع‌گذاری مفید است.
+        ورودی‌ها:
+          - snapshot (str): نام snapshot مبدأ (مانند "tank/data@pre").
+          - bookmark (str): نام bookmark مقصد (مانند "tank/data#pre").
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ ساخت.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Create a bookmark from snapshot.
+        """
         try:
             out, _ = self._run(["zfs", "bookmark", snapshot, bookmark])
             return ok({"bookmark": bookmark, "from_snapshot": snapshot, "stdout": out})
         except Exception as exc:
             return fail(str(exc))
 
-    def list_bookmarks(self, dataset: Optional[str] = None) -> Dict[str, Any]:
-        """List bookmarks under dataset (or all)."""
-        # FA: لیست نام بوکمارک‌ها برای مدیریت و پاک‌سازی.
-        # EN: List bookmark names for management/cleanup.
+    def list_bookmarks(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # FA: لیست bookmarkها.
+        """
+        FA:
+        توضیح: تمام bookmarkها را (یا زیر یک دیتاست مشخص) لیست می‌کند.
+        ورودی:
+          - dataset (str|None): اگر مشخص شود، با -r زیر همان دیتاست جستجو می‌شود.
+        خروجی:
+          - dict(JSON-Ready): لیست اسامی bookmarkها.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          List bookmarks under dataset or globally.
+        """
         try:
             args = ["zfs", "list", "-H", "-o", "name", "-t", "bookmark"]
             if dataset:
@@ -440,10 +774,22 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def clone(self, snapshot: str, target: str, properties: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """Clone a snapshot into a new dataset."""
-        # FA: ایجاد کلون سریع از snapshot برای تست یا شاخهٔ داده.
-        # EN: Fast clone from snapshot for testing/branching.
+    def clone(self, snapshot: str, target: str, properties: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # FA: کلون از snapshot.
+        """
+        FA:
+        توضیح: از snapshot یک دیتاست نوشتنی جدید می‌سازد (clone) که برای تست/ایزوله‌سازی تغییرات مفید است.
+        ورودی‌ها:
+          - snapshot (str): نام snapshot مبدأ (مثل "tank/data@pre").
+          - target (str): نام دیتاست مقصد (مثل "tank/test/data").
+          - properties (dict|None): پراپرتی‌های اولیه برای کلون.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ کلون.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Clone a snapshot into a writable dataset.
+        """
         try:
             args = ["zfs", "clone"]
             if properties:
@@ -455,20 +801,42 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def promote(self, dataset: str) -> Dict[str, Any]:
-        """Promote a clone to a normal dataset."""
-        # FA: قطع وابستگی کلون از والد با promote.
-        # EN: Break clone dependency via promote.
+    def promote(self, dataset: str) -> Dict[str, Any]:  # FA: promote کلون برای مستقل‌سازی.
+        """
+        FA:
+        توضیح: کلون را به دیتاست معمولی تبدیل می‌کند تا وابستگی به والد قطع شود (zfs promote).
+        ورودی:
+          - dataset (str): نام دیتاست کلون که باید promote شود.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Promote a clone to a normal dataset.
+        """
         try:
             out, _ = self._run(["zfs", "promote", dataset])
             return ok({"promoted": dataset, "stdout": out})
         except Exception as exc:
             return fail(str(exc))
 
-    def rename(self, src: str, dst: str, recursive: bool = False) -> Dict[str, Any]:
-        """Rename a dataset (optionally recursive)."""
-        # FA: تغییر نام دیتاست با امکان بازگشتی.
-        # EN: Rename dataset with optional recursion.
+    def rename(self, src: str, dst: str, recursive: bool = False) -> Dict[str, Any]:  # FA: تغییر نام دیتاست.
+        """
+        FA:
+        توضیح: نام دیتاست را تغییر می‌دهد؛ می‌توان به‌صورت بازگشتی نیز عمل کرد.
+        ورودی‌ها:
+          - src (str): نام فعلی.
+          - dst (str): نام جدید.
+          - recursive (bool): اگر True، -r اضافه می‌شود.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عملیات.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Rename dataset (optionally recursive).
+        """
         try:
             args = ["zfs", "rename"]
             if recursive:
@@ -480,10 +848,22 @@ class ZFSManager:
             return fail(str(exc))
 
     def rollback(self, dataset: str, to_snapshot: Optional[str] = None,
-                 destroy_more_recent: bool = False) -> Dict[str, Any]:
-        """Rollback dataset to a snapshot."""
-        # FA: بازگشت به snapshot مشخص یا آخرین snapshot.
-        # EN: Rollback to a specific or latest snapshot.
+                 destroy_more_recent: bool = False) -> Dict[str, Any]:  # FA: بازگشت به snapshot.
+        """
+        FA:
+        توضیح: دیتاست را به یک snapshot مشخص یا آخرین snapshot بازمی‌گرداند. می‌توان snapshotهای جدیدتر را نیز حذف کرد.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - to_snapshot (str|None): نام snapshot هدف (با یا بدون "dataset@"؛ هر دو پذیرفته می‌شود).
+          - destroy_more_recent (bool): اگر True، -r اضافه می‌شود تا snapshotهای جدیدتر حذف شوند.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ عمل.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Rollback dataset to specific or latest snapshot.
+        """
         try:
             args = ["zfs", "rollback"]
             if destroy_more_recent:
@@ -497,20 +877,41 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def mount(self, dataset: str) -> Dict[str, Any]:
-        """Mount a filesystem dataset."""
-        # FA: سوارکردن دیتاست در mountpoint تعریف‌شده.
-        # EN: Mount dataset at its defined mountpoint.
+    def mount(self, dataset: str) -> Dict[str, Any]:  # FA: مونت دیتاست.
+        """
+        FA:
+        توضیح: دیتاست نوع filesystem را طبق mountpoint خودش سوار می‌کند.
+        ورودی:
+          - dataset (str): نام دیتاست.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ مونت.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Mount filesystem dataset at its mountpoint.
+        """
         try:
             out, _ = self._run(["zfs", "mount", dataset])
             return ok({"mounted": dataset, "stdout": out})
         except Exception as exc:
             return fail(str(exc))
 
-    def unmount(self, dataset: str, force: bool = False) -> Dict[str, Any]:
-        """Unmount a dataset."""
-        # FA: پیاده‌کردن دیتاست؛ در صورت نیاز با force.
-        # EN: Unmount dataset; can force if needed.
+    def unmount(self, dataset: str, force: bool = False) -> Dict[str, Any]:  # FA: آن‌مونت دیتاست.
+        """
+        FA:
+        توضیح: دیتاست را پیاده می‌کند؛ در صورت نیاز با -f.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - force (bool): اگر True، -f اضافه می‌شود.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ آن‌مونت.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Unmount dataset; can force with -f.
+        """
         try:
             args = ["zfs", "unmount"]
             if force:
@@ -521,39 +922,93 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- quotas & space ---------------------------
+    # --------------------------- quotas & space ---------------------------  # FA: سهمیه‌ها و رزرو فضا.
 
-    def set_quota(self, dataset: str, size: str) -> Dict[str, Any]:
-        """Set dataset quota (e.g., '100G' or 'none')."""
-        # FA: تعیین quota برای محدودیت فضای قابل‌دید کاربر.
-        # EN: Set user-visible quota limit.
+    def set_quota(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین quota.
+        """
+        FA:
+        توضیح: محدودیت فضا (quota) را روی دیتاست تنظیم می‌کند؛ مثل "100G" یا "none".
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - size (str): مقدار سهمیه (مثلاً "100G") یا "none".
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: مقدار نامعتبر یا خطای CLI.
+
+        EN:
+          Set dataset quota (e.g., "100G" or "none").
+        """
         return self.set_props(dataset, {"quota": size})
 
-    def set_refquota(self, dataset: str, size: str) -> Dict[str, Any]:
-        """Set referenced quota."""
-        # FA: محدودیت فضا بر اساس فضای referenced.
-        # EN: Quota based on referenced space.
+    def set_refquota(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین refquota.
+        """
+        FA:
+        توضیح: محدودیت فضا بر مبنای فضای referenced.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - size (str): مقدار refquota (مثل "50G" یا "none").
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI یا مقدار نامعتبر.
+
+        EN:
+          Set referenced quota.
+        """
         return self.set_props(dataset, {"refquota": size})
 
-    def set_reservation(self, dataset: str, size: str) -> Dict[str, Any]:
-        """Set reservation."""
-        # FA: رزروکردن فضا به‌صورت تضمین‌شده.
-        # EN: Guarantee space via reservation.
+    def set_reservation(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین reservation.
+        """
+        FA:
+        توضیح: رزرو فضای تضمین‌شده برای دیتاست (reservation) را ست می‌کند.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - size (str): مقدار رزرو مثل "10G" یا "none".
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در تنظیم.
+
+        EN:
+          Set reservation.
+        """
         return self.set_props(dataset, {"reservation": size})
 
-    def set_refreservation(self, dataset: str, size: str) -> Dict[str, Any]:
-        """Set referenced reservation."""
-        # FA: رزرو بر اساس referenced space.
-        # EN: Referenced-space reservation.
+    def set_refreservation(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین refreservation.
+        """
+        FA:
+        توضیح: رزرو بر اساس referenced space را تنظیم می‌کند.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - size (str): مقدار (مثل "10G" یا "none").
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Set referenced reservation.
+        """
         return self.set_props(dataset, {"refreservation": size})
 
-    def list_user_quotas(self, dataset: str) -> Dict[str, Any]:
-        """List user/group space and quotas."""
-        # FA: نمایش quota کاربر و گروه برای مدیریت سهمیه‌ها.
-        # EN: Show user/group space usage and quotas.
+    def list_user_quotas(self, dataset: str) -> Dict[str, Any]:  # FA: لیست سهمیه‌های کاربر/گروه.
+        """
+        FA:
+        توضیح: با استفاده از `zfs userspace` و `zfs groupspace` سهمیه‌ها و مصرف کاربران/گروه‌ها را گزارش می‌کند.
+        ورودی:
+          - dataset (str): نام دیتاست هدف.
+        خروجی:
+          - dict(JSON-Ready): {"users":[{"name":...,"used":...,"quota":...},...], "groups":[...]}.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI یا پارس خروجی.
+
+        EN:
+          List per-user and per-group space usage and quotas.
+        """
         try:
             out_u, _ = self._run(["zfs", "userspace", "-H", "-o", "name,used,quota", dataset])
-            out_g, _ = self._run(["zfs", "groupspace", -H", " - o", "name, used, quota", dataset])
+            out_g, _ = self._run(["zfs", "groupspace", "-H", "-o", "name,used,quota", dataset])
         except Exception as exc:
             return fail(str(exc))
         try:
@@ -570,24 +1025,57 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- tuning ---------------------------
+    # --------------------------- tuning ---------------------------  # FA: تنظیمات عملکردی مانند compression/dedup/...
 
-    def enable_compression(self, dataset: str, algo: str = "lz4") -> Dict[str, Any]:
-        """Enable compression (lz4/zstd/gzip/off)."""
-        # FA: فعال‌سازی فشرده‌سازی با الگوریتم دلخواه.
-        # EN: Turn on compression with desired algorithm.
+    def enable_compression(self, dataset: str, algo: str = "lz4") -> Dict[str, Any]:  # FA: فعال‌سازی compression.
+        """
+        FA:
+        توضیح: فشرده‌سازی را برای دیتاست فعال می‌کند. الگوریتم‌ها: lz4, zstd, gzip, off.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - algo (str): نام الگوریتم (پیش‌فرض lz4).
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در تنظیم.
+
+        EN:
+          Enable compression with given algorithm.
+        """
         return self.set_props(dataset, {"compression": algo})
 
-    def enable_dedup(self, dataset: str, mode: str = "on") -> Dict[str, Any]:
-        """Enable deduplication (on/verify/off)."""
-        # FA: فعال‌سازی dedup برای کاهش مصرف فضا.
-        # EN: Enable deduplication to reduce space usage.
+    def enable_dedup(self, dataset: str, mode: str = "on") -> Dict[str, Any]:  # FA: فعال‌سازی deduplication.
+        """
+        FA:
+        توضیح: deduplication را فعال/غیرفعال می‌کند. مقادیر مجاز: on, verify, off.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - mode (str): یکی از on/verify/off.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در تنظیم.
+
+        EN:
+          Enable/disable deduplication.
+        """
         return self.set_props(dataset, {"dedup": mode})
 
-    def set_record_or_volblock(self, dataset: str, size: str = "128K") -> Dict[str, Any]:
-        """Set recordsize or volblocksize depending on dataset type."""
-        # FA: اگر zvol باشد volblocksize وگرنه recordsize را ست می‌کنیم.
-        # EN: Use volblocksize for zvol else recordsize for filesystem.
+    def set_record_or_volblock(self, dataset: str, size: str = "128K") -> Dict[str, Any]:  # FA: تعیین recordsize/volblocksize.
+        """
+        FA:
+        توضیح: اگر دیتاست از نوع zvol باشد volblocksize تنظیم می‌شود و اگر filesystem باشد recordsize.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - size (str): مقدار اندازهٔ بلاک (مثلاً "16K", "128K", "1M").
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در خواندن پراپرتی‌ها یا تنظیم.
+
+        EN:
+          Set volblocksize for zvol or recordsize for filesystem.
+        """
         props = self.get_props(dataset)
         if not props["ok"]:
             return props
@@ -596,26 +1084,63 @@ class ZFSManager:
             return self.set_props(dataset, {"volblocksize": size})
         return self.set_props(dataset, {"recordsize": size})
 
-    def set_mountpoint(self, dataset: str, path: str) -> Dict[str, Any]:
-        """Set mountpoint for a filesystem dataset."""
-        # FA: تعیین مسیر mountpoint دیتاست.
-        # EN: Set dataset's mountpoint path.
+    def set_mountpoint(self, dataset: str, path: str) -> Dict[str, Any]:  # FA: تعیین mountpoint.
+        """
+        FA:
+        توضیح: مسیر mountpoint دیتاست را تنظیم می‌کند.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - path (str): مسیر مقصد.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در تنظیم.
+
+        EN:
+          Set dataset mountpoint path.
+        """
         return self.set_props(dataset, {"mountpoint": path})
 
-    def set_atime(self, dataset: str, mode: str = "off") -> Dict[str, Any]:
-        """Toggle atime (on/off)."""
-        # FA: خاموش/روشن کردن atime برای کاهش I/O.
-        # EN: Toggle atime to reduce extra writes.
+    def set_atime(self, dataset: str, mode: str = "off") -> Dict[str, Any]:  # FA: تنظیم atime.
+        """
+        FA:
+        توضیح: روشن/خاموش کردن atime برای کاهش writeهای اضافی.
+        ورودی‌ها:
+          - dataset (str): نام دیتاست.
+          - mode (str): "on" یا "off".
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ تنظیم.
+        خطاها:
+          - ZFSError: خطا در تنظیم.
+
+        EN:
+          Toggle atime (on/off).
+        """
         return self.set_props(dataset, {"atime": mode})
 
-    # --------------------------- send / receive ---------------------------
+    # --------------------------- send / receive ---------------------------  # FA: ریپلیکیشن با send/receive.
 
     def send(self, snapshot: str, incremental_from: Optional[str] = None, raw: bool = False,
              compressed: bool = True, resume_token: Optional[str] = None,
-             output_file: Optional[str] = None) -> Dict[str, Any]:
-        """Generate a send stream (prefer writing to file for large streams)."""
-        # FA: تولید استریم برای replication؛ پیشنهاد می‌شود به فایل نوشته شود.
-        # EN: Produce replication stream; prefer writing to a file.
+             output_file: Optional[str] = None) -> Dict[str, Any]:  # FA: تولید استریم send.
+        """
+        FA:
+        توضیح: یک استریم send تولید می‌کند (برای ریپلیکیشن/بکاپ). پیشنهاد می‌شود برای استریم‌های بزرگ به فایل نوشته شود.
+        ورودی‌ها:
+          - snapshot (str): نام snapshot مبدأ (مانند "tank/data@A").
+          - incremental_from (str|None): اگر داده شود، استریم افزایشی از این snapshot مبنا تولید می‌شود (-I).
+          - raw (bool): اگر True، از --raw استفاده می‌شود (برای داده‌های رمزگذاری‌شده).
+          - compressed (bool): اگر True، -c برای استریم فشرده اضافه می‌شود.
+          - resume_token (str|None): اگر داده شود، ارسال از میانه (resume) با -t انجام می‌شود.
+          - output_file (str|None): اگر داده شود، استریم در این مسیر نوشته می‌شود؛ وگرنه در حافظه گرفته و طولش گزارش می‌شود.
+        خروجی:
+          - dict(JSON-Ready): اگر output_file مشخص شده باشد، مسیر فایل؛ در غیر اینصورت اندازهٔ استریم بر حسب بایت.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI یا تایم‌اوت.
+
+        EN:
+          Produce a replication stream (prefer writing to file).
+        """
         try:
             args = ["zfs", "send"]
             if raw:
@@ -648,10 +1173,25 @@ class ZFSManager:
             return fail(str(exc))
 
     def receive(self, target: str, input_file: Optional[str] = None, stdin_bytes: Optional[bytes] = None,
-                force: bool = False, nomount: bool = False, verbose: bool = False) -> Dict[str, Any]:
-        """Receive a send stream into target dataset."""
-        # FA: دریافت استریم روی مقصد؛ از فایل یا stdin.
-        # EN: Receive stream into target; from file or stdin.
+                force: bool = False, nomount: bool = False, verbose: bool = False) -> Dict[str, Any]:  # FA: دریافت استریم.
+        """
+        FA:
+        توضیح: استریم send را در مقصد دریافت می‌کند. منبع می‌تواند فایل یا دادهٔ باینری در حافظه باشد.
+        ورودی‌ها:
+          - target (str): نام دیتاست مقصد (مثل "backup/data").
+          - input_file (str|None): مسیر فایل حاوی استریم (اختیاری).
+          - stdin_bytes (bytes|None): خود استریم به‌صورت باینری (اختیاری؛ با input_file توأمان نباشد).
+          - force (bool): اگر True، -F برای rollback/destroy جدیدترها اعمال می‌شود.
+          - nomount (bool): اگر True، -u برای عدم مونت پس از دریافت.
+          - verbose (bool): اگر True، -v برای جزئیات بیشتر.
+        خروجی:
+          - dict(JSON-Ready): نتیجهٔ دریافت.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI یا ورودی نامعتبر (هر دو منبع داده داده شده باشد).
+
+        EN:
+          Receive a replication stream into target dataset.
+        """
         try:
             if input_file and stdin_bytes:
                 return fail("Provide either input_file or stdin_bytes, not both.", code="invalid_request")
@@ -675,22 +1215,43 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- diagnostics ---------------------------
+    # --------------------------- diagnostics ---------------------------  # FA: ابزارهای عیب‌یابی.
 
-    def diff(self, older: str, newer: str) -> Dict[str, Any]:
-        """Return `zfs diff` output between two points."""
-        # FA: مقایسه تغییرات بین دو snapshot/dataset.
-        # EN: Compare changes between two snapshots/datasets.
+    def diff(self, older: str, newer: str) -> Dict[str, Any]:  # FA: مقایسهٔ تغییرات.
+        """
+        FA:
+        توضیح: خروجی `zfs diff` را بین دو نقطه (snapshot/dataset) بازمی‌گرداند.
+        ورودی‌ها:
+          - older (str): نقطهٔ قدیمی‌تر (مانند "tank/data@A" یا خود "tank/data").
+          - newer (str): نقطهٔ جدیدتر.
+        خروجی:
+          - dict(JSON-Ready): متن خام و آرایهٔ خطوط.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Return `zfs diff` output between two points.
+        """
         try:
             out, _ = self._run(["zfs", "diff", older, newer])
             return ok({"raw": out, "lines": [ln for ln in out.splitlines()]})
         except Exception as exc:
             return fail(str(exc))
 
-    def history(self, dataset_or_pool: Optional[str] = None) -> Dict[str, Any]:
-        """Return ZFS command history for a pool/dataset or global."""
-        # FA: تاریخچه عملیات برای بررسی تغییرات.
-        # EN: Operation history to audit changes.
+    def history(self, dataset_or_pool: Optional[str] = None) -> Dict[str, Any]:  # FA: تاریخچهٔ عملیات.
+        """
+        FA:
+        توضیح: تاریخچهٔ عملیات ZFS را بازمی‌گرداند (در سطح global یا محدود به یک pool/dataset).
+        ورودی:
+          - dataset_or_pool (str|None): اگر None باشد، `zfs history` کلی؛ اگر نام pool باشد سعی در `zpool history` می‌کنیم.
+        خروجی:
+          - dict(JSON-Ready): شامل raw history و scope.
+        خطاها:
+          - ZFSError: خطا در اجرای CLI.
+
+        EN:
+          Return ZFS history for auditing.
+        """
         try:
             if dataset_or_pool:
                 try:
@@ -704,20 +1265,27 @@ class ZFSManager:
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- comprehensive export ---------------------------
+    # --------------------------- comprehensive export ---------------------------  # FA: نمای کامل سیستم برای داشبورد/مانیتورینگ.
 
-    def export_full_state(self) -> Dict[str, Any]:
+    def export_full_state(self) -> Dict[str, Any]:  # FA: خروجی جامع وضعیت ZFS.
         """
-        Return a deep, JSON-serializable inventory:
-          - pools (status, features, iostat, status -v)
-          - datasets under each pool (props, snapshots, bookmarks)
-          - global snapshots summary
+        FA:
+        توضیح: نمایی کامل و عمیق از وضعیت ZFS بازمی‌گرداند تا در داشبورد و نظارت استفاده شود. شامل:
+          - اطلاعات هر pool: نام، guid، state/health، پراپرتی‌های کلیدی، featureها، خروجی خام status -v، و iostat.
+          - دیتاست‌های زیر هر pool: نوع، تمام پراپرتی‌ها، لیست snapshotها و bookmarkها.
+          - خلاصه‌ای از تمام snapshotهای موجود در کل سیستم.
+        ورودی:
+          - ندارد.
+        خروجی:
+          - dict(JSON-Ready): ساختار لایه‌لایهٔ کامل از وضعیت ZFS.
+        خطاها:
+          - ممکن است برخی بخش‌ها به‌علت خطا ناپدید شوند اما تابع در مجموع خروجی ok(...) می‌دهد مگر خطای کلی رخ دهد.
+
+        EN:
+          Export a deep JSON inventory of pools/datasets/snapshots/features.
         """
-        # FA: جمع‌آوری نمای کامل وضعیت سیستم فایل ZFS برای داشبورد/مانیتورینگ.
-        # EN: Build a comprehensive JSON view for dashboards/monitoring.
         try:
             full: Dict[str, Any] = {"pools": []}
-
             for p in self.zfs.pools:
                 pool_entry: Dict[str, Any] = {
                     "name": p.name,
@@ -731,7 +1299,7 @@ class ZFSManager:
                     "datasets": [],
                 }
 
-                # pool props
+                # pool props (best-effort)
                 for prop in ("ashift", "autoexpand", "autoreplace", "autotrim", "comment", "cachefile"):
                     try:
                         if hasattr(p, "get_prop"):
@@ -739,7 +1307,7 @@ class ZFSManager:
                     except Exception:
                         pass
 
-                # features
+                # features list
                 try:
                     feat = self.features(p.name)
                     if feat["ok"]:
@@ -747,7 +1315,7 @@ class ZFSManager:
                 except Exception:
                     pass
 
-                # status -v
+                # status -v raw
                 try:
                     stv = self.pool_status_verbose(p.name)
                     if stv["ok"]:
@@ -755,7 +1323,7 @@ class ZFSManager:
                 except Exception:
                     pass
 
-                # iostat
+                # single iostat sample
                 try:
                     io = self.pool_iostat(p.name, samples=1, interval=1)
                     if io["ok"]:
@@ -763,7 +1331,7 @@ class ZFSManager:
                 except Exception:
                     pass
 
-                # datasets in pool
+                # datasets under pool
                 try:
                     ds_list = self.list_datasets(pool=p.name, types=("filesystem", "volume"))
                     if ds_list["ok"]:
@@ -804,4 +1372,4 @@ class ZFSManager:
             return fail(str(exc))
 
 
-__all__ = ["ZFSManager", "ZFSError", "ok", "fail"]
+__all__ = ["ZFSManager", "ZFSError", "ok", "fail"]  # اگر درهنگام ایمپورت ماژول تمام موارد را ایمپورت کنیذ(یعنی توسط * عمل ایمپورت انجام شود) آنگاه چه مواردی از مآژول ایمپورت شوند
