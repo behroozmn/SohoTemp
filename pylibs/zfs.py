@@ -1063,7 +1063,8 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
                 args.append("--raw")
             if compressed:
                 args.append("-c")
-            if resume_tokEN:       args += ["-t", resume_token]
+            if resume_tokEN:
+                args += ["-t", resume_token]
             elif incremental_from:
                 args += ["-I", incremental_from]
             args.append(snapshot)
