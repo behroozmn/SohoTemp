@@ -29,7 +29,6 @@ from typing import Dict, List, Optional, Iterable, Tuple, Any  # تایپ‌هی
 
 def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:  # تابع کمکی برای ساخت پاسخ موفق استاندارد.
     """
-    FA:
     توضیح: این تابع یک پوشش (envelope) استاندارد برای پاسخ موفق تولید می‌کند تا به‌صورت مستقیم در DRF استفاده شود.
     ورودی‌ها:
       - data (Any): هر دادهٔ قابل‌سریالایز به JSON که می‌خواهید به کلاینت برگردانید؛ می‌تواند عدد/رشته/دیکشنری/لیست و ...
@@ -48,7 +47,6 @@ def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:  # �
 
 def fail(message: str, code: str = "zfs_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:  # تابع کمکی برای ساخت پاسخ خطا.
     """
-    FA:
     توضیح: این تابع ساختار یک پاسخ خطا را ایجاد می‌کند تا خطاها به‌صورت یکنواخت به کلاینت بازگردند.
     ورودی‌ها:
       - message (str): پیام خطای قابل‌خواندن برای انسان که توضیح دهد چه رخ داده است.
@@ -66,7 +64,6 @@ def fail(message: str, code: str = "zfs_error", extra: Optional[Dict[str, Any]] 
 
 class ZFSError(Exception):  # استثنای اختصاصی دامنهٔ ZFS برای تمایز خطاها در لاجیک برنامه.
     """
-    FA:
     توضیح: استثنای دامنه‌ای برای مدیریت یک‌دست خطاهای مرتبط با عملیات ZFS.
     چرا؟ برای اینکه بتوانیم خطاهای مربوط به ZFS را از سایر خطاها جدا کنیم و در handlerهای DRF واکنش مناسب نشان دهیم.
     ورودی‌ها/خروجی:
@@ -81,8 +78,7 @@ class ZFSError(Exception):  # استثنای اختصاصی دامنهٔ ZFS ب�
 
 class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروجی JSON-Ready و fallback به CLI.
     """
-    FA:
-    هدف: ارائهٔ API سطح‌بالا برای مدیریت ZFS که:
+    هدف: ارائهٔ API سطح‌بالا برای مدیریت ZFS که
       1) تا جای ممکن از libzfs برای کارهای داخل حافظه (introspection و set/get properties) استفاده کند.
       2) در جاهایی که API پوشش ندارد (مثل send/receive یا create pool)، با اجرای امن CLI (zfs/zpool) کار را انجام دهد.
       3) تمام خروجی‌ها را به‌صورت JSON-Ready برگرداند تا با DRF به‌راحتی قابل مصرف باشد.
@@ -247,7 +243,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def pool_status_verbose(self, pool: str) -> Dict[str, Any]:  # FA: خروجی خام zpool status -v برای عیب‌یابی.
+    def pool_status_verbose(self, pool: str) -> Dict[str, Any]:  # خروجی خام zpool status -v برای عیب‌یابی.
         """
         توضیح: خروجی کامل و خام `zpool status -v` را بازمی‌گرداند که برای عیب‌یابی دقیق (device errors, checksum, ...) کاربرد دارد.
         ورودی:
@@ -260,12 +256,12 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         EN: Return raw `zpool status -v` for troubleshooting.
         """
         try:
-            out, _ = self._run(["zpool", "status", "-v", pool])  # FA: اجرای امن فرمان status -v.
-            return ok({"raw": out})  # FA: بازگرداندن متن خام برای پارس بعدی در کلاینت/سرویس.
+            out, _ = self._run(["zpool", "status", "-v", pool])  # اجرای امن فرمان status -v.
+            return ok({"raw": out})  # بازگرداندن متن خام برای پارس بعدی در کلاینت/سرویس.
         except Exception as exc:
             return fail(str(exc))
 
-    def pool_iostat(self, pool: Optional[str] = None, samples: int = 1, interval: int = 1) -> Dict[str, Any]:  # FA: نمونهٔ I/O stats.
+    def pool_iostat(self, pool: Optional[str] = None, samples: int = 1, interval: int = 1) -> Dict[str, Any]:  # نمونهٔ I/O stats.
         """
         توضیح: یک عکس لحظه‌ای از آمار I/O با `zpool iostat -v` می‌گیرد. برای پایش سریع کاراست.
         ورودی‌ها:
@@ -280,17 +276,17 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         EN: Return raw `zpool iostat -v` output.
         """
         try:
-            args = ["zpool", "iostat", "-v"]  # FA: ساخت آرگومان پایه برای iostat مفصل.
-            if pool:  # FA: اگر نام pool داده شده باشد، اضافه کن.
+            args = ["zpool", "iostat", "-v"]  # ساخت آرگومان پایه برای iostat مفصل.
+            if pool:  # اگر نام pool داده شده باشد، اضافه کن.
                 args.append(pool)
-            args += [str(samples), str(interval)]  # FA: افزودن پارامترهای نمونه و بازه.
-            out, _ = self._run(args)  # FA: اجرای امن CLI.
+            args += [str(samples), str(interval)]  # افزودن پارامترهای نمونه و بازه.
+            out, _ = self._run(args)  # اجرای امن CLI.
             return ok({"raw": out})
         except Exception as exc:
             return fail(str(exc))
 
     def list_datasets(self, pool: Optional[str] = None,
-                      types: Iterable[str] = ("filesystem", "volume", "snapshot")) -> Dict[str, Any]:  # FA: لیست دیتاست‌ها با نوع.
+                      types: Iterable[str] = ("filesystem", "volume", "snapshot")) -> Dict[str, Any]:  # لیست دیتاست‌ها با نوع.
         """
         توضیح: فهرست دیتاست‌ها (filesystem, volume(zvol), snapshot) را به همراه نوعشان بازمی‌گرداند.
         ورودی‌ها:
@@ -304,22 +300,22 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         EN: List datasets with their type, optionally filtered by pool and types.
         """
         try:
-            args = ["zfs", "list", "-H", "-o", "name,type", "-t", ",".join(types), "-r"]  # FA: لیست با خروجی tab-separated.
+            args = ["zfs", "list", "-H", "-o", "name,type", "-t", ",".join(types), "-r"]  # لیست با خروجی tab-separated.
             if pool:
-                args.append(pool)  # FA: محدودکردن به یک pool خاص.
-            out, _ = self._run(args)  # FA: اجرای فرمان.
-            items: List[Dict[str, str]] = []  # FA: آماده‌سازی لیست نتیجه.
-            for line in out.splitlines():  # FA: پیمایش هر خط از خروجی.
+                args.append(pool)  # محدودکردن به یک pool خاص.
+            out, _ = self._run(args)  # اجرای فرمان.
+            items: List[Dict[str, str]] = []  # آماده‌سازی لیست نتیجه.
+            for line in out.splitlines():  # پیمایش هر خط از خروجی.
                 if not line.strip():
-                    continue  # FA: خط خالی را رد کن.
-                name_i, type_i = line.split("\t")  # FA: جدا کردن نام و نوع بر اساس tab.
-                if pool is None or name_i.split("/")[0] == pool:  # FA: در صورت نبود فیلتر pool، همه را می‌پذیریم.
-                    items.append({"name": name_i, "type": type_i})  # FA: افزودن به نتیجه.
+                    continue  # خط خالی را رد کن.
+                name_i, type_i = line.split("\t")  # جدا کردن نام و نوع بر اساس tab.
+                if pool is None or name_i.split("/")[0] == pool:  # در صورت نبود فیلتر pool، همه را می‌پذیریم.
+                    items.append({"name": name_i, "type": type_i})  # افزودن به نتیجه.
             return ok(items)
         except Exception as exc:
             return fail(str(exc))
 
-    def get_props(self, target: str) -> Dict[str, Any]:  # FA: گرفتن همهٔ پراپرتی‌ها برای یک دیتاست.
+    def get_props(self, target: str) -> Dict[str, Any]:  # گرفتن همهٔ پراپرتی‌ها برای یک دیتاست.
         """
         توضیح: تمام پراپرتی‌های قابل مشاهدهٔ یک دیتاست را (ترجیحاً با libzfs و در غیر اینصورت با CLI) بازمی‌گرداند.
         ورودی:
@@ -333,15 +329,15 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         try:
             try:
-                ds = self._get_dataset(target)  # FA: تلاش از libzfs.
-                result: Dict[str, Any] = {}  # FA: نتیجهٔ پراپرتی‌ها.
-                if hasattr(ds, "properties"):  # FA: در برخی bindingها dict-مانند است.
-                    for k, v in ds.properties.items():  # FA: پیمایش کلید/مقدار.
-                        result[k] = str(self._safe_prop_value(v))  # FA: نرمال‌سازی مقدار.
+                ds = self._get_dataset(target)  # تلاش از libzfs.
+                result: Dict[str, Any] = {}  # نتیجهٔ پراپرتی‌ها.
+                if hasattr(ds, "properties"):  # در برخی bindingها dict-مانند است.
+                    for k, v in ds.properties.items():  # پیمایش کلید/مقدار.
+                        result[k] = str(self._safe_prop_value(v))  # نرمال‌سازی مقدار.
                     return ok(result)
             except ZFSError:
-                pass  # FA: اگر libzfs شکست خورد، به CLI می‌رویم.
-            out, _ = self._run(["zfs", "get", "-H", "-o", "property,value", "all", target])  # FA: خواندن همهٔ پراپرتی‌ها با CLI.
+                pass  # اگر libzfs شکست خورد، به CLI می‌رویم.
+            out, _ = self._run(["zfs", "get", "-H", "-o", "property,value", "all", target])  # خواندن همهٔ پراپرتی‌ها با CLI.
             props: Dict[str, Any] = {}
             for line in out.splitlines():
                 if not line.strip():
@@ -352,12 +348,12 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- pool operations ---------------------------  # FA: متدهای ساخت/حذف/وضعیت pool.
+    # --------------------------- pool operations ---------------------------  # متدهای ساخت/حذف/وضعیت pool.
 
     def create_pool(self, name: str, vdevs: List[List[str]],
                     properties: Optional[Dict[str, str]] = None,
                     force: bool = False, altroot: Optional[str] = None,
-                    ashift: Optional[int] = None) -> Dict[str, Any]:  # FA: ساخت zpool جدید با CLI.
+                    ashift: Optional[int] = None) -> Dict[str, Any]:  # ساخت zpool جدید با CLI.
         """
         توضیح: یک zpool جدید می‌سازد. برای vdevها باید آرایه‌ای از گروه‌ها بدهید (مثلاً [["mirror","/dev/sdb","/dev/sdc"], ["raidz1",...]]).
         ورودی‌ها:
@@ -375,25 +371,25 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         EN: Create a zpool using CLI. Provide vdev groups just like zpool create syntax.
         """
         try:
-            args = ["zpool", "create"]  # FA: آغاز آرگومان‌های ساخت pool.
+            args = ["zpool", "create"]  # آغاز آرگومان‌های ساخت pool.
             if force:
-                args.append("-f")  # FA: فلگ اجباری.
+                args.append("-f")  # فلگ اجباری.
             if altroot:
-                args += ["-R", altroot]  # FA: تنظیم روت جایگزین.
+                args += ["-R", altroot]  # تنظیم روت جایگزین.
             if ashift is not None:
-                args += ["-o", f"ashift={ashift}"]  # FA: پراپرتی ashift.
+                args += ["-o", f"ashift={ashift}"]  # پراپرتی ashift.
             if properties:
                 for k, v in properties.items():
                     args += ["-o", f"{k}={v}"]  # افزودن سایر پراپرتی‌ها.
-            args.append(name)  # FA: نام pool.
+            args.append(name)  # نام pool.
             for grp in vdevs:
-                args += grp  # FA: افزودن گروه vdevها دقیقا به ترتیب.
-            out, _ = self._run(args)  # FA: اجرای ساخت.
+                args += grp  # افزودن گروه vdevها دقیقا به ترتیب.
+            out, _ = self._run(args)  # اجرای ساخت.
             return ok({"created": True, "pool": name, "stdout": out})
         except Exception as exc:
             return fail(str(exc))
 
-    def destroy_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # FA: حذف zpool (خطرناک).
+    def destroy_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # حذف zpool (خطرناک).
         """
         توضیح: یک zpool را به‌طور کامل حذف می‌کند. بسیار خطرناک است و همهٔ داده‌ها از دست می‌رود.
         ورودی‌ها:
@@ -417,7 +413,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
             return fail(str(exc))
 
     def import_pool(self, name: Optional[str] = None,
-                    dir_hint: Optional[str] = None, readonly: bool = False) -> Dict[str, Any]:  # FA: ایمپورت pool.
+                    dir_hint: Optional[str] = None, readonly: bool = False) -> Dict[str, Any]:  # ایمپورت pool.
         """
         توضیح: ایمپورت یک zpool از دیسک‌ها. می‌توانید مسیر جستجو بدهید یا حالت فقط‌خواندنی تنظیم کنید.
         ورودی‌ها:
@@ -444,7 +440,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def export_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # FA: اکسپورت pool.
+    def export_pool(self, name: str, force: bool = False) -> Dict[str, Any]:  # اکسپورت pool.
         """
         توضیح: zpool را از سیستم جاری خارج (export) می‌کند تا در سیستم دیگری import شود.
         ورودی‌ها:
@@ -467,7 +463,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def scrub_pool(self, name: str, stop: bool = False) -> Dict[str, Any]:  # FA: شروع/توقف scrub.
+    def scrub_pool(self, name: str, stop: bool = False) -> Dict[str, Any]:  # شروع/توقف scrub.
         """
         توضیح: اسکراب را برای بررسی و اصلاح silent errorها در pool آغاز یا متوقف می‌کند.
         ورودی‌ها:
@@ -490,7 +486,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def clear_pool(self, name: str, device: Optional[str] = None) -> Dict[str, Any]:  # FA: پاک‌سازی شمارنده‌های خطا.
+    def clear_pool(self, name: str, device: Optional[str] = None) -> Dict[str, Any]:  # پاک‌سازی شمارنده‌های خطا.
         """
         توضیح: شمارنده‌های خطا را در سطح pool یا یک وسیلهٔ خاص پاک می‌کند (zpool clear).
         ورودی‌ها:
@@ -512,7 +508,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def features(self, pool: str) -> Dict[str, Any]:  # FA: لیست feature@* ها.
+    def features(self, pool: str) -> Dict[str, Any]:  # لیست feature@* ها.
         """
         توضیح: با استفاده از `zpool get all` فهرست feature@* و وضعیتشان را استخراج می‌کند.
         ورودی:
@@ -537,10 +533,10 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- dataset operations ---------------------------  # FA: متدهای مدیریت دیتاست/زول.
+    # --------------------------- dataset operations ---------------------------  # متدهای مدیریت دیتاست/زول.
 
     def create_dataset(self, name: str, properties: Optional[Dict[str, str]] = None,
-                       dataset_type: str = "filesystem") -> Dict[str, Any]:  # FA: ایجاد filesystem یا zvol.
+                       dataset_type: str = "filesystem") -> Dict[str, Any]:  # ایجاد filesystem یا zvol.
         """
         توضیح: یک دیتاست جدید می‌سازد؛ اگر نوع "volume" انتخاب شود، باید حتماً پراپرتی "volsize" تعیین شود.
         ورودی‌ها:
@@ -568,7 +564,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:  # FA: حذف دیتاست.
+    def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:  # حذف دیتاست.
         """
         توضیح: دیتاست را حذف می‌کند؛ با گزینهٔ recursive می‌توانید فرزندان/اسنپ‌شات‌ها را هم حذف کنید.
         ورودی‌ها:
@@ -594,7 +590,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def set_props(self, target: str, properties: Dict[str, str]) -> Dict[str, Any]:  # FA: ست‌کردن پراپرتی‌ها.
+    def set_props(self, target: str, properties: Dict[str, str]) -> Dict[str, Any]:  # ست‌کردن پراپرتی‌ها.
         """
         توضیح: پراپرتی‌های یک دیتاست را تنظیم می‌کند؛ ابتدا سعی با libzfs و در صورت نیاز با CLI.
         ورودی‌ها:
@@ -631,7 +627,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
             except Exception as exc2:
                 return fail(str(exc2))
 
-    def snapshot(self, name: str, recursive: bool = False, props: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # FA: ساخت snapshot.
+    def snapshot(self, name: str, recursive: bool = False, props: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # ساخت snapshot.
         """
         توضیح: یک snapshot به فرم <dataset>@<snap> ایجاد می‌کند؛ می‌توانید recursive و پراپرتی‌های لازم را بدهید.
         ورودی‌ها:
@@ -658,7 +654,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def list_snapshots(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # FA: فهرست snapshotها.
+    def list_snapshots(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # فهرست snapshotها.
         """
         توضیح: لیست snapshotها را با ستون‌های مفید (name, creation, used, refer) بازمی‌گرداند.
         ورودی:
@@ -683,7 +679,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:  # FA: ساخت bookmark از snapshot.
+    def bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:  # ساخت bookmark از snapshot.
         """
         توضیح: یک bookmark سبک از snapshot می‌سازد که برای ریپلیکیشن و مرجع‌گذاری مفید است.
         ورودی‌ها:
@@ -702,7 +698,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def list_bookmarks(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # FA: لیست bookmarkها.
+    def list_bookmarks(self, dataset: Optional[str] = None) -> Dict[str, Any]:  # لیست bookmarkها.
         """
         توضیح: تمام bookmarkها را (یا زیر یک دیتاست مشخص) لیست می‌کند.
         ورودی:
@@ -724,7 +720,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def clone(self, snapshot: str, target: str, properties: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # FA: کلون از snapshot.
+    def clone(self, snapshot: str, target: str, properties: Optional[Dict[str, str]] = None) -> Dict[str, Any]:  # کلون از snapshot.
         """
         توضیح: از snapshot یک دیتاست نوشتنی جدید می‌سازد (clone) که برای تست/ایزوله‌سازی تغییرات مفید است.
         ورودی‌ها:
@@ -749,7 +745,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def promote(self, dataset: str) -> Dict[str, Any]:  # FA: promote کلون برای مستقل‌سازی.
+    def promote(self, dataset: str) -> Dict[str, Any]:  # promote کلون برای مستقل‌سازی.
         """
         توضیح: کلون را به دیتاست معمولی تبدیل می‌کند تا وابستگی به والد قطع شود (zfs promote).
         ورودی:
@@ -767,7 +763,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def rename(self, src: str, dst: str, recursive: bool = False) -> Dict[str, Any]:  # FA: تغییر نام دیتاست.
+    def rename(self, src: str, dst: str, recursive: bool = False) -> Dict[str, Any]:  # تغییر نام دیتاست.
         """
         توضیح: نام دیتاست را تغییر می‌دهد؛ می‌توان به‌صورت بازگشتی نیز عمل کرد.
         ورودی‌ها:
@@ -792,7 +788,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
             return fail(str(exc))
 
     def rollback(self, dataset: str, to_snapshot: Optional[str] = None,
-                 destroy_more_recent: bool = False) -> Dict[str, Any]:  # FA: بازگشت به snapshot.
+                 destroy_more_recent: bool = False) -> Dict[str, Any]:  # بازگشت به snapshot.
         """
         توضیح: دیتاست را به یک snapshot مشخص یا آخرین snapshot بازمی‌گرداند. می‌توان snapshotهای جدیدتر را نیز حذف کرد.
         ورودی‌ها:
@@ -819,7 +815,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def mount(self, dataset: str) -> Dict[str, Any]:  # FA: مونت دیتاست.
+    def mount(self, dataset: str) -> Dict[str, Any]:  # مونت دیتاست.
         """
         توضیح: دیتاست نوع filesystem را طبق mountpoint خودش سوار می‌کند.
         ورودی:
@@ -837,7 +833,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def unmount(self, dataset: str, force: bool = False) -> Dict[str, Any]:  # FA: آن‌مونت دیتاست.
+    def unmount(self, dataset: str, force: bool = False) -> Dict[str, Any]:  # آن‌مونت دیتاست.
         """
         توضیح: دیتاست را پیاده می‌کند؛ در صورت نیاز با -f.
         ورودی‌ها:
@@ -860,9 +856,9 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- quotas & space ---------------------------  # FA: سهمیه‌ها و رزرو فضا.
+    # --------------------------- quotas & space ---------------------------  # سهمیه‌ها و رزرو فضا.
 
-    def set_quota(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین quota.
+    def set_quota(self, dataset: str, size: str) -> Dict[str, Any]:  # تعیین quota.
         """
         توضیح: محدودیت فضا (quota) را روی دیتاست تنظیم می‌کند؛ مثل "100G" یا "none".
         ورودی‌ها:
@@ -877,7 +873,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"quota": size})
 
-    def set_refquota(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین refquota.
+    def set_refquota(self, dataset: str, size: str) -> Dict[str, Any]:  # تعیین refquota.
         """
         توضیح: محدودیت فضا بر مبنای فضای referenced.
         ورودی‌ها:
@@ -892,7 +888,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"refquota": size})
 
-    def set_reservation(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین reservation.
+    def set_reservation(self, dataset: str, size: str) -> Dict[str, Any]:  # تعیین reservation.
         """
         توضیح: رزرو فضای تضمین‌شده برای دیتاست (reservation) را ست می‌کند.
         ورودی‌ها:
@@ -907,7 +903,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"reservation": size})
 
-    def set_refreservation(self, dataset: str, size: str) -> Dict[str, Any]:  # FA: تعیین refreservation.
+    def set_refreservation(self, dataset: str, size: str) -> Dict[str, Any]:  # تعیین refreservation.
         """
         توضیح: رزرو بر اساس referenced space را تنظیم می‌کند.
         ورودی‌ها:
@@ -922,7 +918,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"refreservation": size})
 
-    def list_user_quotas(self, dataset: str) -> Dict[str, Any]:  # FA: لیست سهمیه‌های کاربر/گروه.
+    def list_user_quotas(self, dataset: str) -> Dict[str, Any]:  # لیست سهمیه‌های کاربر/گروه.
         """
         توضیح: با استفاده از `zfs userspace` و `zfs groupspace` سهمیه‌ها و مصرف کاربران/گروه‌ها را گزارش می‌کند.
         ورودی:
@@ -953,9 +949,9 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- tuning ---------------------------  # FA: تنظیمات عملکردی مانند compression/dedup/...
+    # --------------------------- tuning ---------------------------  # تنظیمات عملکردی مانند compression/dedup/...
 
-    def enable_compression(self, dataset: str, algo: str = "lz4") -> Dict[str, Any]:  # FA: فعال‌سازی compression.
+    def enable_compression(self, dataset: str, algo: str = "lz4") -> Dict[str, Any]:  # فعال‌سازی compression.
         """
         توضیح: فشرده‌سازی را برای دیتاست فعال می‌کند. الگوریتم‌ها: lz4, zstd, gzip, off.
         ورودی‌ها:
@@ -970,7 +966,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"compression": algo})
 
-    def enable_dedup(self, dataset: str, mode: str = "on") -> Dict[str, Any]:  # FA: فعال‌سازی deduplication.
+    def enable_dedup(self, dataset: str, mode: str = "on") -> Dict[str, Any]:  # فعال‌سازی deduplication.
         """
         توضیح: deduplication را فعال/غیرفعال می‌کند. مقادیر مجاز: on, verify, off.
         ورودی‌ها:
@@ -985,7 +981,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"dedup": mode})
 
-    def set_record_or_volblock(self, dataset: str, size: str = "128K") -> Dict[str, Any]:  # FA: تعیین recordsize/volblocksize.
+    def set_record_or_volblock(self, dataset: str, size: str = "128K") -> Dict[str, Any]:  # تعیین recordsize/volblocksize.
         """
         توضیح: اگر دیتاست از نوع zvol باشد volblocksize تنظیم می‌شود و اگر filesystem باشد recordsize.
         ورودی‌ها:
@@ -1006,7 +1002,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
             return self.set_props(dataset, {"volblocksize": size})
         return self.set_props(dataset, {"recordsize": size})
 
-    def set_mountpoint(self, dataset: str, path: str) -> Dict[str, Any]:  # FA: تعیین mountpoint.
+    def set_mountpoint(self, dataset: str, path: str) -> Dict[str, Any]:  # تعیین mountpoint.
         """
         توضیح: مسیر mountpoint دیتاست را تنظیم می‌کند.
         ورودی‌ها:
@@ -1021,7 +1017,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"mountpoint": path})
 
-    def set_atime(self, dataset: str, mode: str = "off") -> Dict[str, Any]:  # FA: تنظیم atime.
+    def set_atime(self, dataset: str, mode: str = "off") -> Dict[str, Any]:  # تنظیم atime.
         """
         توضیح: روشن/خاموش کردن atime برای کاهش writeهای اضافی.
         ورودی‌ها:
@@ -1036,11 +1032,11 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         """
         return self.set_props(dataset, {"atime": mode})
 
-    # --------------------------- send / receive ---------------------------  # FA: ریپلیکیشن با send/receive.
+    # --------------------------- send / receive ---------------------------  # ریپلیکیشن با send/receive.
 
     def send(self, snapshot: str, incremental_from: Optional[str] = None, raw: bool = False,
              compressed: bool = True, resume_token: Optional[str] = None,
-             output_file: Optional[str] = None) -> Dict[str, Any]:  # FA: تولید استریم send.
+             output_file: Optional[str] = None) -> Dict[str, Any]:  # تولید استریم send.
         """
         توضیح: یک استریم send تولید می‌کند (برای ریپلیکیشن/بکاپ). پیشنهاد می‌شود برای استریم‌های بزرگ به فایل نوشته شود.
         ورودی‌ها:
@@ -1089,7 +1085,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
             return fail(str(exc))
 
     def receive(self, target: str, input_file: Optional[str] = None, stdin_bytes: Optional[bytes] = None,
-                force: bool = False, nomount: bool = False, verbose: bool = False) -> Dict[str, Any]:  # FA: دریافت استریم.
+                force: bool = False, nomount: bool = False, verbose: bool = False) -> Dict[str, Any]:  # دریافت استریم.
         """
         توضیح: استریم send را در مقصد دریافت می‌کند. منبع می‌تواند فایل یا دادهٔ باینری در حافظه باشد.
         ورودی‌ها:
@@ -1129,9 +1125,9 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- diagnostics ---------------------------  # FA: ابزارهای عیب‌یابی.
+    # --------------------------- diagnostics ---------------------------  # ابزارهای عیب‌یابی.
 
-    def diff(self, older: str, newer: str) -> Dict[str, Any]:  # FA: مقایسهٔ تغییرات.
+    def diff(self, older: str, newer: str) -> Dict[str, Any]:  # مقایسهٔ تغییرات.
         """
         توضیح: خروجی `zfs diff` را بین دو نقطه (snapshot/dataset) بازمی‌گرداند.
         ورودی‌ها:
@@ -1150,7 +1146,7 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    def history(self, dataset_or_pool: Optional[str] = None) -> Dict[str, Any]:  # FA: تاریخچهٔ عملیات.
+    def history(self, dataset_or_pool: Optional[str] = None) -> Dict[str, Any]:  # تاریخچهٔ عملیات.
         """
         توضیح: تاریخچهٔ عملیات ZFS را بازمی‌گرداند (در سطح global یا محدود به یک pool/dataset).
         ورودی:
@@ -1175,9 +1171,9 @@ class ZFSManager:  # کلاس مدیریت سطح‌بالای ZFS با خروج
         except Exception as exc:
             return fail(str(exc))
 
-    # --------------------------- comprehensive export ---------------------------  # FA: نمای کامل سیستم برای داشبورد/مانیتورینگ.
+    # --------------------------- comprehensive export ---------------------------  # نمای کامل سیستم برای داشبورد/مانیتورینگ.
 
-    def export_full_state(self) -> Dict[str, Any]:  # FA: خروجی جامع وضعیت ZFS.
+    def export_full_state(self) -> Dict[str, Any]:  # خروجی جامع وضعیت ZFS.
         """
         توضیح: نمایی کامل و عمیق از وضعیت ZFS بازمی‌گرداند تا در داشبورد و نظارت استفاده شود. شامل:
           - اطلاعات هر pool: نام، guid، state/health، پراپرتی‌های کلیدی، featureها، خروجی خام status -v، و iostat.
