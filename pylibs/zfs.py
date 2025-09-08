@@ -37,6 +37,8 @@ class ZFSManager:
     """
     High-level ZFS manager using libzfs and safe CLI fallbacks.
 
+    dry_run=True برای تستِ بدون تغییر
+
     - All public methods return JSON-serializable dicts (friendly to DRF Response()).
     - Uses libzfs for discovery/property ops; uses `zfs`/`zpool` CLI for gaps (send/recv, create pool, etc.).
     """
