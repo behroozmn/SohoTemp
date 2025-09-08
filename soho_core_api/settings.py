@@ -39,7 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework', # behroozMohamadinasab
     'drf_spectacular', # behroozMohamadinasab
-    'rest_framework.authtoken',
+    'rest_framework.authtoken', # behroozMohamadinasab
+    'corsheaders', # # behroozMohamadinasab
 ]
 
 MIDDLEWARE = [
@@ -50,7 +51,21 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', #behroozMohammadiNasab
+    'django.middleware.common.CommonMiddleware', #behroozMohammadiNasab
 ]
+
+#BLOCK behroozMohammadiNasab
+# CORS_ALLOW_ALL_ORIGINS = True,  # If want to allow all origins
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "authorization",
+]
+#EndBLOCK
 
 ROOT_URLCONF = 'soho_core_api.urls'
 
