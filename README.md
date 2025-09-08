@@ -43,6 +43,8 @@ pip install djangorestframework
 pip install markdown
 pip install django-filter 
 pip install psutil
+pip install django-cors-headers
+
 python3 manage.py makemigrations
 python3 manage.py migrate
 ```
