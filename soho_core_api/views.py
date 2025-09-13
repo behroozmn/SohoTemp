@@ -6,6 +6,10 @@ from django.http import JsonResponse
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAdminUser
+from pylibs.zfs import ZFSManager
 
 
 def index(myrequest):
@@ -49,19 +53,11 @@ def disk(myrequest):
         return Response({"error": str(e)}, status.HTTP_200_OK)
 
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser
-from pylibs.zfs import ZFSManager
-
-
-def get(request):
-    # فارسی: نمونه‌سازی از مدیر ZFS و گرفتن وضعیت کامل برای داشبورد.
-    # EN: Instantiate manager and export full state for dashboards.
-    mgr = ZFSManager(dry_run=False)
-    return Response(mgr.export_full_state())
-
-
 class ZFSStateView(APIView):
     permission_classes = [IsAdminUser]  # محدودسازی دسترسی؛ اختیاری
 
+    def get(self,request):
+        # فارسی: نمونه‌سازی از مدیر ZFS و گرفتن وضعیت کامل برای داشبورد.
+        # EN: Instantiate manager and export full state for dashboards.
+        mgr = ZFSManager(dry_run=False)
+        return Response(mgr.export_full_state())
