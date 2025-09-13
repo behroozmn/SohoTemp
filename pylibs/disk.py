@@ -42,7 +42,7 @@ class Disk:
             )
             data = eval(output)  # تبدیl to dict
 
-            for disk in data.get("blockdevices", []):
+            for disk in get("blockdevices", []):
                 name = disk.get("name")
                 result[name] = {
                     "maj_min": disk.get("maj:min"),
