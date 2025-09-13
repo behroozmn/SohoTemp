@@ -1,29 +1,25 @@
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
-import psutil  # FA: psutil برای خواندن آمار سیستم
-from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
-import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
+import psutil  # psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
+import subprocess  # اجرای دستورات سیستمی در صورت نیاز
 
-import psutil  # FA: psutil برای خواندن آمار سیستم
+import psutil  # psutil برای خواندن آمار سیستم
 import time
-from typing import Dict, Any, Optional, List  # FA: تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
 
 
-class Disk:  # FA: تعریف کلاس اصلی
+class Disk:
     def __init__(self):
-        """
-        FA: توضیح تابع __init__ — ورودی‌ها: (self) — خروجی: بر اساس پیاده‌سازی فعلی بدون تغییر منطق.
-        FA: این داکیومنت تنها برای توضیح است و هیچ تغییری در رفتار تابع ایجاد نمی‌کند.
-        """
         try:
-            self._partitions = psutil.disk_partitions()  # فقط mount points و فایل‌سیستم‌ها را برمی‌گرداند  # FA: فراخوانی تابع از psutil
-            self._io_counters = psutil.disk_io_counters(perdisk=True)  # آمار read/write دیسک برای هر device  # FA: فراخوانی تابع از psutil
+            self._partitions = psutil.disk_partitions()  # فقط mount points و فایل‌سیستم‌ها را برمی‌گرداند  # فراخوانی تابع از psutil
+            self._io_counters = psutil.disk_io_counters(perdisk=True)  # آمار read/write دیسک برای هر device  # فراخوانی تابع از psutil
             self._usage_data = {}
             self._details = {}
 
             for part in self._partitions:
                 try:
-                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر partition  # FA: فراخوانی تابع از psutil
+                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر partition  # فراخوانی تابع از psutil
                     self._usage_data[part.device] = usage
                 except PermissionError:
                     continue
