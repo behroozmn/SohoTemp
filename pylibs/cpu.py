@@ -1,18 +1,14 @@
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
-import psutil  # FA: psutil برای خواندن آمار سیستم
-from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
-import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
+import psutil  # psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
+import subprocess  # اجرای دستورات سیستمی در صورت نیاز
 
 
-class CPU:  # FA: تعریف کلاس اصلی
+class CPU:
     def __init__(self):
-        """
-        FA: توضیح تابع __init__ — ورودی‌ها: (self) — خروجی: بر اساس پیاده‌سازی فعلی بدون تغییر منطق.
-        FA: این داکیومنت تنها برای توضیح است و هیچ تغییری در رفتار تابع ایجاد نمی‌کند.
-        """
         try:
-            self._cpu_percent = psutil.cpu_percent()  # FA: فراخوانی تابع از psutil
-            self._cpu_times = psutil.cpu_times()._asdict()  # FA: فراخوانی تابع از psutil
+            self._cpu_percent = psutil.cpu_percent()  # فراخوانی تابع از psutil
+            self._cpu_times = psutil.cpu_times()._asdict()  # فراخوانی تابع از psutil
             self._cpu_freq = self._get_cpu_frequency()
             self._cpu_cores = self._get_cpu_cores()
         except Exception as e:
@@ -20,14 +16,14 @@ class CPU:  # FA: تعریف کلاس اصلی
 
     def _get_cpu_frequency(self) -> Dict[str, Optional[float]]:
         try:
-            return psutil.cpu_freq()._asdict()  # FA: فراخوانی تابع از psutil
+            return psutil.cpu_freq()._asdict()  # فراخوانی تابع از psutil
         except Exception as e:
             return {"error": str(e)}
 
     def _get_cpu_cores(self) -> Dict[str, Optional[int]]:
         return {
-            "physical": psutil.cpu_count(logical=False),  # FA: فراخوانی تابع از psutil
-            "logical": psutil.cpu_count(logical=True)  # FA: فراخوانی تابع از psutil
+            "physical": psutil.cpu_count(logical=False),  # فراخوانی تابع از psutil
+            "logical": psutil.cpu_count(logical=True)  # فراخوانی تابع از psutil
         }
 
     def get(self, *fields: str) -> Dict[str, Any]:
@@ -59,12 +55,12 @@ class CPU:  # FA: تعریف کلاس اصلی
         else:
             data = self.to_dict()
 
-        return JsonResponse(data, safe=False)  # FA: برگرداندن خروجی به صورت JSON
+        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت JSON
 
 
-import psutil  # FA: psutil برای خواندن آمار سیستم
+import psutil  # psutil برای خواندن آمار سیستم
 import time
-from typing import Dict, Any, Optional, List  # FA: تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
 
 

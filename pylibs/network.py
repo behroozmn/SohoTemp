@@ -1,23 +1,19 @@
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
-import psutil  # FA: psutil برای خواندن آمار سیستم
-from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
-import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
+import psutil  # psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
+import subprocess  # اجرای دستورات سیستمی در صورت نیاز
 
-import psutil  # FA: psutil برای خواندن آمار سیستم
+import psutil  # psutil برای خواندن آمار سیستم
 import time
-from typing import Dict, Any, Optional, List  # FA: تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
+from django.http import JsonResponse  # برای ساخت پاسخ JSON
 
 
-class Network:  # FA: تعریف کلاس اصلی
+class Network:
     def __init__(self, interval=1):
-        """
-        FA: توضیح تابع __init__ — ورودی‌ها: (self, interval=1) — خروجی: بر اساس پیاده‌سازی فعلی بدون تغییر منطق.
-        FA: این داکیومنت تنها برای توضیح است و هیچ تغییری در رفتار تابع ایجاد نمی‌کند.
-        """
         try:
             # ۱. آمار عمومی اینترفیس‌ها: bytes, packets
-            self._net_io_initial = psutil.net_io_counters(pernic=True)  # FA: فراخوانی تابع از psutil
+            self._net_io_initial = psutil.net_io_counters(pernic=True)  # فراخوانی تابع از psutil
             self._io_data_initial = {
                 intf: counters._asdict()
                 for intf, counters in self._net_io_initial.items()
@@ -27,20 +23,20 @@ class Network:  # FA: تعریف کلاس اصلی
             time.sleep(interval)
 
             # ۲. آمار دومین اینترفیس‌ها بعد از interval
-            self._net_io_final = psutil.net_io_counters(pernic=True)  # FA: فراخوانی تابع از psutil
+            self._net_io_final = psutil.net_io_counters(pernic=True)  # فراخوانی تابع از psutil
 
             # محاسبه سرعت
             self._bandwidth_data = self._calculate_bandwidth(interval)
 
             # ۳. IP و MAC هر interface
-            self._net_addrs = psutil.net_if_addrs()  # FA: فراخوانی تابع از psutil
+            self._net_addrs = psutil.net_if_addrs()  # فراخوانی تابع از psutil
             self._addr_data = {
                 intf: [addr._asdict() for addr in addrs]
                 for intf, addrs in self._net_addrs.items()
             }
 
             # ۴. وضعیت هر interface (up/down, duplex, speed)
-            self._net_stats = psutil.net_if_stats()  # FA: فراخوانی تابع از psutil
+            self._net_stats = psutil.net_if_stats()  # فراخوانی تابع از psutil
             self._stats_data = {
                 intf: {
                     "isup": stats.isup,
@@ -53,8 +49,8 @@ class Network:  # FA: تعریف کلاس اصلی
             }
 
             # ۵. شمارش TCP/UDP connections
-            self._tcp_connections = len(psutil.net_connections('tcp'))  # FA: فراخوانی تابع از psutil
-            self._udp_connections = len(psutil.net_connections('udp'))  # FA: فراخوانی تابع از psutil
+            self._tcp_connections = len(psutil.net_connections('tcp'))  # فراخوانی تابع از psutil
+            self._udp_connections = len(psutil.net_connections('udp'))  # فراخوانی تابع از psutil
 
             # ۶. gateway پیش‌فرض
             self._default_gateway = self.get_default_gateway()
@@ -159,6 +155,6 @@ class Network:  # FA: تعریف کلاس اصلی
         else:
             data = self.to_dict()
 
-        return JsonResponse(data, safe=False)  # FA: برگرداندن خروجی به صورت JSON
+        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت JSON
 
 
