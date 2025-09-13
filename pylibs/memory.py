@@ -13,7 +13,7 @@ class Memory:
 
     def get(self, *fields: str) -> Dict[str, Optional[Any]]:
         """فقط فیلدهای تعیین شده را برمی‌گرداند."""
-        data = self._mem._asdict()
+        data = self._mem
         result = {}
 
         for field in fields:

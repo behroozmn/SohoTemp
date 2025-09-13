@@ -19,6 +19,7 @@ from . import views
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
+from .views import ZFSStateView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('rest_framework.urls')),
@@ -33,4 +34,6 @@ urlpatterns = [
     path('cpu', views.cpu),
     path('network', views.network),
     path('disk', views.disk),
+
+    path("api/zfs/state/", ZFSStateView.as_view(), name="zfs-state"),
 ]
