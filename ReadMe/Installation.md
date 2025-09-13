@@ -58,6 +58,12 @@ echo $?
 
 zfs version # باید نشان دهد
 ```
+## VirtualEnvironments
+
+```shell
+cd <Dir>
+python3 -m venv .venv --system-site-packages
+```
 
 ## Test
 
