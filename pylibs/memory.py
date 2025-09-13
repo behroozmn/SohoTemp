@@ -1,6 +1,9 @@
 from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
 import psutil  # psutil برای خواندن آمار سیستم
-
+from django.http import JsonResponse
+import psutil
+from typing import Dict, List, Any, Optional
+import subprocess
 
 
 

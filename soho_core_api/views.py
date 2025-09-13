@@ -1,10 +1,11 @@
-from django.http import JsonResponse
-from rest_framework import status
-from rest_framework.decorators import api_view
 from pylibs.network import Network
 from pylibs.memory import Memory
 from pylibs.cpu import CPU
 from pylibs.disk import Disk
+from django.http import JsonResponse
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.decorators import api_view
 
 
 def index(myrequest):
