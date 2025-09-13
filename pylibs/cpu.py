@@ -7,8 +7,8 @@ import subprocess  # اجرای دستورات سیستمی در صورت نیا
 class CPU:
     def __init__(self):
         try:
-            self._cpu_percent = psutil.cpu_percent()  # فراخوانی تابع از psutil
-            self._cpu_times = psutil.cpu_times()._asdict()  # فراخوانی تابع از psutil
+            self._cpu_percent = psutil.cpu_percent()
+            self._cpu_times = psutil.cpu_times()._asdict()
             self._cpu_freq = self._get_cpu_frequency()
             self._cpu_cores = self._get_cpu_cores()
         except Exception as e:
@@ -16,14 +16,14 @@ class CPU:
 
     def _get_cpu_frequency(self) -> Dict[str, Optional[float]]:
         try:
-            return psutil.cpu_freq()._asdict()  # فراخوانی تابع از psutil
+            return psutil.cpu_freq()._asdict()
         except Exception as e:
             return {"error": str(e)}
 
     def _get_cpu_cores(self) -> Dict[str, Optional[int]]:
         return {
-            "physical": psutil.cpu_count(logical=False),  # فراخوانی تابع از psutil
-            "logical": psutil.cpu_count(logical=True)  # فراخوانی تابع از psutil
+            "physical": psutil.cpu_count(logical=False),
+            "logical": psutil.cpu_count(logical=True)
         }
 
     def get(self, *fields: str) -> Dict[str, Any]:
