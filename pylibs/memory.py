@@ -22,7 +22,7 @@ class Memory:
         return result
 
     def to_dict(self) -> Dict[str, Any]:
-        """تمام فیلدها را به صورت dict برمی‌گرداند."""
+        """تمام فیلدها را به صورت دیکشنری برمی‌گرداند."""
         return self._mem._asdict()
 
     def total(self) -> int:
@@ -42,7 +42,7 @@ class Memory:
         return self._mem.free
 
     def percent(self) -> float:
-        """درصد استفاده از RAM"""
+        """درصد استفاده از رم"""
         # calculated as (total - available) / total * 100
         return self._mem.percent
 
