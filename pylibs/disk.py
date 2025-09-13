@@ -1,14 +1,7 @@
 import subprocess  # اجرای دستورات سیستمی در صورت نیاز
 import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse
-import psutil
-from typing import Dict, List, Any, Optional
-import subprocess
-
-import psutil
 import time
-from typing import Dict, Any, Optional, List
 from django.http import JsonResponse
 
 class Disk:
