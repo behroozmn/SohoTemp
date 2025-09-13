@@ -1,5 +1,5 @@
 import subprocess  # اجرای دستورات سیستمی در صورت نیاز
-import psutil  # psutil برای خواندن آمار سیستم
+import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 
 
@@ -13,7 +13,7 @@ class Disk:
 
             for part in self._partitions:
                 try:
-                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر partition
+                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر پارتیشن
                     self._usage_data[part.device] = usage
                 except PermissionError:
                     continue
@@ -91,7 +91,7 @@ class Disk:
         return {}
 
     def get_disk_usage(self, device_path: str) -> Dict[str, Any]:
-        """استفاده از حافظه برای یک device خاص"""
+        """استفاده از حافظه برای یک دیوایس خاص"""
         return self._usage_data.get(device_path, {})
 
     def get_disk_info(self, device: str) -> Dict[str, Any]:
@@ -117,7 +117,7 @@ class Disk:
         return devices
 
     def to_dict(self) -> Dict[str, Any]:
-        """بازگرداندن تمام اطلاعات به صورت dict"""
+        """بازگرداندن تمام اطلاعات به صورت دیکشنری"""
         return {
             "disks": self.get_all_devices(),
             "summary": {

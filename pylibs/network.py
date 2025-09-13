@@ -17,20 +17,20 @@ class Network:
             # منتظر می‌مانیم برای اندازه‌گیری سرعت
             time.sleep(interval)
 
-            # ۲. آمار دومین اینترفیس‌ها بعد از interval
+            # ۲. آمار دومین اینترفیس‌ها بعد از اینترنال
             self._net_io_final = psutil.net_io_counters(pernic=True)
 
             # محاسبه سرعت
             self._bandwidth_data = self._calculate_bandwidth(interval)
 
-            # ۳. IP و MAC هر interface
+            # ۳. آی‌پی و مک هر اینترفیس
             self._net_addrs = psutil.net_if_addrs()
             self._addr_data = {
                 intf: [addr._asdict() for addr in addrs]
                 for intf, addrs in self._net_addrs.items()
             }
 
-            # ۴. وضعیت هر interface (up/down, duplex, speed)
+            # ۴. وضعیت هر اینترفیس (up/down, duplex, speed)
             self._net_stats = psutil.net_if_stats()
             self._stats_data = {
                 intf: {
@@ -47,7 +47,7 @@ class Network:
             self._tcp_connections = len(psutil.net_connections('tcp'))
             self._udp_connections = len(psutil.net_connections('udp'))
 
-            # ۶. gateway پیش‌فرض
+            # ۶. گیت‌وی پیش‌فرض
             self._default_gateway = self.get_default_gateway()
 
         except Exception as e:
@@ -74,7 +74,7 @@ class Network:
 
     @staticmethod
     def get_default_gateway() -> Optional[str]:
-        """گرفتن gateway پیش‌فرض در لینوکس از /proc/net/route"""
+        """گرفتن گیت‌وی پیش‌فرض در لینوکس از /proc/net/route"""
         import socket
 
         try:
@@ -91,7 +91,7 @@ class Network:
             return None
 
     def get_interface(self, interface_name: str) -> Dict[str, Any]:
-        """بازگرداندن اطلاعات یک interface خاص"""
+        """بازگرداندن اطلاعات یک اینترفیس خاص"""
         io = self._io_data_initial.get(interface_name, {})
         bandwidth = self._bandwidth_data.get(interface_name, {"upload": 0, "download": 0, "unit": "KB/s"})
         addr = self._addr_data.get(interface_name, [])
@@ -105,7 +105,7 @@ class Network:
         }
 
     def get_interfaces(self, *interface_names: str) -> Dict[str, Dict]:
-        """فقط interfaceهای مشخص شده را برمی‌گرداند"""
+        """فقط اینترفیس‌های مشخص شده را برمی‌گرداند"""
         result = {}
         all_interfaces = set(self._io_data_initial.keys()) | set(self._addr_data.keys()) | set(self._stats_data.keys())
 
@@ -115,7 +115,7 @@ class Network:
         return result
 
     def to_dict(self) -> Dict[str, Any]:
-        """بازگرداندن تمام اطلاعات شبکه به صورت dict"""
+        """بازگرداندن تمام اطلاعات شبکه به صورت دیکشنری"""
         return {
             "interfaces": {
                 intf: {
@@ -150,4 +150,4 @@ class Network:
         else:
             data = self.to_dict()
 
-        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت JSON
+        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت جی‌سان

@@ -1,6 +1,6 @@
-import psutil  # psutil برای خواندن آمار سیستم
+import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse  # برای ساخت پاسخ JSON
+from django.http import JsonResponse  # برای ساخت پاسخ جی‌سان
 
 
 
@@ -41,7 +41,7 @@ class CPU:
         return result
 
     def to_dict(self) -> Dict[str, Any]:
-        """بازگرداندن تمام اطلاعات CPU به صورت dict"""
+        """بازگرداندن تمام اطلاعات سی‌پی‌یو به صورت دیکشنری"""
         return {
             "cpu_percent": self._cpu_percent,
             "cpu_times_second": self._cpu_times,
@@ -56,4 +56,4 @@ class CPU:
         else:
             data = self.to_dict()
 
-        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت JSON
+        return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت جی‌سان
