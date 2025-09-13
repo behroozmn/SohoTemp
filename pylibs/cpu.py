@@ -1,6 +1,11 @@
-import psutil  # برای خواندن آمار سیستم
-from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
-from django.http import JsonResponse  # برای ساخت پاسخ جی‌سان
+from django.http import JsonResponse
+import psutil
+from typing import Dict, List, Any, Optional
+import subprocess
+from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+import psutil  # FA: psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
+import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
 
 
 
