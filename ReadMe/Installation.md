@@ -40,7 +40,7 @@ echo $?
 wget http://ftp.us.debian.org/debian/pool/main/g/glibc/libc6_2.36-9+deb12u10_amd64.deb                            #libc6_2.36-9+deb12u10_amd64.deb
 wget http://ftp.us.debian.org/debian/pool/contrib/z/zfs-linux/libnvpair3linux_2.1.11-1+deb12u1_amd64.deb          #libnvpair3linux_2.1.11-1+deb12u1_amd64.deb
 wget http://ftp.us.debian.org/debian/pool/main/libt/libtirpc/libtirpc3_1.3.3+ds-1_amd64.deb                       #libtirpc3_1.3.3+ds-1_amd64.deb
-lwget http://ftp.us.debian.org/debian/pool/main/libt/libtirpc/libtirpc-common_1.3.3+ds-1_all.deb                  #ibtirpc-common_1.3.3+ds-1_all.deb
+wget http://ftp.us.debian.org/debian/pool/main/libt/libtirpc/libtirpc-common_1.3.3+ds-1_all.deb                  #ibtirpc-common_1.3.3+ds-1_all.deb
 wget http://ftp.us.debian.org/debian/pool/contrib/z/zfs-linux/libuutil3linux_2.1.11-1+deb12u1_amd64.deb           #libuutil3linux_2.1.11-1+deb12u1_amd64.deb
 wget http://ftp.us.debian.org/debian/pool/contrib/z/zfs-linux/libzfs4linux_2.1.11-1+deb12u1_amd64.deb             #libzfs4linux_2.1.11-1+deb12u1_amd64.deb
 wget http://ftp.us.debian.org/debian/pool/contrib/z/zfs-linux/libzfsbootenv1linux_2.1.11-1+deb12u1_amd64.deb      #libzfsbootenv1linux_2.1.11-1+deb12u1_amd64.deb
@@ -62,7 +62,11 @@ zfs version # باید نشان دهد
 ## Test
 
 ```shell
-python3 -c "import libzfs; print('Module installed successfully') ;print(libzfs.__doc__)"
+python3 -c "import libzfs; print('Module installed successfully') ;print(libzfs.__doc__);import sys; print(sys.path)"
+#OUTPUT:
+## ---> Module installed successfully
+## ---> None
+## ---> ['', '/usr/lib/python311.zip', '/usr/lib/python3.11', '/usr/lib/python3.11/lib-dynload', '/usr/local/lib/python3.11/dist-packages', '/usr/lib/python3/dist-packages', '/usr/lib/python3.11/dist-packages']
 ```
 
 [URL](https://installati.one/debian/12/)
