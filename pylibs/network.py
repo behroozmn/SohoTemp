@@ -1,14 +1,8 @@
-import psutil  # psutil برای خواندن آمار سیستم
+import psutil  # برای خواندن آمار سیستم
 import time
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 from django.http import JsonResponse  # برای ساخت پاسخ JSON
-from typing import Dict, List, Any, Optional
 import subprocess
-
-import psutil
-import time
-from typing import Dict, Any, Optional, List
-from django.http import JsonResponse
 
 
 class Network:
