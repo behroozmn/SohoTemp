@@ -1,14 +1,18 @@
-from django.http import JsonResponse
-import psutil
-from typing import Dict, List, Any, Optional
-import subprocess
+from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+import psutil  # FA: psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
+import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
 
 
-class CPU:
+class CPU:  # FA: تعریف کلاس اصلی
     def __init__(self):
+        """
+        FA: توضیح تابع __init__ — ورودی‌ها: (self) — خروجی: بر اساس پیاده‌سازی فعلی بدون تغییر منطق.
+        FA: این داکیومنت تنها برای توضیح است و هیچ تغییری در رفتار تابع ایجاد نمی‌کند.
+        """
         try:
-            self._cpu_percent = psutil.cpu_percent()
-            self._cpu_times = psutil.cpu_times()._asdict()
+            self._cpu_percent = psutil.cpu_percent()  # FA: فراخوانی تابع از psutil
+            self._cpu_times = psutil.cpu_times()._asdict()  # FA: فراخوانی تابع از psutil
             self._cpu_freq = self._get_cpu_frequency()
             self._cpu_cores = self._get_cpu_cores()
         except Exception as e:
@@ -16,14 +20,14 @@ class CPU:
 
     def _get_cpu_frequency(self) -> Dict[str, Optional[float]]:
         try:
-            return psutil.cpu_freq()._asdict()
+            return psutil.cpu_freq()._asdict()  # FA: فراخوانی تابع از psutil
         except Exception as e:
             return {"error": str(e)}
 
     def _get_cpu_cores(self) -> Dict[str, Optional[int]]:
         return {
-            "physical": psutil.cpu_count(logical=False),
-            "logical": psutil.cpu_count(logical=True)
+            "physical": psutil.cpu_count(logical=False),  # FA: فراخوانی تابع از psutil
+            "logical": psutil.cpu_count(logical=True)  # FA: فراخوانی تابع از psutil
         }
 
     def get(self, *fields: str) -> Dict[str, Any]:
@@ -55,12 +59,12 @@ class CPU:
         else:
             data = self.to_dict()
 
-        return JsonResponse(data, safe=False)
+        return JsonResponse(data, safe=False)  # FA: برگرداندن خروجی به صورت JSON
 
 
-import psutil
+import psutil  # FA: psutil برای خواندن آمار سیستم
 import time
-from typing import Dict, Any, Optional, List
-from django.http import JsonResponse
+from typing import Dict, Any, Optional, List  # FA: تایپ‌هینت برای خوانایی بهتر
+from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
 
 

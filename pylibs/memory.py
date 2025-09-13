@@ -1,13 +1,17 @@
-from django.http import JsonResponse
-import psutil
-from typing import Dict, List, Any, Optional
-import subprocess
+from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
+import psutil  # FA: psutil برای خواندن آمار سیستم
+from typing import Dict, List, Any, Optional  # FA: تایپ‌هینت برای خوانایی بهتر
+import subprocess  # FA: اجرای دستورات سیستمی در صورت نیاز
 
 
-class Memory:
+class Memory:  # FA: تعریف کلاس اصلی
     def __init__(self):
+        """
+        FA: توضیح تابع __init__ — ورودی‌ها: (self) — خروجی: بر اساس پیاده‌سازی فعلی بدون تغییر منطق.
+        FA: این داکیومنت تنها برای توضیح است و هیچ تغییری در رفتار تابع ایجاد نمی‌کند.
+        """
         try:
-            self._mem = psutil.virtual_memory()
+            self._mem = psutil.virtual_memory()  # FA: فراخوانی تابع از psutil
         except Exception as e:
             raise RuntimeError("ERROR in getting data from system") from e
 
@@ -26,7 +30,7 @@ class Memory:
         return self._mem._asdict()
 
     def total(self) -> int:
-        return self._mem.total  # total physical psutil.virtual_memory()ory available.
+        return self._mem.total  # total physical psutil.virtual_memory()ory available.  # FA: فراخوانی تابع از psutil
 
     def available(self) -> int:
         # the memory that can be given instantly to processes without the system going into swap.
@@ -72,9 +76,9 @@ class Memory:
         return getattr(self._mem, 'shared', None)
 
 
-import psutil
+import psutil  # FA: psutil برای خواندن آمار سیستم
 import time
-from typing import Dict, Any, Optional, List
-from django.http import JsonResponse
+from typing import Dict, Any, Optional, List  # FA: تایپ‌هینت برای خوانایی بهتر
+from django.http import JsonResponse  # FA: برای ساخت پاسخ JSON
 
 
