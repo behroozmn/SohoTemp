@@ -13,7 +13,7 @@ class Network:
     def __init__(self, interval=1):
         try:
             # ۱. آمار عمومی اینترفیس‌ها: bytes, packets
-            self._net_io_initial = psutil.net_io_counters(pernic=True)  # فراخوانی تابع از psutil
+            self._net_io_initial = psutil.net_io_counters(pernic=True)
             self._io_data_initial = {
                 intf: counters._asdict()
                 for intf, counters in self._net_io_initial.items()
@@ -23,20 +23,20 @@ class Network:
             time.sleep(interval)
 
             # ۲. آمار دومین اینترفیس‌ها بعد از interval
-            self._net_io_final = psutil.net_io_counters(pernic=True)  # فراخوانی تابع از psutil
+            self._net_io_final = psutil.net_io_counters(pernic=True)
 
             # محاسبه سرعت
             self._bandwidth_data = self._calculate_bandwidth(interval)
 
             # ۳. IP و MAC هر interface
-            self._net_addrs = psutil.net_if_addrs()  # فراخوانی تابع از psutil
+            self._net_addrs = psutil.net_if_addrs()
             self._addr_data = {
                 intf: [addr._asdict() for addr in addrs]
                 for intf, addrs in self._net_addrs.items()
             }
 
             # ۴. وضعیت هر interface (up/down, duplex, speed)
-            self._net_stats = psutil.net_if_stats()  # فراخوانی تابع از psutil
+            self._net_stats = psutil.net_if_stats()
             self._stats_data = {
                 intf: {
                     "isup": stats.isup,
@@ -49,8 +49,8 @@ class Network:
             }
 
             # ۵. شمارش TCP/UDP connections
-            self._tcp_connections = len(psutil.net_connections('tcp'))  # فراخوانی تابع از psutil
-            self._udp_connections = len(psutil.net_connections('udp'))  # فراخوانی تابع از psutil
+            self._tcp_connections = len(psutil.net_connections('tcp'))
+            self._udp_connections = len(psutil.net_connections('udp'))
 
             # ۶. gateway پیش‌فرض
             self._default_gateway = self.get_default_gateway()
@@ -156,5 +156,3 @@ class Network:
             data = self.to_dict()
 
         return JsonResponse(data, safe=False)  # برگرداندن خروجی به صورت JSON
-
-

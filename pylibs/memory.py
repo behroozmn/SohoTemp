@@ -7,7 +7,7 @@ import subprocess  # اجرای دستورات سیستمی در صورت نیا
 class Memory:
     def __init__(self):
         try:
-            self._mem = psutil.virtual_memory()  # فراخوانی تابع از psutil
+            self._mem = psutil.virtual_memory()
         except Exception as e:
             raise RuntimeError("ERROR in getting data from system") from e
 
@@ -26,7 +26,7 @@ class Memory:
         return self._mem._asdict()
 
     def total(self) -> int:
-        return self._mem.total  # total physical psutil.virtual_memory()ory available.  # فراخوانی تابع از psutil
+        return self._mem.total  # total physical psutil.virtual_memory()ory available.
 
     def available(self) -> int:
         # the memory that can be given instantly to processes without the system going into swap.

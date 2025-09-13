@@ -12,14 +12,14 @@ from django.http import JsonResponse  # برای ساخت پاسخ JSON
 class Disk:
     def __init__(self):
         try:
-            self._partitions = psutil.disk_partitions()  # فقط mount points و فایل‌سیستم‌ها را برمی‌گرداند  # فراخوانی تابع از psutil
-            self._io_counters = psutil.disk_io_counters(perdisk=True)  # آمار read/write دیسک برای هر device  # فراخوانی تابع از psutil
+            self._partitions = psutil.disk_partitions()  # فقط mount points و فایل‌سیستم‌ها را برمی‌گرداند
+            self._io_counters = psutil.disk_io_counters(perdisk=True)  # آمار read/write دیسک برای هر device
             self._usage_data = {}
             self._details = {}
 
             for part in self._partitions:
                 try:
-                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر partition  # فراخوانی تابع از psutil
+                    usage = psutil.disk_usage(part.mountpoint)._asdict()  # استفاده از حافظه برای هر partition
                     self._usage_data[part.device] = usage
                 except PermissionError:
                     continue
