@@ -1,8 +1,3 @@
-from django.http import JsonResponse  # برای ساخت پاسخ JSON
-import psutil  # psutil برای خواندن آمار سیستم
-from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
-import subprocess  # اجرای دستورات سیستمی در صورت نیاز
-
 import psutil  # psutil برای خواندن آمار سیستم
 import time
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
