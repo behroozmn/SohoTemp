@@ -15,7 +15,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -25,8 +24,7 @@ SECRET_KEY = 'django-insecure-f=(i%x1&1309nek6ydpqm%bop#kp2s(fe27smixo)@vyi0(uoh
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*'] # behroozMohamadinasab
-
+ALLOWED_HOSTS = ['*']  # behroozMohamadinasab
 
 # Application definition
 
@@ -37,10 +35,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'rest_framework', # behroozMohamadinasab
-    'drf_spectacular', # behroozMohamadinasab
-    'rest_framework.authtoken', # behroozMohamadinasab
-    'corsheaders', # # behroozMohamadinasab
+    'rest_framework',  # behroozMohamadinasab
+    'drf_spectacular',  # behroozMohamadinasab
+    'rest_framework.authtoken',  # behroozMohamadinasab
+    'corsheaders',  # # behroozMohamadinasab
 ]
 
 MIDDLEWARE = [
@@ -51,11 +49,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware', #behroozMohammadiNasab
-    'django.middleware.common.CommonMiddleware', #behroozMohammadiNasab
+    'corsheaders.middleware.CorsMiddleware',  # behroozMohammadiNasab
+    'django.middleware.common.CommonMiddleware',  # behroozMohammadiNasab
 ]
 
-#BLOCK behroozMohammadiNasab
+# BLOCK behroozMohammadiNasab
 # CORS_ALLOW_ALL_ORIGINS = True,  # If want to allow all origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -65,7 +63,7 @@ from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "authorization",
 ]
-#EndBLOCK
+# EndBLOCK
 
 ROOT_URLCONF = 'soho_core_api.urls'
 
@@ -87,7 +85,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'soho_core_api.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -97,7 +94,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -117,7 +113,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -128,7 +123,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -147,8 +141,8 @@ REST_FRAMEWORK = {
     # 'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.BasicAuthentication'], # behrooz:[For Basic authentication]
     # 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'] # behrooz:[For Basic authentication]
 
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'], # behrooz:[For Token authentication]
-    'DEFAULT_PERMISSION_CLASSES':     ['rest_framework.permissions.IsAuthenticated'] # behrooz:[For Token authentication]
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],  # behrooz:[For Token authentication]
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']  # behrooz:[For Token authentication]
 }
 
 SPECTACULAR_SETTINGS = {
@@ -157,3 +151,5 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
+
+handler404 = '404_not_found'
