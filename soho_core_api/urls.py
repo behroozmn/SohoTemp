@@ -15,11 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from . import views
+from . import view_cpu, view_disk, view_network,view_memory,view_zfs
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
-from .views import ZFSStateView
 
 
 urlpatterns = [
@@ -32,10 +31,11 @@ urlpatterns = [
     # Optional UI:
     path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'), # Swagger
     path('auth-token/', obtain_auth_token, name='generate_auth_token'),
-    path('memory', views.memory),
-    path('cpu', views.cpu),
-    path('network', views.network),
-    path('disk', views.disk),
+    path('memory', view_memory.memory),
+    path('cpu', view_cpu.cpu),
+    path('network', view_network.network),
+    path('disk', view_disk.disk),
 
-    path("api/zfs/state/", ZFSStateView.as_view(), name="zfs-state"),
+    path("api/zfs/state/", view_zfs.ZFSStateView.as_view(), name="zfs-state"),
+    path("api/zfs/zvol/", view_zfs.CreateZvolView.as_view(), name="zfs-vol"),
 ]
