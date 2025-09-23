@@ -59,6 +59,8 @@ MIDDLEWARE = [
 # CORS_ALLOW_ALL_ORIGINS = True,  # If want to allow all origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://192.168.100.108:5173",
+    "http://10.0.20.245:5173",
 ]
 from corsheaders.defaults import default_headers
 
