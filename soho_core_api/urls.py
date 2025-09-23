@@ -33,9 +33,9 @@ urlpatterns = [
     path('auth-token/', obtain_auth_token, name='generate_auth_token'),
     path('memory', view_memory.memory),
     path('cpu', view_cpu.cpu),
-    path('network', view_network.network),
+    path('net', view_network.network),
     path('disk', view_disk.disk),
 
-    path("api/zfs/state/", view_zfs.ZFSStateView.as_view(), name="zfs-state"),
-    path("api/zfs/zvol/", view_zfs.CreateZvolView.as_view(), name="zfs-vol"),
+    path("zfs/state/", view_zfs.ZFSStateView.as_view(), name="zfs-state"),
+    path("zfs/zvol/", view_zfs.CreateZvolView.as_view(), name="zfs-vol"),
 ]
