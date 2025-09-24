@@ -1,376 +1,284 @@
-# zfsDataset.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-zfsDataset module: ZFSDatasetManager for dataset-level operations (filesystem, zvol, snapshot, bookmark, clone).
-This module prefers libzfs for reading/setting properties and uses CLI only for fallback mutating operations if required.
+zfsDataset.py
 
-Inline comments are English. Docstrings are Persian and describe parameters/returns.
+High-level ZFS Dataset management library using libzfs binding.
+- Provides ZFSDatasetManager class to manage filesystems, zvols (volumes), snapshots, bookmarks, and clones.
+- Class-level attributes define default properties with inline comments for valid values.
+- All operations use libzfs API (no shell CLI fallback).
+- Methods return DRF-friendly JSON envelopes.
+
+فارسی:
+این کتابخانه برای مدیریت دیتاست‌های ZFS طراحی شده است.
+ویژگی‌ها:
+  - مدیریت volume, filesystem, snapshot, bookmark, clone
+  - استفاده از libzfs به‌طور مستقیم
+  - خروجی به صورت JSON سازگار با DRF
 """
 
-from typing import Dict, List, Optional, Any
-import libzfs
-import subprocess
-import shlex
+from typing import Any, Dict, List, Optional
 import datetime
 
+try:
+    import libzfs  # official python binding for ZFS
+except Exception as exc:
+    libzfs = None  # will raise meaningful error at runtime
+
+# -------------------- JSON Envelopes --------------------
+
 def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Success envelope."""
+    """Return success envelope."""
     return {"ok": True, "error": None, "data": data, "meta": meta or {}}
 
 def fail(message: str, code: str = "zfs_dataset_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Failure envelope."""
+    """Return failure envelope."""
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
 
 
+# -------------------- Manager Class --------------------
+
 class ZFSDatasetManager:
     """
-    کلاس ZFSDatasetManager برای عملیات مربوط به dataset ها (filesystems, zvols, snapshots, bookmarks, clones).
+    مدیر دیتاست‌های ZFS.
 
-    ویژگی‌ها (class attributes): تعریف مجموعه‌ای از پراپرتی‌های رایج dataset به‌صورت متغیر کلاس با مقدار پیش‌فرض.
-    مثال‌ها در کامنت انگلیسی هر attribute ذکر شده‌اند.
+    این کلاس شامل همه پارامترهای مربوط به دیتاست (filesystem, volume, snapshot, bookmark, clone)
+    به صورت متغیرهای سطح کلاس (attributes) می‌باشد.
+    تمام عملیات (ایجاد، حذف، ویرایش، استخراج اطلاعات) با استفاده از libzfs انجام می‌شود.
+
+    پارامترهای سازنده:
+      - dry_run (bool): اگر True باشد، تغییرات واقعی اعمال نمی‌شوند.
+      - run_timeout (int): زمان انتظار؛ در این پیاده‌سازی بیشتر جهت هماهنگی لحاظ شده.
     """
 
-    # Common dataset-level properties with defaults (class-level)
-    compression: Optional[str] = None        # Possible: "off","lz4","zstd","gzip"
-    dedup: Optional[str] = None              # Possible: "on","off","verify"
-    atime: Optional[str] = None              # Possible: "on","off"
-    recordsize: Optional[str] = None         # Possible: "128K","256K","16K"
-    volsize: Optional[str] = None            # For zvols e.g. "50G"
-    volblocksize: Optional[str] = None       # For zvols e.g. "8K","16K"
-    mountpoint: Optional[str] = None         # e.g. "/mnt/data" or "none"
-    readonly: Optional[str] = None           # "on","off"
-    quota: Optional[str] = None              # e.g. "100G", "none"
-    reservation: Optional[str] = None        # e.g. "10G", "none"
-    primarycache: Optional[str] = None       # "all","none","metadata"
-    secondarycache: Optional[str] = None     # "all","none","metadata"
-    sync: Optional[str] = None               # "standard","always","disabled"
-    sharenfs: Optional[str] = None           # "on","off"
-    shareiscsi: Optional[str] = None         # "on","off"
-    copies: Optional[int] = None             # 1,2,3
-    logbias: Optional[str] = None            # "latency","throughput"
-    snapdir: Optional[str] = None            # "visible","hidden"
-    # More attributes can be added as needed
+    # -------------------- Dataset Properties --------------------
+    compression: Optional[str] = "lz4"          # "off","lz4","zstd","gzip","zle"
+    dedup: Optional[str] = "off"                # "on","off","verify"
+    atime: Optional[str] = "off"                # "on","off"
+    recordsize: Optional[str] = "128K"          # "16K","128K","256K"
+    volsize: Optional[str] = None               # e.g. "50G","10T"
+    volblocksize: Optional[str] = "8K"          # "8K","16K","512"
+    mountpoint: Optional[str] = "none"          # "/mnt/data","none"
+    readonly: Optional[str] = "off"             # "on","off"
+    quota: Optional[str] = "none"               # "100G","none"
+    reservation: Optional[str] = "none"         # "10G","none"
+    refquota: Optional[str] = None              # e.g. "50G"
+    refreservation: Optional[str] = None        # e.g. "50G"
+    primarycache: Optional[str] = "all"         # "all","none","metadata"
+    secondarycache: Optional[str] = "all"       # "all","none","metadata"
+    sync: Optional[str] = "standard"            # "standard","always","disabled"
+    sharenfs: Optional[str] = "off"             # "on","off"
+    shareiscsi: Optional[str] = "off"           # "on","off"
+    copies: Optional[int] = 1                   # 1,2,3
+    logbias: Optional[str] = "latency"          # "latency","throughput"
+    snapdir: Optional[str] = "hidden"           # "visible","hidden"
+    user_properties: Optional[Dict[str,str]] = None  # custom user props
+    compression_level: Optional[int] = None     # for gzip: "1"-"9"
 
     def __init__(self, dry_run: bool = False, run_timeout: int = 120) -> None:
-        """
-        سازنده ZFSDatasetManager.
-        ورودی:
-          - dry_run (bool): اگر True باشد عملیات تغییر‌دهنده اجرا نمی‌شوند.
-          - run_timeout (int): timeout برای fallback CLI.
-        خروجی: None
-        """
-        self.zfs = libzfs.ZFS()  # libzfs instance
-        self.dry_run = dry_run  # do not execute destructive ops if True
-        self.run_timeout = run_timeout  # CLI fallback timeout
-        self._last_refresh = None
+        """Initialize dataset manager."""
+        self.dry_run = dry_run
+        self.run_timeout = run_timeout
+        if libzfs is None:
+            self.zfs = None
+        else:
+            self.zfs = libzfs.ZFS()
+        self._last_refresh: Optional[datetime.datetime] = None
 
-    # -------------------- helpers --------------------
+    # -------------------- Internal Helpers --------------------
 
-    def _safe(self, v: Any) -> Any:
-        """Normalize libzfs property object to simple value."""
+    def _ensure_binding(self) -> Optional[Dict[str, Any]]:
+        """Ensure libzfs binding is available."""
+        if self.zfs is None:
+            return fail("libzfs binding not available", code="binding_missing")
+        return None
+
+    def _normalize(self, v: Any) -> Any:
+        """Convert libzfs property object to primitive value."""
         return getattr(v, "value", v)
 
-    def _run_cli(self, args: List[str]) -> Dict[str,str]:
-        """Run CLI command if fallback needed."""
-        cmd_str = " ".join(shlex.quote(a) for a in args)
-        if self.dry_run:
-            return {"stdout": f"[DRY-RUN] {cmd_str}", "stderr": ""}
-        proc = subprocess.run(args, capture_output=True, timeout=self.run_timeout, check=False)
-        return {"stdout": proc.stdout.decode(errors="ignore"), "stderr": proc.stderr.decode(errors="ignore")}
-
-    # -------------------- dataset discovery --------------------
+    # -------------------- Discovery --------------------
 
     def list_datasets(self) -> Dict[str, Any]:
-        """
-        Return list of all datasets with their types.
-        خروجی:
-          - dict with list of {"name": "...", "type": "..."}
-        """
+        """Return list of all dataset names and types."""
+        missing = self._ensure_binding()
+        if missing: return missing
         try:
-            items = []
-            for ds in self.zfs.datasets:
-                items.append({"name": ds.name, "type": getattr(ds, "type", None)})
+            items = [{"name": ds.name, "type": getattr(ds, "type", None)} for ds in self.zfs.datasets]
             return ok(items)
         except Exception as exc:
             return fail(str(exc))
 
     def get_dataset(self, name: str) -> Dict[str, Any]:
-        """
-        Return full dataset info for given name (type, properties, space usage, snapshots/bookmarks).
-        ورودی:
-          - name (str): dataset name
-        خروجی:
-          - dict: detailed dataset info
-        """
+        """Return full details of a dataset."""
+        missing = self._ensure_binding()
+        if missing: return missing
         try:
-            ds = self.zfs.get_dataset(name)  # may raise
-            info: Dict[str, Any] = {}
-            info["name"] = ds.name
-            info["type"] = getattr(ds, "type", None)
-            # properties
-            props = {}
-            try:
-                for k, v in getattr(ds, "properties", {}).items():
-                    props[k] = str(self._safe(v))
-            except Exception:
-                pass
-            info["properties"] = props
-            # space/usage
-            try:
-                # libzfs may expose referenced/used/available properties
-                info["referenced"] = props.get("referenced") or props.get("used") or None
-                info["used"] = props.get("used")
-                info["available"] = props.get("available")
-            except Exception:
-                pass
-            # snapshots & bookmarks (use libzfs dataset.snapshots if available)
-            snaps = []
-            try:
-                for s in ds.snapshots:  # type: ignore
-                    snaps.append({"name": s.name, "creation": getattr(s, "creation", None)})
-            except Exception:
-                # fallback: no snapshots attribute
-                snaps = []
-            info["snapshots"] = snaps
-            # bookmarks: some bindings might have dataset.bookmarks
-            bms = []
-            try:
-                for b in getattr(ds, "bookmarks", []) or []:
-                    bms.append({"name": getattr(b, "name", None)})
-            except Exception:
-                pass
-            info["bookmarks"] = bms
+            ds = self.zfs.get_dataset(name)
+            info = {
+                "name": ds.name,
+                "type": getattr(ds, "type", None),
+                "properties": {k: self._normalize(v) for k,v in getattr(ds,"properties",{}).items()},
+                "snapshots": [{"name": s.name, "creation": getattr(s,"creation",None)} for s in getattr(ds,"snapshots",[])],
+                "bookmarks": [{"name": b.name} for b in getattr(ds,"bookmarks",[])],
+                "clones": [{"name": c.name} for c in getattr(ds,"clones",[])]
+            }
             return ok(info)
-        except libzfs.ZFSException as exc:
-            return fail(f"Dataset not found: {name}", code="not_found")
+        except Exception as exc:
+            return fail(f"Dataset not found or error: {exc}", code="not_found")
+
+    # -------------------- Create / Destroy / Edit --------------------
+
+    def create_dataset(self, name: str, dataset_type: str="filesystem", properties: Optional[Dict[str,str]]=None) -> Dict[str, Any]:
+        """Create dataset (filesystem or zvol)."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"created": False,"dry_run": True,"name": name})
+        try:
+            if dataset_type not in ("filesystem","volume","zvol"):
+                return fail("Invalid dataset_type", code="invalid_request")
+            self.zfs.create(name, properties=properties or {})
+            return ok({"created": True,"name": name,"type": dataset_type})
         except Exception as exc:
             return fail(str(exc))
 
-    # -------------------- create / destroy / edit --------------------
-
-    def create_dataset(self, name: str, dataset_type: str = "filesystem", properties: Optional[Dict[str,str]] = None) -> Dict[str, Any]:
-        """
-        Create a dataset (filesystem or zvol). Prefer libzfs when able; fallback to CLI if required.
-        ورودی:
-          - name (str): dataset full name
-          - dataset_type (str): "filesystem" or "volume"
-          - properties (dict|None): properties map (must contain volsize for zvol)
-        خروجی:
-          - dict envelope
-        """
+    def destroy_dataset(self, name: str, recursive: bool=False, force: bool=False) -> Dict[str, Any]:
+        """Destroy a dataset."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"destroyed": False,"dry_run": True,"name": name})
         try:
-            # attempt libzfs create if available
-            try:
-                if dataset_type == "filesystem":
-                    self.zfs.create(name, properties=properties or {})  # some bindings accept create(name, properties={})
-                    return ok({"created": True, "dataset": name})
-                else:
-                    # For volume, libzfs binding may have create_zvol or similar
-                    # We try generic create and fall back later
-                    self.zfs.create(name, properties=properties or {})  # may raise
-                    return ok({"created": True, "dataset": name})
-            except Exception:
-                # fallback to CLI zfs create
-                if dataset_type == "volume" and (not properties or "volsize" not in properties):
-                    return fail("volsize is required for volume creation", code="invalid_request")
-                args = ["zfs", "create", "-p"]
-                if properties:
-                    for k, v in properties.items():
-                        args += ["-o", f"{k}={v}"]
-                args.append(name)
-                res = self._run_cli(args)
-                if res["stderr"]:
-                    return fail("CLI create failed", extra={"stderr": res["stderr"]})
-                return ok({"created": True, "dataset": name, "stdout": res["stdout"]})
+            ds = self.zfs.get_dataset(name)
+            ds.destroy(recursive=recursive, force=force)
+            return ok({"destroyed": True,"name": name})
         except Exception as exc:
             return fail(str(exc))
 
-    def destroy_dataset(self, name: str, recursive: bool = False, force: bool = False) -> Dict[str, Any]:
-        """
-        Destroy a dataset. Uses libzfs.destroy_dataset if available; otherwise CLI fallback.
-        ورودی:
-          - name (str)
-          - recursive (bool)
-          - force (bool)
-        خروجی:
-          - dict envelope
-        """
+    def edit_dataset(self, name: str, properties: Dict[str,str]) -> Dict[str, Any]:
+        """Edit dataset properties."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"edited": False,"dry_run": True,"name": name})
         try:
-            # attempt libzfs
-            try:
-                ds = self.zfs.get_dataset(name)
-                if hasattr(ds, "destroy"):
-                    ds.destroy(recursive=recursive, force=force)  # type: ignore
-                    return ok({"destroyed": True, "dataset": name})
-            except Exception:
-                pass
-            # fallback CLI
-            args = ["zfs", "destroy"]
-            if recursive:
-                args.append("-r")
-            if force:
-                args.append("-f")
-            args.append(name)
-            res = self._run_cli(args)
-            if res["stderr"]:
-                return fail("CLI destroy failed", extra={"stderr": res["stderr"]})
-            return ok({"destroyed": True, "dataset": name, "stdout": res["stdout"]})
+            ds = self.zfs.get_dataset(name)
+            for k,v in properties.items():
+                ds.set_property(k,v)
+            return ok({"edited": True,"name": name,"changed": properties})
         except Exception as exc:
             return fail(str(exc))
 
-    def edit_dataset_props(self, name: str, properties: Dict[str,str]) -> Dict[str, Any]:
-        """
-        Edit dataset properties. Prefer libzfs set_property on dataset object; fallback to CLI zfs set.
-        ورودی:
-          - name (str)
-          - properties (dict)
-        خروجی:
-          - dict with changed properties
-        """
+    # -------------------- Snapshot / Bookmark / Clone --------------------
+
+    def create_snapshot(self, dataset_at_snap: str, recursive: bool=False) -> Dict[str, Any]:
+        """Create snapshot (dataset@snap)."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"created": False,"dry_run": True,"snapshot": dataset_at_snap})
+        if "@" not in dataset_at_snap:
+            return fail("Invalid format; must be dataset@snap", code="invalid_request")
         try:
-            try:
-                ds = self.zfs.get_dataset(name)
-                changed = {}
-                for k, v in properties.items():
-                    try:
-                        ds.set_property(k, v)  # type: ignore
-                        changed[k] = v
-                    except Exception:
-                        # try CLI for that key
-                        res = self._run_cli(["zfs", "set", f"{k}={v}", name])
-                        if res["stderr"]:
-                            return fail(f"Failed to set {k}", extra={"stderr": res["stderr"]})
-                        changed[k] = v
-                return ok({"dataset": name, "changed": changed})
-            except libzfs.ZFSException:
-                # fallback: CLI for all
-                changed = {}
-                for k, v in properties.items():
-                    res = self._run_cli(["zfs", "set", f"{k}={v}", name])
-                    if res["stderr"]:
-                        return fail(f"Failed to set {k}", extra={"stderr": res["stderr"]})
-                    changed[k] = v
-                return ok({"dataset": name, "changed": changed, "method": "cli_fallback"})
+            ds_name, snap_name = dataset_at_snap.split("@",1)
+            ds = self.zfs.get_dataset(ds_name)
+            ds.create_snapshot(snap_name, recursive=recursive)
+            return ok({"created": True,"snapshot": dataset_at_snap})
         except Exception as exc:
             return fail(str(exc))
 
-    # -------------------- snapshot / bookmark / clone helpers --------------------
-
-    def create_snapshot(self, dataset_at_snap: str, recursive: bool = False) -> Dict[str, Any]:
-        """
-        Create a snapshot (dataset@snapname). Uses libzfs if available else CLI fallback.
-        ورودی:
-          - dataset_at_snap (str): e.g. "tank/data@now"
-          - recursive (bool)
-        خروجی:
-          - dict envelope
-        """
+    def list_snapshots(self, dataset_name: Optional[str]=None) -> Dict[str, Any]:
+        """List snapshots (all or for specific dataset)."""
+        missing = self._ensure_binding()
+        if missing: return missing
         try:
-            try:
-                ds_name, snap_name = dataset_at_snap.split("@", 1)
-            except ValueError:
-                return fail("snapshot name must be dataset@snap", code="invalid_request")
-            try:
-                ds = self.zfs.get_dataset(ds_name)
-                # some bindings offer create_snapshot on dataset
-                if hasattr(ds, "create_snapshot"):
-                    ds.create_snapshot(snap_name, recursive=recursive)  # type: ignore
-                    return ok({"snapshot": dataset_at_snap, "created": True})
-            except Exception:
-                pass
-            # CLI fallback
-            args = ["zfs", "snapshot"]
-            if recursive:
-                args.append("-r")
-            args.append(dataset_at_snap)
-            res = self._run_cli(args)
-            if res["stderr"]:
-                return fail("CLI snapshot failed", extra={"stderr": res["stderr"]})
-            return ok({"snapshot": dataset_at_snap, "created": True, "stdout": res["stdout"]})
-        except Exception as exc:
-            return fail(str(exc))
-
-    def create_bookmark(self, snapshot: str, bookmark: str) -> Dict[str, Any]:
-        """
-        Create a bookmark from an existing snapshot.
-        ورودی:
-          - snapshot (str): "tank/data@A"
-          - bookmark (str): "tank/data#bm"
-        خروجی:
-          - dict envelope
-        """
-        try:
-            # try CLI (bookmarks are often CLI-only in some bindings)
-            res = self._run_cli(["zfs", "bookmark", snapshot, bookmark])
-            if res["stderr"]:
-                return fail("CLI bookmark failed", extra={"stderr": res["stderr"]})
-            return ok({"bookmark": bookmark, "from": snapshot})
-        except Exception as exc:
-            return fail(str(exc))
-
-    def clone_snapshot(self, snapshot: str, target: str, properties: Optional[Dict[str,str]] = None) -> Dict[str, Any]:
-        """
-        Clone a snapshot into a writable dataset.
-        ورودی:
-          - snapshot (str)
-          - target (str)
-          - properties (optional dict)
-        خروجی:
-          - dict envelope
-        """
-        try:
-            # try CLI clone because lib bindings vary
-            args = ["zfs", "clone"]
-            if properties:
-                for k,v in properties.items():
-                    args += ["-o", f"{k}={v}"]
-            args += [snapshot, target]
-            res = self._run_cli(args)
-            if res["stderr"]:
-                return fail("CLI clone failed", extra={"stderr": res["stderr"]})
-            return ok({"cloned": True, "from": snapshot, "to": target})
-        except Exception as exc:
-            return fail(str(exc))
-
-    # -------------------- convenience / utility --------------------
-
-    def dataset_names_with_type(self) -> Dict[str, Any]:
-        """
-        Return list of datasets with their type (name,type).
-        خروجی:
-          - dict with list
-        """
-        try:
-            items = []
-            for ds in self.zfs.datasets:
-                items.append({"name": ds.name, "type": getattr(ds, "type", None)})
-            return ok(items)
-        except Exception as exc:
-            return fail(str(exc))
-
-    def get_snapshots_of_dataset(self, dataset_name: str) -> Dict[str, Any]:
-        """
-        Return a list of snapshots for a dataset.
-        ورودی:
-          - dataset_name (str)
-        خروجی:
-          - dict with snapshots list
-        """
-        try:
-            ds = self.zfs.get_dataset(dataset_name)
             snaps = []
-            try:
-                for s in ds.snapshots:
-                    snaps.append({"name": s.name, "creation": getattr(s, "creation", None)})
-            except Exception:
-                pass
+            if dataset_name:
+                ds = self.zfs.get_dataset(dataset_name)
+                snaps = [{"name": s.name,"creation": getattr(s,"creation",None)} for s in ds.snapshots]
+            else:
+                for ds in self.zfs.datasets:
+                    for s in ds.snapshots:
+                        snaps.append({"name": s.name,"dataset": ds.name})
             return ok(snaps)
-        except libzfs.ZFSException:
-            return fail("Dataset not found", code="not_found")
         except Exception as exc:
             return fail(str(exc))
 
+    def create_bookmark(self, snapshot: str, bookmark_name: str) -> Dict[str, Any]:
+        """Create a bookmark from snapshot."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"created": False,"dry_run": True,"bookmark": bookmark_name})
+        try:
+            self.zfs.bookmark(snapshot, bookmark_name)
+            return ok({"created": True,"bookmark": bookmark_name})
+        except Exception as exc:
+            return fail(str(exc))
 
-__all__ = ["ZFSDatasetManager", "ok", "fail"]
+    def clone_snapshot(self, snapshot: str, target: str, properties: Optional[Dict[str,str]]=None) -> Dict[str, Any]:
+        """Clone a snapshot into writable dataset."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        if self.dry_run: return ok({"cloned": False,"dry_run": True,"snapshot": snapshot})
+        try:
+            self.zfs.clone(snapshot, target, properties=properties or {})
+            return ok({"cloned": True,"from": snapshot,"to": target})
+        except Exception as exc:
+            return fail(str(exc))
+
+    def promote_clone(self, clone_name: str) -> Dict[str, Any]:
+        """Promote a clone to be independent."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        try:
+            ds = self.zfs.get_dataset(clone_name)
+            ds.promote()
+            return ok({"promoted": True,"clone": clone_name})
+        except Exception as exc:
+            return fail(str(exc))
+
+    def rollback(self, dataset: str, to_snapshot: Optional[str]=None, destroy_more_recent: bool=False) -> Dict[str, Any]:
+        """Rollback dataset to snapshot."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        try:
+            ds = self.zfs.get_dataset(dataset)
+            if to_snapshot:
+                snap_full = to_snapshot if "@" in to_snapshot else f"{dataset}@{to_snapshot}"
+                ds.rollback(snap_full, destroy_more_recent=destroy_more_recent)
+                return ok({"rolled_back": True,"to": snap_full})
+            else:
+                ds.rollback(destroy_more_recent=destroy_more_recent)
+                return ok({"rolled_back": True,"to": "latest"})
+        except Exception as exc:
+            return fail(str(exc))
+
+    # -------------------- Utilities --------------------
+
+    def dataset_exists(self, name: str) -> Dict[str, Any]:
+        """Check if dataset exists."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        try:
+            self.zfs.get_dataset(name)
+            return ok({"exists": True})
+        except Exception:
+            return ok({"exists": False})
+
+    def datasets_under_pool(self, pool_name: str) -> Dict[str, Any]:
+        """Return summary of datasets under a pool."""
+        missing = self._ensure_binding()
+        if missing: return missing
+        try:
+            out = []
+            for ds in self.zfs.datasets:
+                if ds.name == pool_name or ds.name.startswith(pool_name+"/"):
+                    props = {k: self._normalize(v) for k,v in getattr(ds,"properties",{}).items()}
+                    out.append({
+                        "name": ds.name,
+                        "type": getattr(ds,"type",None),
+                        "used": props.get("used"),
+                        "available": props.get("available"),
+                        "referenced": props.get("referenced")
+                    })
+            return ok(out)
+        except Exception as exc:
+            return fail(str(exc))
