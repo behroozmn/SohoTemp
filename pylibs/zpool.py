@@ -25,7 +25,7 @@ def fail(message: str, code: str = "zpool_error", extra: Optional[Dict[str, Any]
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
 
 
-class ZPoolManager:
+class PoolManager:
     """
     High-level manager for ZFS Pools (zpools).
     Attributes:
