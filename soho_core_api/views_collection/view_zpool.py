@@ -8,10 +8,8 @@ from django.views.decorators.csrf import csrf_exempt
 from pylibs.zpool import ZPoolManager
 
 
-# دکوراتور برای غیرفعال کردن CSRF (اگر API مصرف‌کننده خارجی دارد)
-@method_decorator(csrf_exempt, name='dispatch')
 class ZPoolListView(APIView):
-    """List all pools."""
+    """List all pools (GET) or create a new pool (POST - not implemented)."""
 
     def get(self, request):
         manager = ZPoolManager()
@@ -19,6 +17,17 @@ class ZPoolListView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        return Response({
+            "ok": False,
+            "error": {
+                "code": "not_implemented",
+                "message": "Pool creation is not implemented in ZPoolManager yet."
+            },
+            "data": None,
+            "meta": {}
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
