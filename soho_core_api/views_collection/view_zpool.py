@@ -5,7 +5,7 @@ from rest_framework import status
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from pylibs.zpool import PoolManager
+from pylibs.pool import PoolManager
 
 
 class ZPoolListView(APIView):
