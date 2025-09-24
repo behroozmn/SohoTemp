@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
     path("api/net/", include("soho_core_api.urls_collection.url_network")),
     path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
+    path("api/pool/", include("soho_core_api.urls_collection.url_pool")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
 
 ]
