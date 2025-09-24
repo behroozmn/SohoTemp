@@ -2,20 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import libzfs
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 def ok(data: Any) -> Dict[str, Any]:
     """Return a success envelope (DRF-ready)."""
-    return {"ok": True, "error": None, "data": data, "Details": {}}
+    return {"ok": True, "error": None, "data": data, "details": {}}
 
 
 def fail(message: str, code: str = "zpool_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return a failure envelope (DRF-ready)."""
-    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "Details": {}}
+    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "details": {}}
 
 
-class zPoolManager:
+class ZpoolManager:
     def __init__(self) -> None:
         self.zfs = libzfs.ZFS()
 
@@ -38,18 +38,6 @@ class zPoolManager:
         except Exception as exc:
             return fail(str(exc))
 
-    def list_pool_size_detail(self, pool_name: str):
-        try:
-            pool = next(p for p in self.zfs.pools if p.name == pool_name)
-            return ok({
-                "size": str(pool.properties["size"].value),
-                "allocated": str(pool.properties["allocated"].value),
-                "free": str(pool.properties["free"].value),
-                "capacity": str(pool.properties["capacity"].value),
-            })
-        except Exception as exc:
-            return fail(str(exc))
-
     def list_pool_details(self, pool_name: str):
         try:
             pool = next(p for p in self.zfs.pools if p.name == pool_name)
@@ -60,7 +48,7 @@ class zPoolManager:
                 "autoexpand": str(pool.properties["autoexpand"].value),
                 "autoreplace": str(pool.properties["autoreplace"].value),
                 "bootfs": str(pool.properties["bootfs"].value),
-                "cachemode": str(pool.properties["cachemode"].value),
+                # "cachemode": str(pool.properties["cachemode"].value),
                 "capacity": str(pool.properties["capacity"].value),
                 "comment": str(pool.properties["comment"].value),
                 "dedupditto": str(pool.properties["dedupditto"].value),
@@ -77,7 +65,7 @@ class zPoolManager:
                 "listsnapshots": str(pool.properties["listsnapshots"].value),
                 "name": str(pool.properties["name"].value),
                 "readonly": str(pool.properties["readonly"].value),
-                "size": str(pool.properties["size"].value),
+                "size": str(pool.properties["size"].value)
             })
         except Exception as exc:
             return fail(str(exc))
