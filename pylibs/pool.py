@@ -5,7 +5,7 @@
 pool.py
 ========
 High-level ZFS Pool management library using official libzfs Python bindings.
-- Contains all zpool-level properties as class attributes with default values.
+- Contains all pool-level properties as class attributes with default values.
 - No dataset creation/deletion/editing logic is inside this class (those belong in dataset manager).
 - Provides methods to inspect pools, list pools, manage properties, show devices, and fetch dataset summaries.
 - Designed for DRF-friendly JSON output.
@@ -20,14 +20,14 @@ def ok(data: Any) -> Dict[str, Any]:
     return {"ok": True, "error": None, "data": data, "meta": {}}
 
 
-def fail(message: str, code: str = "zpool_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def fail(message: str, code: str = "pool_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return a failure envelope (DRF-ready)."""
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "meta": {}}
 
 
 class PoolManager:
     """
-    High-level manager for ZFS Pools (zpools).
+    High-level manager for ZFS Pools (pools).
     Attributes:
         ashift (int): default block size shift (commonly 12 → 4K) # possible: 9, 12, 13
         autoexpand (str): autoexpand pool # values: "on", "off"
