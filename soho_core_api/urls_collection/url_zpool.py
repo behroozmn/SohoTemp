@@ -1,5 +1,5 @@
 from django.urls import path
-from soho_core_api import view_zpool
+from soho_core_api.views_collection import view_zpool
 
 urlpatterns = [
     # POST /api/zfs/pools/ → create (not implemented, but reserved)
