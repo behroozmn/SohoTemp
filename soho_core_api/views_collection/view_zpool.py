@@ -1,28 +1,23 @@
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from pylibs.pool import PoolManager
+from pylibs.zpool import ZpoolManager
 
-class zPoolListView(APIView):
-    """List all pools (GET) or create a new pool (POST - not implemented)."""
 
+class ZpoolListNameView(APIView):
     def get(self, request):
-        manager = PoolManager()
-        result = manager.list_pools()
+        manager = ZpoolManager()
+        result = manager.list_pools_name()
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def post(self, request):
-        name = request.data.get("name", "None")
-        return Response({
-            "ok": False,
-            "error": {
-                "code": "not_implemented",
-                "message": "Pool creation is not implemented in PoolManager yet."
-            },
-            "data": None,
-            "meta": {}
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
 
+class ZpoolListDetailView(APIView):
+    def post(self, request):
+        name = request.data.get("pool_name", "None")
+        manager = ZpoolManager()
+        result = manager.list_pool_details(name)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_404_NOT_FOUND)
