@@ -93,7 +93,6 @@ class ZPoolManager:
                 "name": pool.name,
                 "guid": str(pool.guid),
                 "state": str(pool.state),
-                "health": str(pool.health),
                 "props": props
             })
         except StopIteration:
