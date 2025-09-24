@@ -15,27 +15,27 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from . import view_cpu, view_disk, view_network,view_memory,view_zfs
+from . import view_cpu, view_disk, view_network, view_memory
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
-
+from . import urls_collection
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('rest_framework.urls')),
 
     # YOUR PATTERNS
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'), # Swagger
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # Swagger
 
     # Optional UI:
-    path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'), # Swagger
+    path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger
     path('auth-token/', obtain_auth_token, name='generate_auth_token'),
     path('memory', view_memory.memory),
     path('cpu', view_cpu.cpu),
     path('net', view_network.network),
     path('disk', view_disk.disk),
 
-    path("zfs/state/", view_zfs.ZFSStateView.as_view(), name="zfs-state"),
-    path("zfs/zvol/", view_zfs.CreateZvolView.as_view(), name="zfs-vol"),
+    path("api/zpool/", include("soho_core_api.urls_collection.urls_api_zpools")),
+
 ]
