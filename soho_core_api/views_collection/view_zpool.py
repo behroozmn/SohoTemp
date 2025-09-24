@@ -5,14 +5,14 @@ from rest_framework import status
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from pylibs.zpool import ZPoolManager
+from pylibs.zpool import PoolManager
 
 
 class ZPoolListView(APIView):
     """List all pools (GET) or create a new pool (POST - not implemented)."""
 
     def get(self, request):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.list_pools()
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -35,14 +35,14 @@ class ZPoolDetailView(APIView):
     """Get, update, or delete a specific pool."""
 
     def get_pool_or_404(self, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         info = manager.pool_info(pool_name)
         if not info["ok"]:
             raise Http404(f"Pool '{pool_name}' not found.")
         return pool_name
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.pool_info(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -59,14 +59,14 @@ class ZPoolDetailView(APIView):
                 "meta": {}
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.edit_pool_prop(pool_name, prop, str(value))
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.delete_pool(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -78,7 +78,7 @@ class ZPoolDatasetsView(APIView):
     """List datasets (filesystems/volumes) in a pool."""
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.list_datasets_info(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -90,7 +90,7 @@ class ZPoolDevicesView(APIView):
     """List detailed device info (vdevs) in a pool."""
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.list_pool_devices(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -102,7 +102,7 @@ class ZPoolDeviceNamesView(APIView):
     """List only device paths in a pool."""
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.list_pool_device_names(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -114,7 +114,7 @@ class ZPoolFeaturesView(APIView):
     """List ZFS feature states (feature@*) for a pool."""
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.pool_features(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -126,7 +126,7 @@ class ZPoolCapacityView(APIView):
     """Get capacity usage (size, free, allocated) of a pool."""
 
     def get(self, request, pool_name):
-        manager = ZPoolManager()
+        manager = PoolManager()
         result = manager.pool_capacity(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
