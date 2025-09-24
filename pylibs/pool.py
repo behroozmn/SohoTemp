@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-zpool.py
+pool.py
 ========
 High-level ZFS Pool management library using official libzfs Python bindings.
 - Contains all zpool-level properties as class attributes with default values.
