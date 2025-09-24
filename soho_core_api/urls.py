@@ -15,11 +15,12 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from . import view_cpu, view_disk, view_network, view_memory
+
+import soho_core_api.views_collection.view_network
+from .views_collection import view_memory, view_disk, view_cpu, view_network
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
-from . import urls_collection
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -31,11 +32,13 @@ urlpatterns = [
     # Optional UI:
     path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger
     path('auth-token/', obtain_auth_token, name='generate_auth_token'),
-    path('memory', view_memory.memory),
-    path('cpu', view_cpu.cpu),
-    path('net', view_network.network),
-    path('disk', view_disk.disk),
 
-    path("api/zpool/", include("soho_core_api.urls_collection.urls_api_zpools")),
+
+
+    path("api/cpu/", include("soho_core_api.urls_collection.url_cpu")),
+    path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
+    path("api/net/", include("soho_core_api.urls_collection.url_network")),
+    path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
+    path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
 
 ]
