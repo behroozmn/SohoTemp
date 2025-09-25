@@ -21,3 +21,25 @@ class ZpoolListDetailView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
+
+
+class ZpoolDeleteView(APIView):
+    def post(self, request):
+        pool_name = request.data.get("pool_name", "None")
+        manager = ZpoolManager()
+        result = manager.pool_delete(pool_name)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_404_NOT_FOUND)
+
+
+class ZpoolCreaView(APIView):
+    def post(self, request):
+        pool_name = request.data.get("pool_name", "None")
+        devices = request.data.get("devices", [])
+        vdev_type = request.data.get("vdev_type", "None")
+        manager = ZpoolManager()
+        result = manager.create_pool(pool_name,devices, vdev_type)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_404_NOT_FOUND)
