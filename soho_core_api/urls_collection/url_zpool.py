@@ -8,4 +8,7 @@ urlpatterns = [
 
     path("details", view_zpool.ZpoolListDetailView.as_view(), name="details"),
 
+    path("create", view_zpool.ZpoolCreaView.as_view(), name="create"),
+    path("delete", view_zpool.ZpoolDeleteView.as_view(), name="delete"),
+
 ]

@@ -3,6 +3,7 @@
 
 import libzfs
 from typing import Any, Dict, Optional
+import subprocess
 
 
 def ok(data: Any) -> Dict[str, Any]:
@@ -42,6 +43,7 @@ class ZpoolManager:
         try:
             pool = next(p for p in self.zfs.pools if p.name == pool_name)
             return ok({
+                "name": str(pool.properties["name"].value),
                 "allocated": str(pool.properties["allocated"].value),
                 "altroot": str(pool.properties["altroot"].value),
                 "ashift": str(pool.properties["ashift"].value),
@@ -63,9 +65,44 @@ class ZpoolManager:
                 "health": str(pool.properties["health"].value),
                 "leaked": str(pool.properties["leaked"].value),
                 "listsnapshots": str(pool.properties["listsnapshots"].value),
-                "name": str(pool.properties["name"].value),
                 "readonly": str(pool.properties["readonly"].value),
                 "size": str(pool.properties["size"].value)
             })
+        except Exception as exc:
+            return fail(str(exc))
+
+    def create_pool(self, pool_name: str, devices: list[str], vdev_type: str = "disk"):
+        """
+        ایجاد یک ZFS pool با استفاده از دستور zpool.
+
+        Args:
+            pool_name (str): نام pool (مثلاً "mypool")
+            devices (list[str]): لیست دیوایس‌ها (مثلاً ['/dev/sdb', '/dev/sdc'])
+            vdev_type (str): نوع vdev (disk, mirror, raidz, raidz2, ...)
+        """
+        try:
+            if pool_name and devices and vdev_type:
+                if vdev_type == "disk":
+                    cmd = ["zpool", "create", pool_name] + devices
+                else:
+                    cmd = ["zpool", "create", pool_name, vdev_type] + devices
+                subprocess.run(cmd, check=True)
+                return ok({"name": "موفقیت آمیز ساخته شد", })
+            else:
+                return fail("محتویات آرگومان های ورودی خالی است",
+                            "create_pool",
+                            {"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type})
+        except subprocess.CalledProcessError as exc:
+            return fail(str(exc))
+        except Exception as exc:
+            return fail(str(exc))
+
+    def pool_delete(self, pool_name: str):
+        try:
+            cmd = ["zpool", "destroy", pool_name]
+            subprocess.run(cmd, check=True)
+            return ok({"name": "موفقیت آمیز حذف شد", })
+        except subprocess.CalledProcessError as cpe:
+            return fail(str(cpe))
         except Exception as exc:
             return fail(str(exc))
