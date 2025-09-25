@@ -4,7 +4,7 @@ from rest_framework import status
 from pylibs.zpool import ZpoolManager
 
 
-class ZpoolListNameView(APIView):
+class ZpoolListView(APIView):
     def get(self, request):
         manager = ZpoolManager()
         result = manager.list_pools_name()
@@ -12,15 +12,13 @@ class ZpoolListNameView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class ZpoolListDetailView(APIView):
-    def post(self, request,pool_name):
+    def post(self, request):
         manager = ZpoolManager()
+        pool_name = request.data.get("pool_name", "None")
         result = manager.list_pool_details(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
-
 
 class ZpoolDeleteView(APIView):
     def post(self, request):
@@ -29,7 +27,7 @@ class ZpoolDeleteView(APIView):
         result = manager.pool_delete(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
-        return Response(result, status=status.HTTP_404_NOT_FOUND)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ZpoolCreaView(APIView):
@@ -39,6 +37,23 @@ class ZpoolCreaView(APIView):
         vdev_type = request.data.get("vdev_type", "None")
         manager = ZpoolManager()
         result = manager.create_pool(pool_name,devices, vdev_type)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ZpoolDetailView(APIView):
+    def get(self, request):
+        manager = ZpoolManager()
+        result = manager.list_pools_name()
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        manager = ZpoolManager()
+        pool_name = request.data.get("pool_name", "None")
+        result = manager.list_pool_details(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
