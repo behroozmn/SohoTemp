@@ -14,10 +14,9 @@ class ZpoolListNameView(APIView):
 
 
 class ZpoolListDetailView(APIView):
-    def post(self, request):
-        name = request.data.get("pool_name", "None")
+    def post(self, request,pool_name):
         manager = ZpoolManager()
-        result = manager.list_pool_details(name)
+        result = manager.list_pool_details(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
