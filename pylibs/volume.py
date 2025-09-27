@@ -64,3 +64,21 @@ class VolumeManager:
             return fail(f"Error creating volume: {stderr}")
         except Exception as exc:
             return fail(f"Error creating volume: {str(exc)}")
+
+    def delete(self, volume_name: str):
+        import subprocess
+        try:
+            cmd = ["zfs", "destroy", volume_name]  # اجرای دستور: zfs destroy volume_name
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            return ok({
+                "status": "موفقیت‌آمیز حذف شد",
+                "name": volume_name
+            })
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.strip() if e.stderr else str(e)
+            # بررسی خطا برای حالتی که volume وجود ندارد
+            if "dataset does not exist" in stderr or "no such dataset" in stderr.lower():
+                return fail(f"Volume '{volume_name}' not found", code="not_found")
+            return fail(f"Error deleting volume: {stderr}")
+        except Exception as exc:
+            return fail(f"Error deleting volume: {str(exc)}")
