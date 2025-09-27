@@ -7,7 +7,7 @@ from pylibs.zpool import ZpoolManager
 class ZpoolListView(APIView):
     def get(self, request):
         manager = ZpoolManager()
-        result = manager.list_pools_name()
+        result = manager.list_pool()
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -15,7 +15,7 @@ class ZpoolListView(APIView):
 class ZpoolDetailView(APIView):
     def get(self, request,pool_name):
         manager = ZpoolManager()
-        result = manager.list_pool_details(pool_name)
+        result = manager.list_pool(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
@@ -45,7 +45,7 @@ class ZpoolCreaView(APIView):
 class ZpoolDetailView(APIView):
     def get(self, request,pool_name):
         manager = ZpoolManager()
-        result = manager.list_pool_details(pool_name)
+        result = manager.list_pool_detail(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
