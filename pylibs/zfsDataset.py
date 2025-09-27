@@ -107,8 +107,7 @@ class ZFSDatasetManager:
         try:
             items = [{
                 "name": ds.name,
-                "type": getattr(ds,
-                "type", None)
+                "type": getattr(ds,"type", None)
             } for ds in self.zfs.datasets]
             return ok(items)
         except Exception as exc:

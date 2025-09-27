@@ -12,7 +12,6 @@ def ok(data: Any) -> Dict[str, Any]:
 
 
 def fail(message: str, code: str = "zpool_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Return a failure envelope (DRF-ready)."""
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "details": {}}
 
 
@@ -20,152 +19,21 @@ class VolumeManager:
     def __init__(self) -> None:
         self.zfs = libzfs.ZFS()
 
-    def list_volume_name(self):
+    def list_volume_detail(self, volume_name :str = None):
         try:
+            all_volumes = [ds for ds in self.zfs.datasets if getattr(ds, 'type', None) == 4]
+
+            if volume_name is not None:
+                filtered_volumes = [vol for vol in all_volumes if vol.name == volume_name]
+            else:
+                filtered_volumes = all_volumes
+
             items = [{
-                "name": ds.name,
-                "aclinherit": getattr(ds,"aclinherit", None),
-                "aclmode": getattr(ds,"aclmode", None),
-                "atime": getattr(ds,"atime", None),
-                "available": getattr(ds,"available", None),
-                "canmount": getattr(ds,"canmount", None),
-                "casesensitivity": getattr(ds,"casesensitivity", None),
-                "checksum": getattr(ds,"checksum", None),
-                "compression": getattr(ds,"compression", None),
-                "copies": getattr(ds,"copies", None),
-                "creation": getattr(ds,"creation", None),
-                "dedup": getattr(ds,"dedup", None),
-                "devices": getattr(ds,"devices", None),
-                "exec": getattr(ds,"exec", None),
-                "filesystem_count": getattr(ds,"filesystem_count", None),
-                "filesystem_limit": getattr(ds,"filesystem_limit", None),
-                "jailed": getattr(ds,"jailed", None),
-                "logbias": getattr(ds,"logbias", None),
-                "logicalreferenced": getattr(ds,"logicalreferenced", None),
-                "logicalused": getattr(ds,"logicalused", None),
-                "mislabel": getattr(ds,"mislabel", None),
-                "mounted": getattr(ds,"mounted", None),
-                "mountpoint": getattr(ds,"mountpoint", None),
-                "nbmand": getattr(ds,"nbmand", None),
-                "normalization": getattr(ds,"normalization", None),
-                "primarycache": getattr(ds,"primarycache", None),
-                "quota": getattr(ds,"quota", None),
-                "readonly": getattr(ds,"readonly", None),
-                "recordsize": getattr(ds,"recordsize", None),
-                "redundant_metadata": getattr(ds,"redundant_metadata", None),
-                "refcompressratio": getattr(ds,"refcompressratio", None),
-                "referenced": getattr(ds,"referenced", None),
-                "refquota": getattr(ds,"refquota", None),
-                "refreservation": getattr(ds,"refreservation", None),
-                "reservation": getattr(ds,"reservation", None),
-                "secondarycache": getattr(ds,"secondarycache", None),
-                "setuid": getattr(ds,"setuid", None),
-                "sharenfs": getattr(ds,"sharenfs", None),
-                "sharesmb": getattr(ds,"sharesmb", None),
-                "snapdir": getattr(ds,"snapdir", None),
-                "snapshot_count": getattr(ds,"snapshot_count", None),
-                "snapshot_limit": getattr(ds,"snapshot_limit", None),
-                "sync": getattr(ds,"sync", None),
-                "type": getattr(ds,"type", None),
-                "used": getattr(ds,"used", None),
-                "usedbychildren": getattr(ds,"usedbychildren", None),
-                "usedbydataset": getattr(ds,"usedbydataset", None),
-                "usedbyrefreservation": getattr(ds,"usedbyrefreservation", None),
-                "usedbysnapshots": getattr(ds,"usedbysnapshots", None),
-                "utf8only": getattr(ds,"utf8only", None),
-                "version": getattr(ds,"version", None),
-                "volblocksize": getattr(ds,"volblocksize", None),
-                "volmode": getattr(ds,"volmode", None),
-                "volsize": getattr(ds,"volsize", None),
-                "vscan": getattr(ds,"vscan", None),
-                "written": getattr(ds,"written", None),
-                "xattr": getattr(ds,"xattr", None),
-                "": getattr(ds,"", None),
-            } for ds in self.zfs.datasets]
+                "name": vol.name,
+                "mountpoint": getattr(vol, "mountpoint", None),
+                "type": "volume",
+                "type_number": getattr(vol, "type", None),
+            } for vol in filtered_volumes]
             return ok(items)
         except Exception as exc:
-            return fail(str(exc))
-
-    # def get_pools(self):
-    #     try:
-    #         return self.zfs.pools
-    #     except Exception as exc:
-    #         return fail(str(exc))
-    #
-    # def get_pool(self, pool_name):
-    #     try:
-    #         pool = next(p for p in self.zfs.pools if p.name == pool_name)
-    #         return pool
-    #     except Exception as exc:
-    #         return fail(str(exc))
-    #
-    # def list_pool_details(self, pool_name: str):
-    #     try:
-    #         pool = next(p for p in self.zfs.pools if p.name == pool_name)
-    #         return ok({
-    #             "name": str(pool.properties["name"].value),
-    #             "allocated": str(pool.properties["allocated"].value),
-    #             "altroot": str(pool.properties["altroot"].value),
-    #             "ashift": str(pool.properties["ashift"].value),
-    #             "autoexpand": str(pool.properties["autoexpand"].value),
-    #             "autoreplace": str(pool.properties["autoreplace"].value),
-    #             "bootfs": str(pool.properties["bootfs"].value),
-    #             # "cachemode": str(pool.properties["cachemode"].value),
-    #             "capacity": str(pool.properties["capacity"].value),
-    #             "comment": str(pool.properties["comment"].value),
-    #             "dedupditto": str(pool.properties["dedupditto"].value),
-    #             "dedupratio": str(pool.properties["dedupratio"].value),
-    #             "delegation": str(pool.properties["delegation"].value),
-    #             "expandsize": str(pool.properties["expandsize"].value),
-    #             "failmode": str(pool.properties["failmode"].value),
-    #             "fragmentation": str(pool.properties["fragmentation"].value),
-    #             "freeing": str(pool.properties["freeing"].value),
-    #             "free": str(pool.properties["free"].value),
-    #             "guid": str(pool.properties["guid"].value),
-    #             "health": str(pool.properties["health"].value),
-    #             "leaked": str(pool.properties["leaked"].value),
-    #             "listsnapshots": str(pool.properties["listsnapshots"].value),
-    #             "readonly": str(pool.properties["readonly"].value),
-    #             "size": str(pool.properties["size"].value)
-    #         })
-    #     except Exception as exc:
-    #         return fail(str(exc))
-    #
-    # def create_pool(self, pool_name: str, devices: list[str], vdev_type: str = "disk"):
-    #     """
-    #     ایجاد یک ZFS pool با استفاده از دستور zpool.
-    #
-    #     Args:
-    #         pool_name (str): نام pool (مثلاً "mypool")
-    #         devices (list[str]): لیست دیوایس‌ها (مثلاً ['/dev/sdb', '/dev/sdc'])
-    #         vdev_type (str): نوع vdev (disk, mirror, raidz, raidz2, ...)
-    #     """
-    #     try:
-    #         if pool_name and devices and vdev_type:
-    #             if vdev_type == "disk":
-    #                 cmd = ["zpool", "create", pool_name] + devices
-    #             else:
-    #                 cmd = ["zpool", "create", pool_name, vdev_type] + devices
-    #             subprocess.run(cmd, check=True)
-    #             return ok({"name": "موفقیت آمیز ساخته شد", })
-    #         else:
-    #             return fail("محتویات آرگومان های ورودی خالی است",
-    #                         "create_pool",
-    #                         {"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type})
-    #     except subprocess.CalledProcessError as exc:
-    #         return fail(str(exc))
-    #     except Exception as exc:
-    #         return fail(str(exc))
-    #
-    # def pool_delete(self, pool_name: str):
-    #     try:
-    #         cmd = ["zpool", "destroy", pool_name]
-    #         subprocess.run(cmd, check=True)
-    #         return ok({"name": "موفقیت آمیز حذف شد", })
-    #     except subprocess.CalledProcessError as cpe:
-    #         return fail(str(cpe))
-    #     except Exception as exc:
-    #         return fail(str(exc))
-
-
-
+            return fail(f"Error listing volumes: {str(exc)}")
