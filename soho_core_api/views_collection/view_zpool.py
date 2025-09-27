@@ -12,7 +12,8 @@ class ZpoolListView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def post(self, request):
+class ZpoolDetailView(APIView):
+    def get(self, request,pool_name):
         manager = ZpoolManager()
         pool_name = request.data.get("pool_name", "None")
         result = manager.list_pool_details(pool_name)
@@ -21,7 +22,7 @@ class ZpoolListView(APIView):
         return Response(result, status=status.HTTP_404_NOT_FOUND)
 
 class ZpoolDeleteView(APIView):
-    def post(self, request):
+    def delete(self, request):
         pool_name = request.data.get("pool_name", "None")
         manager = ZpoolManager()
         result = manager.pool_delete(pool_name)
