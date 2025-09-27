@@ -22,43 +22,9 @@ class ZpoolManager:
 
     def list_pool_detail(self, pool_name: str = None):
         try:
-            pool = next(p for p in self.zfs.pools if p.name == pool_name)
-            return ok({
-                "name": str(pool.properties["name"].value),
-                "allocated": str(pool.properties["allocated"].value),
-                "altroot": str(pool.properties["altroot"].value),
-                "ashift": str(pool.properties["ashift"].value),
-                "autoexpand": str(pool.properties["autoexpand"].value),
-                "autoreplace": str(pool.properties["autoreplace"].value),
-                "bootfs": str(pool.properties["bootfs"].value),
-                # "cachemode": str(pool.properties["cachemode"].value),
-                "capacity": str(pool.properties["capacity"].value),
-                "comment": str(pool.properties["comment"].value),
-                "dedupditto": str(pool.properties["dedupditto"].value),
-                "dedupratio": str(pool.properties["dedupratio"].value),
-                "delegation": str(pool.properties["delegation"].value),
-                "expandsize": str(pool.properties["expandsize"].value),
-                "failmode": str(pool.properties["failmode"].value),
-                "fragmentation": str(pool.properties["fragmentation"].value),
-                "freeing": str(pool.properties["freeing"].value),
-                "free": str(pool.properties["free"].value),
-                "guid": str(pool.properties["guid"].value),
-                "health": str(pool.properties["health"].value),
-                "leaked": str(pool.properties["leaked"].value),
-                "listsnapshots": str(pool.properties["listsnapshots"].value),
-                "readonly": str(pool.properties["readonly"].value),
-                "size": str(pool.properties["size"].value)
-            })
-        except Exception as exc:
-            return fail(str(exc))
-
-    def list_pool(self, pool_name: str = None):
-        try:
             # اگر pool_name داده شده باشد، فقط آن pool را فیلتر کن
             if pool_name:
                 pools = [p for p in self.zfs.pools if str(p.properties["name"].value) == pool_name]
-                # if not pools:
-                #     return error(f"Pool '{pool_name}' not found", status_code=404)
             else:
                 pools = self.zfs.pools
             items = [{
@@ -86,7 +52,7 @@ class ZpoolManager:
                 "listsnapshots": str(p.properties["listsnapshots"].value),
                 "readonly": str(p.properties["readonly"].value),
                 "size": str(p.properties["size"].value)
-            } for p in self.zfs.pools]
+            } for p in pools]
             return ok(items)
         except Exception as exc:
             return fail(str(exc))
