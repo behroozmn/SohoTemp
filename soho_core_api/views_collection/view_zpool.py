@@ -21,7 +21,8 @@ class ZpoolDetailView(APIView):
         return Response(result, status=status.HTTP_404_NOT_FOUND)
 
 class ZpoolDeleteView(APIView):
-    def delete(self, request,pool_name):
+    def delete(self, request):
+        pool_name = request.data.get("pool_name", "None")
         manager = ZpoolManager()
         result = manager.pool_delete(pool_name)
         if result["ok"]:
