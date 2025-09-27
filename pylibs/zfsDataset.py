@@ -105,7 +105,11 @@ class ZFSDatasetManager:
         missing = self._ensure_binding()
         if missing: return missing
         try:
-            items = [{"name": ds.name, "type": getattr(ds, "type", None)} for ds in self.zfs.datasets]
+            items = [{
+                "name": ds.name,
+                "type": getattr(ds,
+                "type", None)
+            } for ds in self.zfs.datasets]
             return ok(items)
         except Exception as exc:
             return fail(str(exc))
