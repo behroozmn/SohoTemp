@@ -20,26 +20,7 @@ class ZpoolManager:
     def __init__(self) -> None:
         self.zfs = libzfs.ZFS()
 
-    def list_pools_name(self):
-        try:
-            return ok([p.name for p in self.zfs.pools])
-        except Exception as exc:
-            return fail(str(exc))
-
-    def get_pools(self):
-        try:
-            return self.zfs.pools
-        except Exception as exc:
-            return fail(str(exc))
-
-    def get_pool(self, pool_name):
-        try:
-            pool = next(p for p in self.zfs.pools if p.name == pool_name)
-            return pool
-        except Exception as exc:
-            return fail(str(exc))
-
-    def list_pool_details(self, pool_name: str):
+    def list_pool_detail(self, pool_name: str = None):
         try:
             pool = next(p for p in self.zfs.pools if p.name == pool_name)
             return ok({
@@ -68,6 +49,45 @@ class ZpoolManager:
                 "readonly": str(pool.properties["readonly"].value),
                 "size": str(pool.properties["size"].value)
             })
+        except Exception as exc:
+            return fail(str(exc))
+
+    def list_pool(self, pool_name: str = None):
+        try:
+            # اگر pool_name داده شده باشد، فقط آن pool را فیلتر کن
+            if pool_name:
+                pools = [p for p in self.zfs.pools if str(p.properties["name"].value) == pool_name]
+                # if not pools:
+                #     return error(f"Pool '{pool_name}' not found", status_code=404)
+            else:
+                pools = self.zfs.pools
+            items = [{
+                "name": str(p.properties["name"].value),
+                "allocated": str(p.properties["allocated"].value),
+                "altroot": str(p.properties["altroot"].value),
+                "ashift": str(p.properties["ashift"].value),
+                "autoexpand": str(p.properties["autoexpand"].value),
+                "autoreplace": str(p.properties["autoreplace"].value),
+                "bootfs": str(p.properties["bootfs"].value),
+                # "cachemode": str(p.properties["cachemode"].value),
+                "capacity": str(p.properties["capacity"].value),
+                "comment": str(p.properties["comment"].value),
+                "dedupditto": str(p.properties["dedupditto"].value),
+                "dedupratio": str(p.properties["dedupratio"].value),
+                "delegation": str(p.properties["delegation"].value),
+                "expandsize": str(p.properties["expandsize"].value),
+                "failmode": str(p.properties["failmode"].value),
+                "fragmentation": str(p.properties["fragmentation"].value),
+                "freeing": str(p.properties["freeing"].value),
+                "free": str(p.properties["free"].value),
+                "guid": str(p.properties["guid"].value),
+                "health": str(p.properties["health"].value),
+                "leaked": str(p.properties["leaked"].value),
+                "listsnapshots": str(p.properties["listsnapshots"].value),
+                "readonly": str(p.properties["readonly"].value),
+                "size": str(p.properties["size"].value)
+            } for p in self.zfs.pools]
+            return ok(items)
         except Exception as exc:
             return fail(str(exc))
 
