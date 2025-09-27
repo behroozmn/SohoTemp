@@ -15,15 +15,13 @@ class ZpoolListView(APIView):
 class ZpoolDetailView(APIView):
     def get(self, request,pool_name):
         manager = ZpoolManager()
-        pool_name = request.data.get("pool_name", "None")
         result = manager.list_pool_details(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_404_NOT_FOUND)
 
 class ZpoolDeleteView(APIView):
-    def delete(self, request):
-        pool_name = request.data.get("pool_name", "None")
+    def delete(self, request,pool_name):
         manager = ZpoolManager()
         result = manager.pool_delete(pool_name)
         if result["ok"]:
@@ -44,16 +42,8 @@ class ZpoolCreaView(APIView):
 
 
 class ZpoolDetailView(APIView):
-    def get(self, request):
+    def get(self, request,pool_name):
         manager = ZpoolManager()
-        result = manager.list_pools_name()
-        if result["ok"]:
-            return Response(result, status=status.HTTP_200_OK)
-        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def post(self, request):
-        manager = ZpoolManager()
-        pool_name = request.data.get("pool_name", "None")
         result = manager.list_pool_details(pool_name)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
