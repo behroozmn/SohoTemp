@@ -28,7 +28,7 @@ class VolumeCreateView(APIView):
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class VolumeDeleteView(APIView):
-    def post(self, request):
+    def delete(self, request):
         volume_name = request.data.get("volume_name", "None")
         zfs_manager = VolumeManager()
         result = zfs_manager.delete(volume_name)
