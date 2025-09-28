@@ -44,4 +44,6 @@ urlpatterns = [
 
     path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
 
+    path("api/service/", include("soho_core_api.urls_collection.url_service")),
+
 ]
