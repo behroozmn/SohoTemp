@@ -5,6 +5,6 @@ urlpatterns = [
 
     path('', view_share_samba.SambaListView.as_view()),
 
-    path('create', view_share_samba.SambaCreateView.as_view()),
-    path('delete', view_share_samba.SambaDeleteView.as_view()),
+    path('create/', view_share_samba.SambaCreateView.as_view()),
+    path('delete/', view_share_samba.SambaDeleteView.as_view()),
 ]

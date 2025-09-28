@@ -5,5 +5,5 @@ urlpatterns = [
 
     path('', view_disk.disk),
 
-    path('wwn/map', view_disk.DiskWwnView.as_view()),
+    path('wwn/map/', view_disk.DiskWwnView.as_view()),
 ]
