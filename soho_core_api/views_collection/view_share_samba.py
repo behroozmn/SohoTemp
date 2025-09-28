@@ -23,7 +23,7 @@ class SambaCreateView(APIView):
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
 class SambaDeleteView(APIView):
-    def post(self, request):
+    def delete(self, request):
         share_name = request.data.get("share_name", None)
 
         smb = SambaManager()
