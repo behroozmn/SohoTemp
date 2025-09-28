@@ -42,4 +42,6 @@ urlpatterns = [
 
     path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
 
+    path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
+
 ]
