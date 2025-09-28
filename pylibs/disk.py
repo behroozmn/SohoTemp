@@ -3,8 +3,23 @@ import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 import time
 from django.http import JsonResponse
+import os
+import glob
+import re
+
+
+def ok(data: Any) -> Dict[str, Any]:
+    """Return a success envelope (DRF-ready)."""
+    return {"ok": True, "error": None, "data": data, "details": {}}
+
+
+def fail(message: str, code: str = "disk_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return a failure envelope (DRF-ready)."""
+    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "details": {}}
+
 
 class Disk:
+
     def __init__(self):
         try:
             self._partitions = psutil.disk_partitions()  # فقط mount points و فایل‌سیستم‌ها را برمی‌گرداند
@@ -129,3 +144,58 @@ class Disk:
                 },
             }
         }
+
+    def get_disks_wwn_mapping(self):
+        """
+        Returns a dict: {device_name: wwn_name} -----> {'sda': 'wwn-0x5002538d40123456', ...}
+        """
+        mapping = {}
+        by_id_path = "/dev/disk/by-id/wwn-*"
+
+        try:
+            for link in glob.glob(by_id_path):
+                target = os.readlink(link)  # Resolve symlink to get target (e.g., ../../sda)
+                dev_name = os.path.basename(target)  # Extract device name (e.g., sda from ../../sda or nvme0n1 from ../../nvme0n1)
+                if re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+)$', dev_name):  # Only consider block devices that look like disks (not partitions)
+                    # wwn_name = os.path.basename(link)
+                    d = "/dev/" + dev_name
+                    # mapping[dev_name] = wwn_name
+                    mapping[d] = link
+        except Exception as exc:
+            return fail(str(exc))
+        return ok(mapping)  # {'sdb': 'wwn-0x50014ee2139fda31', 'sda': 'wwn-0x5000000000001aa9'}
+
+        return ok(items)
+
+
+def get_all_disks(self):
+    """
+    Returns a sorted list of disk device names (e.g., ['sda', 'sdb', 'nvme0n1'])
+    by scanning /sys/block and excluding partitions and virtual devices.
+    """
+    disks = []
+    block_path = "/sys/block"
+
+    if not os.path.exists(block_path):
+        raise RuntimeError("/sys/block not found – are you on Linux?")
+
+    for entry in os.listdir(block_path):
+        # Skip loop, ram, sr (CD-ROM), etc.
+        if entry.startswith(('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')):
+            continue
+        # Only include real disk-like devices
+        if re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+)$', entry):
+            disks.append(entry)
+    return sorted(disks)  # ['nvme0n1', 'sda', 'sdb']
+
+#
+# def main():
+#     disk_wwn_map = get_disks_wwn_mapping()
+#     all_disks = get_all_disks()
+#
+#     print(f"{'Device':<12} {'WWN'}")
+#     print("-" * 60)
+#
+#     for disk in all_disks:
+#         wwn = disk_wwn_map.get(disk, "N/A")
+#         print(f"{disk:<12} {wwn}")
