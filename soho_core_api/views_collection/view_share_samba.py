@@ -22,6 +22,7 @@ class SambaCreateView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
+
 class SambaDeleteView(APIView):
     def delete(self, request):
         share_name = request.data.get("share_name", None)
@@ -33,6 +34,7 @@ class SambaDeleteView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
+
 class SambaListView(APIView):
     def get(self, request):
         smb = SambaManager()
@@ -41,3 +43,41 @@ class SambaListView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SambaUserCreateView(APIView):
+    """
+    POST /api/samba/user/
+    Body: { "username": "ali", "password": "mypass123" }
+    """
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+        if not username or not password:
+            return Response({"error": "Both 'username' and 'password' are required."}, status=status.HTTP_400_BAD_REQUEST)
+        smb = SambaManager()
+        result = smb.create_samba_user(username, password)
+
+        if result["ok"]:
+            return Response(result, status=status.HTTP_201_CREATED)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SambaUserEnableView(APIView):
+    """
+    POST /api/samba/user/enable/
+    Body: { "username": "ali" }
+    """
+
+    def post(self, request):
+        username = request.data.get("username")
+        if not username:
+            return Response({"error": "'username' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        smb = SambaManager()
+        result = smb.enable_samba_user(username)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
