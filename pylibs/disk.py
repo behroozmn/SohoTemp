@@ -242,6 +242,67 @@ class Disk:
             return fail("Permission denied accessing /sys/block")
         except Exception as e:
             return fail(f"Unexpected error: {str(e)}", extra={"exception": str(e)})
+
+    def wipe_disk(self, device_name: str) -> Dict[str, Any]:
+        """
+        Safely run: wipefs -a /dev/<device_name>
+
+        Args:
+            device_name (str): e.g., "sda", "nvme0n1"
+
+        Returns:
+            DRF-ready response dict.
+        """
+        if not isinstance(device_name, str) or not device_name.strip():
+            return fail("Device name must be a non-empty string.")
+
+        device_name = device_name.strip()
+
+        # اعتبارسنجی نام دستگاه (جلوگیری از command injection و دستگاه‌های نامعتبر)
+        if not re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$', device_name):
+            return fail(f"Invalid device name: {device_name}. Only block devices like sda, nvme0n1 are allowed.")
+
+        device_path = f"/dev/{device_name}"
+
+        # بررسی وجود دستگاه
+        try:
+            import os
+            if not os.path.exists(device_path):
+                return fail(f"Device not found: {device_path}")
+        except Exception as e:
+            return fail(f"Error checking device path: {str(e)}")
+
+        try:
+            # اجرای دستور wipefs
+            result = subprocess.run(
+                ["wipefs", "-a", device_path],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60
+            )
+
+            if result.returncode == 0:
+                return ok(
+                    {"device": device_name},
+                    details="All filesystem signatures successfully wiped."
+                )
+            else:
+                stderr = result.stderr.strip() or result.stdout.strip()
+                return fail(
+                    f"wipefs failed on {device_name}: {stderr}",
+                    code="wipefs_failed",
+                    extra={"stderr": result.stderr, "stdout": result.stdout}
+                )
+
+        except subprocess.TimeoutExpired:
+            return fail(f"wipefs timed out on {device_name}", code="timeout")
+        except FileNotFoundError:
+            return fail("wipefs command not found. Install util-linux package.", code="command_not_found")
+        except Exception as e:
+            return fail(f"Exception during wipefs: {str(e)}", extra={"exception": str(e)})
+
+
 # def main():
 #     disk_wwn_map = get_disks_wwn_mapping()
 #     all_disks = get_all_disks()

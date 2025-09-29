@@ -32,3 +32,13 @@ class DiskFreeView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DiskDeleteView(APIView):
+    def delete(self, request):
+        device_name = request.data.get("device_name")
+        disk_object = Disk()
+        result = disk_object.wipe_disk(device_name)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
