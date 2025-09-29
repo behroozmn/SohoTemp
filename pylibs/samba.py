@@ -253,3 +253,52 @@ valid users = {valid_users_str}
             return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
         except Exception as e:
             return fail(f"Exception during Samba user enable: {str(e)}", code="exception", extra=str(e))
+
+    def change_samba_password(self, username: str, new_password: str) -> Dict[str, Any]:
+        """
+        Change Samba user password non-interactively.
+        Equivalent to: echo -e "newpass\nnewpass" | smbpasswd -s username
+        Requires root privileges.
+        """
+        if os.geteuid() != 0:
+            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+
+        if not username or not isinstance(username, str):
+            return fail("Username must be a non-empty string.")
+
+        if not new_password or not isinstance(new_password, str):
+            return fail("New password must be a non-empty string.")
+
+        try:
+            # دو بار رمز عبور جدید را به smbpasswd می‌دهیم
+            passwd_input = f"{new_password}\n{new_password}\n"
+            result = subprocess.run(
+                ["smbpasswd", "-s", username],
+                input=passwd_input,
+                text=True,
+                capture_output=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                return ok(
+                    {"username": username},
+                    detail="Samba password changed successfully."
+                )
+            else:
+                stderr = result.stderr.strip()
+                if "user not found" in stderr.lower() or "does not exist" in stderr.lower():
+                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
+                else:
+                    return fail(
+                        f"Failed to change Samba password: {stderr}",
+                        code="smbpasswd_error",
+                        extra=stderr
+                    )
+
+        except subprocess.TimeoutExpired:
+            return fail("smbpasswd command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
+        except Exception as e:
+            return fail(f"Exception during password change: {str(e)}", code="exception", extra=str(e))
