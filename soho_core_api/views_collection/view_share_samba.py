@@ -82,7 +82,7 @@ class SambaUserEnableView(APIView):
         else:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
-class SambaChangePasswordView(APIView):
+class SambaUserChangePasswordView(APIView):
     """
     POST /api/samba/password/
     Body: { "username": "behrooz", "new_password": "NewSecurePass123!" }
@@ -99,6 +99,21 @@ class SambaChangePasswordView(APIView):
 
         smb = SambaManager()
         result = smb.change_samba_password(username, new_password)
+
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SambaUserListView(APIView):
+    """
+    GET /api/samba/users/detailed/
+    Returns full details of all Samba users (like `pdbedit -L -v`).
+    """
+    def get(self, request):
+        smb = SambaManager()
+        result = smb.list_samba_users_detailed()
 
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)

@@ -188,13 +188,7 @@ valid users = {valid_users_str}
 
         try:
             passwd_input = f"{password}\n{password}\n"
-            result = subprocess.run(
-                ["smbpasswd", "-a", "-s", username],
-                input=passwd_input,
-                text=True,
-                capture_output=True,
-                timeout=10
-            )
+            result = subprocess.run(["smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba user created successfully (password set).")
@@ -224,28 +218,16 @@ valid users = {valid_users_str}
             return fail("Username must be a non-empty string.")
 
         try:
-            result = subprocess.run(
-                ["smbpasswd", "-e", username],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = subprocess.run(["smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
-                return ok(
-                    {"username": username},
-                    detail="Samba user enabled successfully."
-                )
+                return ok({"username": username}, detail="Samba user enabled successfully.")
             else:
                 stderr = result.stderr.strip()
                 if "not found" in stderr.lower() or "does not exist" in stderr.lower():
                     return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
                 else:
-                    return fail(
-                        f"Failed to enable Samba user: {stderr}",
-                        code="enable_error",
-                        extra=stderr
-                    )
+                    return fail(f"Failed to enable Samba user: {stderr}", code="enable_error", extra=stderr)
 
         except subprocess.TimeoutExpired:
             return fail("smbpasswd enable command timed out.", code="timeout")
@@ -272,29 +254,16 @@ valid users = {valid_users_str}
         try:
             # دو بار رمز عبور جدید را به smbpasswd می‌دهیم
             passwd_input = f"{new_password}\n{new_password}\n"
-            result = subprocess.run(
-                ["smbpasswd", "-s", username],
-                input=passwd_input,
-                text=True,
-                capture_output=True,
-                timeout=10
-            )
+            result = subprocess.run(["smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
-                return ok(
-                    {"username": username},
-                    detail="Samba password changed successfully."
-                )
+                return ok({"username": username}, detail="Samba password changed successfully.")
             else:
                 stderr = result.stderr.strip()
                 if "user not found" in stderr.lower() or "does not exist" in stderr.lower():
                     return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
                 else:
-                    return fail(
-                        f"Failed to change Samba password: {stderr}",
-                        code="smbpasswd_error",
-                        extra=stderr
-                    )
+                    return fail(f"Failed to change Samba password: {stderr}", code="smbpasswd_error", extra=stderr)
 
         except subprocess.TimeoutExpired:
             return fail("smbpasswd command timed out.", code="timeout")
@@ -302,3 +271,70 @@ valid users = {valid_users_str}
             return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
         except Exception as e:
             return fail(f"Exception during password change: {str(e)}", code="exception", extra=str(e))
+
+    def list_samba_users_detailed(self) -> Dict[str, Any]:
+        """
+        Parse output of: sudo pdbedit -L -v
+        Handles blocks separated by '---------------'
+        """
+        if os.geteuid() != 0:
+            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+
+        try:
+            result = subprocess.run(
+                ["pdbedit", "-L", "-v"],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+
+            if result.returncode != 0:
+                stderr = result.stderr.strip()
+                if "No such file" in stderr or "command not found" in stderr.lower():
+                    return fail("pdbedit not found. Is Samba installed?", code="command_missing", extra=stderr)
+                elif "No users" in stderr or "no such user" in stderr.lower():
+                    return ok({}, detail="No Samba users found.")
+                else:
+                    return fail(f"pdbedit failed: {stderr}", code="pdbedit_error", extra=stderr)
+
+            raw_output = result.stdout.strip()
+            if not raw_output:
+                return ok({}, detail="No Samba users found.")
+
+            # تقسیم بر اساس خط جداکننده
+            blocks = raw_output.split("---------------")
+            users = {}
+
+            for block in blocks:
+                block = block.strip()
+                if not block or "Unix username:" not in block:
+                    continue
+
+                user_info = {}
+                username = None
+
+                for line in block.splitlines():
+                    line = line.strip()
+                    if not line or ":" not in line:
+                        continue
+
+                    key, value = line.split(":", 1)
+                    key = key.strip()
+                    value = value.strip()
+
+                    if key == "Unix username":
+                        username = value
+                    else:
+                        user_info[key] = value
+
+                if username:
+                    users[username] = user_info
+
+            return ok(users, detail=f"Found {len(users)} Samba user(s) with full details.")
+
+        except subprocess.TimeoutExpired:
+            return fail("pdbedit command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("pdbedit command not found. Is Samba installed?", code="command_missing")
+        except Exception as e:
+            return fail(f"Exception during listing Samba users: {str(e)}", code="exception", extra=str(e))
