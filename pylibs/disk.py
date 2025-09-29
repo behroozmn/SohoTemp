@@ -1,12 +1,9 @@
+import os
 import subprocess  # اجرای دستورات سیستمی در صورت نیاز
 import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
-import time
-from django.http import JsonResponse
-import os
 import glob
 import re
-
 
 
 def ok(data: Any, details: Any = None) -> Dict[str, Any]:
@@ -17,6 +14,7 @@ def ok(data: Any, details: Any = None) -> Dict[str, Any]:
         "details": details or {}
     }
 
+
 def fail(message: str, code: str = "disk_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -24,6 +22,7 @@ def fail(message: str, code: str = "disk_error", extra: Optional[Dict[str, Any]]
         "data": None,
         "details": {}
     }
+
 
 class Disk:
 
@@ -243,30 +242,20 @@ class Disk:
         except Exception as e:
             return fail(f"Unexpected error: {str(e)}", extra={"exception": str(e)})
 
-    def wipe_disk(self, device_name: str) -> Dict[str, Any]:
-        """
-        Safely run: wipefs -a /dev/<device_name>
+    def wipe_disk(self, device_path: str) -> Dict[str, Any]:
 
-        Args:
-            device_name (str): e.g., "sda", "nvme0n1"
+        device_path = device_path.strip()
+        device_name = os.path.basename(device_path)
 
-        Returns:
-            DRF-ready response dict.
-        """
-        if not isinstance(device_name, str) or not device_name.strip():
+        if not isinstance(device_path, str) or not device_path.strip():
             return fail("Device name must be a non-empty string.")
-
-        device_name = device_name.strip()
 
         # اعتبارسنجی نام دستگاه (جلوگیری از command injection و دستگاه‌های نامعتبر)
         if not re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$', device_name):
             return fail(f"Invalid device name: {device_name}. Only block devices like sda, nvme0n1 are allowed.")
 
-        device_path = f"/dev/{device_name}"
-
         # بررسی وجود دستگاه
         try:
-            import os
             if not os.path.exists(device_path):
                 return fail(f"Device not found: {device_path}")
         except Exception as e:
@@ -301,7 +290,6 @@ class Disk:
             return fail("wipefs command not found. Install util-linux package.", code="command_not_found")
         except Exception as e:
             return fail(f"Exception during wipefs: {str(e)}", extra={"exception": str(e)})
-
 
 # def main():
 #     disk_wwn_map = get_disks_wwn_mapping()
