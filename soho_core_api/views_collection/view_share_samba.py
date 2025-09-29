@@ -81,3 +81,26 @@ class SambaUserEnableView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         else:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+class SambaChangePasswordView(APIView):
+    """
+    POST /api/samba/password/
+    Body: { "username": "behrooz", "new_password": "NewSecurePass123!" }
+    """
+    def post(self, request):
+        username = request.data.get("username")
+        new_password = request.data.get("new_password")
+
+        if not username or not new_password:
+            return Response(
+                {"error": "Both 'username' and 'new_password' are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        smb = SambaManager()
+        result = smb.change_samba_password(username, new_password)
+
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
