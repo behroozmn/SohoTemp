@@ -167,3 +167,89 @@ valid users = {valid_users_str}
 
         except Exception as e:
             return fail(f"Failed to parse smb.conf: {str(e)}", "parse_error", extra=str(e))
+
+    def create_samba_user(self, username: str, password: str) -> Dict[str, Any]:
+        """
+        Create a Samba user and set password non-interactively.
+        Equivalent to: echo -e "pass\npass" | smbpasswd -a -s username
+        Does NOT enable the user (you must call enable_samba_user separately).
+        """
+        if os.geteuid() != 0:
+            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+
+        if not username or not isinstance(username, str):
+            return fail("Username must be a non-empty string.")
+
+        if not password or not isinstance(password, str):
+            return fail("Password must be a non-empty string.")
+
+        if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
+            return fail("Invalid username: only letters, digits, ., -, _ allowed.")
+
+        try:
+            passwd_input = f"{password}\n{password}\n"
+            result = subprocess.run(
+                ["smbpasswd", "-a", "-s", username],
+                input=passwd_input,
+                text=True,
+                capture_output=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                return ok({"username": username}, detail="Samba user created successfully (password set).")
+            else:
+                stderr = result.stderr.strip()
+                if "user exists" in stderr.lower():
+                    return fail(f"Samba user '{username}' already exists.", code="user_exists", extra=stderr)
+                else:
+                    return fail(f"Failed to create Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
+
+        except subprocess.TimeoutExpired:
+            return fail("smbpasswd command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
+        except Exception as e:
+            return fail(f"Exception during Samba user creation: {str(e)}", code="exception", extra=str(e))
+
+    def enable_samba_user(self, username: str) -> Dict[str, Any]:
+        """
+        Enable an existing Samba user.
+        Equivalent to: smbpasswd -e username
+        """
+        if os.geteuid() != 0:
+            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+
+        if not username or not isinstance(username, str):
+            return fail("Username must be a non-empty string.")
+
+        try:
+            result = subprocess.run(
+                ["smbpasswd", "-e", username],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                return ok(
+                    {"username": username},
+                    detail="Samba user enabled successfully."
+                )
+            else:
+                stderr = result.stderr.strip()
+                if "not found" in stderr.lower() or "does not exist" in stderr.lower():
+                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
+                else:
+                    return fail(
+                        f"Failed to enable Samba user: {stderr}",
+                        code="enable_error",
+                        extra=stderr
+                    )
+
+        except subprocess.TimeoutExpired:
+            return fail("smbpasswd enable command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
+        except Exception as e:
+            return fail(f"Exception during Samba user enable: {str(e)}", code="exception", extra=str(e))
