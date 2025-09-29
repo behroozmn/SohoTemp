@@ -281,12 +281,7 @@ valid users = {valid_users_str}
             return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         try:
-            result = subprocess.run(
-                ["pdbedit", "-L", "-v"],
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
+            result = subprocess.run(["pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
 
             if result.returncode != 0:
                 stderr = result.stderr.strip()
