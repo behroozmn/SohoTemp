@@ -6,4 +6,5 @@ urlpatterns = [
     path('', view_disk.disk),
 
     path('wwn/map/', view_disk.DiskWwnView.as_view()),
+    path('free', view_disk.DiskFreeView.as_view()),
 ]
