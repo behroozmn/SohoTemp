@@ -5,10 +5,6 @@ from pylibs.samba import SambaManager
 import os
 
 
-class SambaListView(APIView):
-    pass
-
-
 class SambaCreateView(APIView):
     def post(self, request):
         full_path = request.data.get("full_path", None)
