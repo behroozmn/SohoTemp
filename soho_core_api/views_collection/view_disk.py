@@ -25,9 +25,10 @@ class DiskWwnView(APIView):
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-    #  = get_disk_wwn_mapping()
-    #  = get_all_disks()
-    #
-    # print(f"{'Device':<12} {'WWN'}")
-    # print("-" * 60)
-    #
+class DiskFreeView(APIView):
+    def get(self, request):
+        disk_object = Disk()
+        result = disk_object.list_unpartitioned_disks()
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

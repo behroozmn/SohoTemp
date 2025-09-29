@@ -8,15 +8,22 @@ import glob
 import re
 
 
-def ok(data: Any) -> Dict[str, Any]:
-    """Return a success envelope (DRF-ready)."""
-    return {"ok": True, "error": None, "data": data, "details": {}}
 
+def ok(data: Any, details: Any = None) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "error": None,
+        "data": data,
+        "details": details or {}
+    }
 
 def fail(message: str, code: str = "disk_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Return a failure envelope (DRF-ready)."""
-    return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "details": {}}
-
+    return {
+        "ok": False,
+        "error": {"code": code, "message": message, "extra": extra or {}},
+        "data": None,
+        "details": {}
+    }
 
 class Disk:
 
@@ -167,28 +174,74 @@ class Disk:
 
         return ok(items)
 
+    def get_all_disks(self):
+        """
+        Returns a sorted list of disk device names (e.g., ['sda', 'sdb', 'nvme0n1'])
+        by scanning /sys/block and excluding partitions and virtual devices.
+        """
+        disks = []
+        block_path = "/sys/block"
 
-def get_all_disks(self):
-    """
-    Returns a sorted list of disk device names (e.g., ['sda', 'sdb', 'nvme0n1'])
-    by scanning /sys/block and excluding partitions and virtual devices.
-    """
-    disks = []
-    block_path = "/sys/block"
+        if not os.path.exists(block_path):
+            raise RuntimeError("/sys/block not found – are you on Linux?")
 
-    if not os.path.exists(block_path):
-        raise RuntimeError("/sys/block not found – are you on Linux?")
+        for entry in os.listdir(block_path):
+            # Skip loop, ram, sr (CD-ROM), etc.
+            if entry.startswith(('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')):
+                continue
+            # Only include real disk-like devices
+            if re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+)$', entry):
+                disks.append(entry)
+        return sorted(disks)  # ['nvme0n1', 'sda', 'sdb']
 
-    for entry in os.listdir(block_path):
-        # Skip loop, ram, sr (CD-ROM), etc.
-        if entry.startswith(('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')):
-            continue
-        # Only include real disk-like devices
-        if re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+)$', entry):
-            disks.append(entry)
-    return sorted(disks)  # ['nvme0n1', 'sda', 'sdb']
+    def list_unpartitioned_disks(self) -> Dict[str, Any]:
+        """
+        List block devices that have NO partitions.
+        Works for both SCSI (sda, sdb) and NVMe (nvme0n1) devices.
+        """
+        try:
+            block_path = "/sys/block"
+            if not os.path.exists(block_path):
+                return fail("System does not appear to be Linux (no /sys/block).")
 
-#
+            unpartitioned = []
+
+            for device in os.listdir(block_path):
+                # فیلتر کردن دستگاه‌های غیردیسک
+                if device.startswith(('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram', 'mmcblk')):
+                    continue
+
+                # فقط دستگاه‌های معتبر
+                if not re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$', device):
+                    continue
+
+                # بررسی وجود پارتیشن: آیا زیرشاخه‌ای با نام پارتیشن وجود دارد؟
+                device_dir = os.path.join(block_path, device)
+                has_partition = False
+
+                try:
+                    for entry in os.listdir(device_dir):
+                        # پارتیشن‌ها معمولاً با عدد شروع یا شامل 'p' هستند
+                        if entry.startswith(device) and (
+                                entry[len(device):].isdigit() or  # sda1, sdb2
+                                (entry.startswith(device + "p") and entry[len(device) + 1:].isdigit())  # nvme0n1p1
+                        ):
+                            has_partition = True
+                            break
+                except OSError:
+                    # اگر دسترسی نبود، فرض می‌کنیم پارتیشن ندارد (کم‌احتمال)
+                    pass
+
+                if not has_partition:
+                    unpartitioned.append(device)
+
+            unpartitioned.sort()
+            return ok(unpartitioned, details={"count": len(unpartitioned)})
+
+        except PermissionError:
+            return fail("Permission denied accessing /sys/block")
+        except Exception as e:
+            return fail(f"Unexpected error: {str(e)}", extra={"exception": str(e)})
 # def main():
 #     disk_wwn_map = get_disks_wwn_mapping()
 #     all_disks = get_all_disks()
