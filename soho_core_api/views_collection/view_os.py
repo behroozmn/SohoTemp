@@ -1,9 +1,21 @@
-from xmlrpc.client import boolean
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAdminUser
 from rest_framework import status
+from pylibs.OSSystem import SystemManager
 from pylibs.OSUser import UserManager
+
+
+class SystemPowerView(APIView):
+    permission_classes = [IsAdminUser]  # فقط ادمین‌ها
+
+    def get(self, request,action):
+        if not action:
+            return Response("فیلد 'action' الزامی است (مقادیر مجاز: 'shutdown', 'restart').", status=status.HTTP_400_BAD_REQUEST)
+
+        result = SystemManager.shutdown_or_restart(action.lower()) # shutdown or restart
+        status_code = status.HTTP_200_OK if result["ok"] else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=status_code)
 
 
 class UserListView(APIView):
