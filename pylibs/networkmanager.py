@@ -137,7 +137,12 @@ class NetworkManager:
         return result
 
     def to_dict(self) -> Dict[str, Any]:
-        """بازگرداندن تمام اطلاعات شبکه به صورت دیکشنری"""
+        """بازگرداندن تمام اطلاعات شبکه به صورت دیکشنری""""""بازگرداندن تمام اطلاعات شبکه به صورت دیکشنری (بدون اینترفیس lo)"""
+        all_interfaces = set(self._io_data_initial.keys()) | set(self._addr_data.keys()) | set(self._stats_data.keys())
+
+        # حذف 'lo' از لیست اینترفیس‌ها
+        filtered_interfaces = {intf for intf in all_interfaces if intf != 'lo'}
+
         return {
             "interfaces": {
                 intf: {
@@ -146,7 +151,7 @@ class NetworkManager:
                     "addresses": self._addr_data.get(intf, []),
                     "status": self._stats_data.get(intf, {})
                 }
-                for intf in set(self._io_data_initial.keys()) | set(self._addr_data.keys()) | set(self._stats_data.keys())
+                for intf in filtered_interfaces
             },
             "summary": {
                 "total_tcp_connections": self._tcp_connections,
