@@ -1,10 +1,6 @@
-# Step1
+# Installation
 
 `install Debian 12` with all configuration
-
-# Step2
-
-After boot OS install this packages
 
 ```shell
 su root
@@ -53,8 +49,7 @@ python3 manage.py migrate
 python3 manage.py createsuperuser
 ```
 
-
-# Swagger
+## Swagger
 
 ```shell
 pip install drf-spectacular
@@ -150,3 +145,69 @@ python3 -c "import libzfs; print('Module installed successfully') ;print(libzfs.
 ```
 
 [URL](https://installati.one/debian/12/)
+
+# HTTP
+
+Success:
+
+```
+{
+    "ok": true,
+    "error": null,
+    "message": "",
+    "data": ["john", "mary", "root"],
+    "details": {
+        "count": 3,
+        "include_system": true
+    },
+    "meta": {
+        "timestamp": "2025-09-24T12:34:56Z",
+        "response_status_code": ""
+    },
+    "request_data": {}
+}
+```
+
+Error:
+
+```
+{
+    "ok": false,
+    "error": {
+        "code": "modules_error",
+        "message": "Unexpected error while reading user list",
+        "extra": {
+            "exception": "PermissionError"
+            "exception_etails": 
+        }
+    },
+    "data": null,
+    "details": {},
+    "meta": {
+        "timestamp": "2025-09-24T12:45:00Z",
+        "response_status_code": ""
+    }
+}
+```
+
+
+# NGINX
+```shell
+server {
+    listen 80;
+    server_name _;  # یا دامنه واقعی شما مثل example.com
+
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+```
