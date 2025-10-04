@@ -62,7 +62,24 @@ class ServiceManager:
                 unit = parts[0]
                 if not unit.endswith(".service"):
                     continue
-
+                if unit in {"apparmor.service","apt-daily-upgrade.service","apt-daily.service","blk-availability.service","console-setup.service","cron.service",
+                            "dbus.service","dm-event.service","dnsmasq.service","dpkg-db-backup.service","dracut-cmdline.service","dracut-initqueue.service",
+                            "dracut-mount.service","dracut-pre-mount.service","dracut-pre-pivot.service","dracut-pre-trigger.service","dracut-pre-udev.service",
+                            "dracut-shutdown-onfailure.service","dracut-shutdown.service","e2scrub_all.service","e2scrub_reap.service","emergency.service",
+                            "exim4-base.service","exim4.service","fstrim.service","getty-static.service","getty@tty1.service","hostapd.service","ifupdown-pre.service",
+                            "initrd-cleanup.service","initrd-parse-etc.service","initrd-switch-root.service","initrd-udevadm-cleanup-db.service","keyboard-setup.service",
+                            "kmod-static-nodes.service","logrotate.service","lvm2-lvmpolld.service","lvm2-monitor.service","man-db.service","mdadm-shutdown.service",
+                            "modprobe@configfs.service","modprobe@dm_mod.service","modprobe@drm.service","modprobe@efi_pstore.service","modprobe@fuse.service",
+                            "modprobe@loop.service","plocate-updatedb.service","rc-local.service","rescue.service",
+                            "systemd-ask-password-console.service","systemd-ask-password-wall.service","systemd-binfmt.service","systemd-firstboot.service",
+                            "systemd-fsck-root.service","systemd-fsckd.service","systemd-initctl.service","systemd-journal-flush.service","systemd-journald.service",
+                            "systemd-logind.service","systemd-machine-id-commit.service","systemd-modules-load.service",
+                            "systemd-pcrphase-initrd.service","systemd-pcrphase-sysinit.service","systemd-pcrphase.service","systemd-pstore.service",
+                            "systemd-random-seed.service","systemd-remount-fs.service","systemd-repart.service","systemd-rfkill.service","systemd-sysctl.service",
+                            "systemd-sysext.service","systemd-sysusers.service","systemd-timesyncd.service","systemd-tmpfiles-clean.service","systemd-tmpfiles-setup-dev.service",
+                            "systemd-tmpfiles-setup.service","systemd-udev-settle.service","systemd-udev-trigger.service","systemd-udevd.service","systemd-update-utmp-runlevel.service",
+                            "systemd-update-utmp.service","systemd-user-sessions.service"}:
+                    continue
                 load = parts[1]
                 active = parts[2]
                 sub = parts[3]
