@@ -158,7 +158,7 @@ valid users = {valid_users_str}
             shares = {}
             for section in config.sections():
                 # Skip global section (usually named 'global')
-                if section.lower() == 'global':
+                if section.lower() in {'global', 'printers', 'print$'}:
                     continue
                 # Convert section to dict
                 shares[section] = dict(config[section])
