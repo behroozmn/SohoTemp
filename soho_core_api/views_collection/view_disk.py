@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from pylibs.disk import Disk,DiskManager
+from pylibs.disk import Disk, DiskManager
 
 
 @api_view(['GET'])
@@ -45,12 +45,9 @@ class DiskDeleteView(APIView):
 
 
 class DiskListView(APIView):
-    def get(self,request):
+    def get(self, request):
         dsk = DiskManager()
-
 
         # result = dsk.get_disks_all(contain_os_disk=False)
 
-        return Response(dsk.os_disk, status=status.HTTP_200_OK)
-
-
+        return Response(dsk.get_disks_all(contain_os_disk=False), status=status.HTTP_200_OK)
