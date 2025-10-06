@@ -4,6 +4,7 @@ import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 import glob
 import re
+from pylibs.File import FileManager
 
 
 def ok(data: Any, details: Any = None) -> Dict[str, Any]:
@@ -51,11 +52,7 @@ class Disk:
 
         try:
             # گرفتن لیست دیسک‌ها با lsblk
-            output = subprocess.check_output(
-                ["lsblk", "-O", "-J"],
-                stderr=subprocess.DEVNULL,
-                text=True
-            )
+            output = subprocess.check_output(["lsblk", "-O", "-J"], stderr=subprocess.DEVNULL, text=True)
             data = eval(output)  # تبدیl to dict
 
             for disk in get("blockdevices", []):
@@ -349,3 +346,19 @@ class DiskManager:
                     if dev.startswith(disk):
                         return disk
         return None
+
+    def get_disk_info(self, disk: str) -> Dict[str, Optional[str]]:
+        base = f"/sys/block/{disk}"
+        filemanager = FileManager()
+        info = {
+            "disk": disk,
+            "model": filemanager.get_file_content(f"{base}/device/model"),
+            "vendor": filemanager.get_file_content(f"{base}/device/vendor"),
+            "wwn": filemanager.get_file_content(f"{base}/device/wwid"),  # may exist depending on driver
+            "device_path": os.path.realpath(base),
+            "physical_block_size": filemanager.get_file_content(f"{base}/queue/physical_block_size"),
+            "logical_block_size": filemanager.get_file_content(f"{base}/queue/logical_block_size"),
+            "scheduler": filemanager.get_file_content(f"{base}/queue/scheduler"),
+            "state": filemanager.get_file_content(f"{base}/device/state"),
+        }
+        return info

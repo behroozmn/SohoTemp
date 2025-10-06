@@ -46,8 +46,15 @@ class DiskDeleteView(APIView):
 
 class DiskListView(APIView):
     def get(self, request):
-        dsk = DiskManager()
+        obj_dm = DiskManager()
+        disks=obj_dm.get_disks_all(contain_os_disk=True)
+        disk_dictionary={}
+        for disk in disks:
+            disk_info = obj_dm.get_disk_info(disk)
 
-        # result = dsk.get_disks_all(contain_os_disk=False)
+            # جمع‌بندی اطلاعات در یک دیکشنری واحد
+            disk_dictionary[disk] = {
+                "info": disk_info,
+            }
 
-        return Response(dsk.get_disks_all(contain_os_disk=False), status=status.HTTP_200_OK)
+        return Response(disk_dictionary, status=status.HTTP_200_OK)
