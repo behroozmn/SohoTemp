@@ -71,6 +71,7 @@ class FileManager:
             return fail("Permission denied. Run as root.", code="permission_denied")
         except Exception as e:
             return fail(f"Error setting permissions: {str(e)}", code="os_error", extra=str(e))
+
     # TODO: اگر چندین دایرکتوری تو در تو بسازه دایرکتوری میانی دسترسی یوزری خواهند داشت که برنامه پایتون را ران کرده است
     def create_directory(
             self,
@@ -138,3 +139,13 @@ class FileManager:
 
         except Exception as e:
             return fail(f"Error reading file info: {str(e)}", code="os_error", extra=str(e))
+
+    def get_file_content(self, path: str, strip: bool = True) -> str:
+        try:
+            with open(path, "r") as f:
+                if strip:
+                    return f.read().strip()
+                else:
+                    return f.read()
+        except Exception:
+            return None
