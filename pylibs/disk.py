@@ -314,9 +314,6 @@ class DiskManager:
         self.disks = self.get_disks_all()
 
     def get_disks_all(self, contain_os_disk=True, exclude: tuple = ('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')):
-        """
-        لیست مرتب‌سازی شده از دیسک‌های سیستم لینوکس
-        """
         import os
         import re
 
@@ -338,7 +335,6 @@ class DiskManager:
                     disks.append(entry)
 
         disks = sorted(disks)
-        # مشکل اصلی: باید disks را برگردانید، نه self.os_disk
         return disks
 
     def get_os_disk(self) -> str | None:
