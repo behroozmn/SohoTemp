@@ -291,6 +291,7 @@ class Disk:
         except Exception as e:
             return fail(f"Exception during wipefs: {str(e)}", extra={"exception": str(e)})
 
+
 # def main():
 #     disk_wwn_map = get_disks_wwn_mapping()
 #     all_disks = get_all_disks()
@@ -301,3 +302,54 @@ class Disk:
 #     for disk in all_disks:
 #         wwn = disk_wwn_map.get(disk, "N/A")
 #         print(f"{disk:<12} {wwn}")
+
+class DiskManager:
+    os_disk: str = None
+    disks: list = []
+
+    def __init__(self):
+        # مشکل: استفاده از : به جای = برای انتساب
+        # همچنین باید از self استفاده کنید
+        self.os_disk = self.get_os_disk()
+        self.disks = self.get_disks_all()
+
+    def get_disks_all(self, contain_os_disk=True, exclude: tuple = ('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')):
+        """
+        لیست مرتب‌سازی شده از دیسک‌های سیستم لینوکس
+        """
+        import os
+        import re
+
+        block_path = "/sys/block"
+        if not os.path.exists(block_path):
+            raise Exception("/sys/block not found – OS is not Linux?")
+
+        disks = []
+        for entry in os.listdir(block_path):
+            # مشکل: exclude باید چک شود که با هر کدام از موارد شروع می‌شود یا نه
+            if any(entry.startswith(excl) for excl in exclude):
+                continue
+
+            # Only include real disk-like devices
+            if re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+)$', entry):
+                if not contain_os_disk and entry == self.os_disk:
+                    continue
+                else:
+                    disks.append(entry)
+
+        disks = sorted(disks)
+        # مشکل اصلی: باید disks را برگردانید، نه self.os_disk
+        return disks
+
+    def get_os_disk(self) -> str | None:
+        import os
+        import psutil
+
+        for part in psutil.disk_partitions(all=False):
+            if part.mountpoint == '/':
+                dev = os.path.basename(part.device)  # e.g. sda2
+                # strip partition number (sda2 → sda)
+                for disk in os.listdir("/sys/block"):
+                    if dev.startswith(disk):
+                        return disk
+        return None
