@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import libzfs
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 import subprocess
 
 
@@ -35,7 +35,14 @@ class FilesystemManager:
 
     def create(self, filesystem_name: str, properties: Dict[str, str]=None):
         try:
-            cmd = ["zfs", "create"]
+            # zfs create p1/ds1 -o quota=100g -o reservation=50G
+            cmd: List[str] = ["zfs", "create"]
+
+            # اگر پراپرتی‌ها وجود داشتن، هر کدوم رو با -o اضافه کن
+            if properties:
+                for key, value in properties.items():
+                    cmd += ["-o", f"{key}={value}"]
+
             cmd.append(filesystem_name)
 
             # اجرای دستور
