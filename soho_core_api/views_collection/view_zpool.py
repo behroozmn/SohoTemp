@@ -42,3 +42,11 @@ class ZpoolCreaView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ZpoolDevicesView(APIView):
+    def get(self, request, pool_name):
+        manager = ZpoolManager()
+        result = manager.list_pool_devices(pool_name)
+        if result["ok"]:
+            return Response(result, status=status.HTTP_200_OK)
+        return Response(result, status=status.HTTP_404_NOT_FOUND)
