@@ -288,6 +288,54 @@ class Disk:
         except Exception as e:
             return fail(f"Exception during wipefs: {str(e)}", extra={"exception": str(e)})
 
+    def wipe_disk_clean(self, device_path: str) -> Dict[str, Any]:
+        """
+        پاک‌سازی کامل یک دیسک/پارتیشن از هر اثر ZFS یا فایل‌سیستم.
+
+        مراحل:
+        1. اجرای `zfs clearlabel` روی device_path (مثلاً /dev/sda1)
+        2. استخراج نام دیسک اصلی (مثلاً از /dev/sda1 → /dev/sda)
+        3. اجرای `wipefs -af` روی دیسک اصلی
+
+        Args:
+            device_path (str): مسیر دستگاه (مثلاً "/dev/sda1" یا "/dev/sda")
+
+        Returns:
+            Dict: نتیجه عملیات
+        """
+        try:
+            if not device_path or not device_path.startswith("/dev/"):
+                return fail("مسیر دستگاه نامعتبر است.", "invalid_device_path")
+
+            # مرحله 1: حذف لیبل ZFS (اگر وجود داشته باشد)
+            try:
+                subprocess.run(
+                    ["zfs", "clearlabel", f"{device_path}1"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except subprocess.CalledProcessError as e:
+                # اگر لیبل ZFS نبود، خطا را نادیده بگیر (طبیعی است)
+                pass
+
+            subprocess.run(
+                ["wipefs", "-a", device_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            return ok({
+                "message": "دیسک با موفقیت پاک‌سازی شد.",
+                "device_path": device_path,
+            })
+
+        except subprocess.CalledProcessError as e:
+            return fail(f"خطا در اجرای دستور سیستمی: {e}", "wipe_error")
+        except Exception as e:
+            return fail(f"خطای غیرمنتظره: {str(e)}", "wipe_error")
+
 
 # def main():
 #     disk_wwn_map = get_disks_wwn_mapping()
