@@ -155,7 +155,7 @@ class ZpoolManager:
                 if vdev.type in ("disk", "file"):
                     wwn = _get_wwn_from_device_path(vdev.path)
                     devices.append({
-                        "name": vdev.path,
+                        "name": vdev.path.replace("1", ""),
                         "status": getattr(vdev, 'status', 'UNKNOWN'),
                         "type": vdev.type,
                         "parent_vdev": parent_type,

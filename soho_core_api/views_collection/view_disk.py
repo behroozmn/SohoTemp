@@ -36,12 +36,13 @@ class DiskFreeView(APIView):
 
 class DiskDeleteView(APIView):
     def delete(self, request):
-        device_name = request.data.get("device_name")
+        disk = request.data.get("disk_path")
         disk_object = Disk()
-        result = disk_object.wipe_disk(device_name)
+        result = disk_object.wipe_disk_clean(disk)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class DiskListView(APIView):
@@ -58,3 +59,4 @@ class DiskListView(APIView):
             }
 
         return Response(disk_dictionary, status=status.HTTP_200_OK)
+
