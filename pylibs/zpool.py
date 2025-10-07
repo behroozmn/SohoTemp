@@ -4,6 +4,7 @@
 import libzfs
 from typing import Any, Dict, Optional
 import subprocess
+import os
 
 
 def ok(data: Any) -> Dict[str, Any]:
@@ -16,13 +17,52 @@ def fail(message: str, code: str = "zpool_error", extra: Optional[Dict[str, Any]
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra or {}}, "data": None, "details": {}}
 
 
+def _get_wwn_from_device_path(device_path: str) -> str:
+    """
+    استخراج WWN از مسیر دستگاه (حتی اگر پارتیشن باشد، مثل /dev/sda1).
+    """
+    try:
+        # استخراج نام دیسک اصلی از مسیر (مثلاً از sda1 → sda)
+        if device_path.startswith("/dev/"):
+            dev_name = os.path.basename(device_path)
+        else:
+            dev_name = device_path
+
+        # حذف شماره پارتیشن: sda1 → sda, nvme0n1p1 → nvme0n1
+        import re
+        disk_name = re.sub(r'[0-9]+$', '', dev_name)  # برای sda1, sdb2, ...
+        disk_name = re.sub(r'p[0-9]+$', '', disk_name)  # برای nvme0n1p1
+
+        # جلوگیری از نام‌های نامعتبر (مثل "sda" که به "sd" تبدیل نشود)
+        if not disk_name or disk_name == dev_name:
+            disk_name = dev_name
+
+        # مسیر sysfs برای دیسک اصلی
+        wwn_path = f"/sys/block/{disk_name}/device/wwid"
+        if os.path.exists(wwn_path):
+            with open(wwn_path, "r") as f:
+                wwn = f.read().strip()
+                if wwn:
+                    return wwn.replace("naa.","wwn-0x")
+
+        # fallback: سریال دیسک (اگر WWN نبود)
+        serial_path = f"/sys/block/{disk_name}/device/serial"
+        if os.path.exists(serial_path):
+            with open(serial_path, "r") as f:
+                serial = f.read().strip()
+                if serial:
+                    return f"SERIAL:{serial}"
+
+    except Exception:
+        pass
+    return ""
+
 class ZpoolManager:
     def __init__(self) -> None:
         self.zfs = libzfs.ZFS()
 
     def list_pool_detail(self, pool_name: str = None):
         try:
-            # اگر pool_name داده شده باشد، فقط آن pool را فیلتر کن
             if pool_name:
                 pools = [p for p in self.zfs.pools if str(p.properties["name"].value) == pool_name]
             else:
@@ -35,7 +75,6 @@ class ZpoolManager:
                 "autoexpand": str(p.properties["autoexpand"].value),
                 "autoreplace": str(p.properties["autoreplace"].value),
                 "bootfs": str(p.properties["bootfs"].value),
-                # "cachemode": str(p.properties["cachemode"].value),
                 "capacity": str(p.properties["capacity"].value),
                 "comment": str(p.properties["comment"].value),
                 "dedupditto": str(p.properties["dedupditto"].value),
@@ -73,22 +112,66 @@ class ZpoolManager:
                 else:
                     cmd = ["zpool", "create", pool_name, vdev_type] + devices
                 subprocess.run(cmd, check=True)
-                return ok({"name": "موفقیت آمیز ساخته شد", })
+                return ok({"message": "Pool با موفقیت ساخته شد."})
             else:
-                return fail("محتویات آرگومان های ورودی خالی است",
+                return fail("محتویات آرگومان‌های ورودی خالی است",
                             "create_pool",
                             {"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type})
         except subprocess.CalledProcessError as exc:
-            return fail(str(exc))
+            return fail(f"خطا در اجرای دستور zpool: {exc}")
         except Exception as exc:
-            return fail(str(exc))
+            return fail(f"خطای غیرمنتظره: {exc}")
 
     def pool_delete(self, pool_name: str):
         try:
             cmd = ["zpool", "destroy", pool_name]
             subprocess.run(cmd, check=True)
-            return ok({"name": "موفقیت آمیز حذف شد", })
+            return ok({"message": "Pool با موفقیت حذف شد."})
         except subprocess.CalledProcessError as cpe:
-            return fail(str(cpe))
+            return fail(f"خطا در حذف pool: {cpe}")
         except Exception as exc:
-            return fail(str(exc))
+            return fail(f"خطای غیرمنتظره: {exc}")
+
+    def list_pool_devices(self, pool_name: str) -> Dict[str, Any]:
+        """
+        بازگرداندن لیست دیسک‌های فیزیکی یک ZFS pool خاص همراه با WWN.
+        """
+        try:
+            # پیدا کردن pool با نام داده‌شده
+            target_pool = None
+            for p in self.zfs.pools:
+                if str(p.properties["name"].value) == pool_name:
+                    target_pool = p
+                    break
+
+            if not target_pool:
+                return fail(f"Pool با نام '{pool_name}' یافت نشد.", "pool_not_found")
+
+            devices = []
+
+            def traverse_vdevs(vdev, parent_type="root"):
+                """پیمایش بازگشتی ساختار vdevها"""
+                # فقط دیسک‌های فیزیکی یا فایل‌ها را در نظر بگیر
+                if vdev.type in ("disk", "file"):
+                    wwn = _get_wwn_from_device_path(vdev.path)
+                    devices.append({
+                        "name": vdev.path,
+                        "status": getattr(vdev, 'status', 'UNKNOWN'),
+                        "type": vdev.type,
+                        "parent_vdev": parent_type,
+                        "wwn": f"/dev/disk/by-id/{wwn}",
+                    })
+                # پیمایش زیرشاخه‌ها (mirror, raidz, etc.)
+                elif hasattr(vdev, 'children') and vdev.children:
+                    for child in vdev.children:
+                        traverse_vdevs(child, parent_type=vdev.type)
+
+            traverse_vdevs(target_pool.root_vdev)
+
+            return ok({
+                "pool_name": pool_name,
+                "devices": devices
+            })
+
+        except Exception as exc:
+            return fail(f"خطا در دریافت لیست دیسک‌ها: {str(exc)}", "device_list_error")
