@@ -188,7 +188,7 @@ valid users = {valid_users_str}
 
         try:
             passwd_input = f"{password}\n{password}\n"
-            result = subprocess.run(["smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba user created successfully (password set).")
@@ -218,7 +218,7 @@ valid users = {valid_users_str}
             return fail("Username must be a non-empty string.")
 
         try:
-            result = subprocess.run(["smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba user enabled successfully.")
@@ -254,7 +254,7 @@ valid users = {valid_users_str}
         try:
             # دو بار رمز عبور جدید را به smbpasswd می‌دهیم
             passwd_input = f"{new_password}\n{new_password}\n"
-            result = subprocess.run(["smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba password changed successfully.")
@@ -281,7 +281,7 @@ valid users = {valid_users_str}
             return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         try:
-            result = subprocess.run(["pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
+            result = subprocess.run(["/usr/bin/sudo","/usr/bin/pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
 
             if result.returncode != 0:
                 stderr = result.stderr.strip()

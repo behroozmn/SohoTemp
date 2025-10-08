@@ -90,7 +90,7 @@ class UserManager:
 
         try:
             result = subprocess.run(
-                ["useradd", "-M", "-s", login_shell, username],
+                ["/usr/bin/sudo","/usr/sbin/useradd", "-M", "-s", login_shell, username],
                 capture_output=True,
                 text=True,
                 check=False
