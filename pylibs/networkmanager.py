@@ -321,8 +321,8 @@ class NetworkManager:
                 f.writelines(updated_lines)
 
             # اعمال تغییرات (نیاز به دسترسی root)
-            # subprocess.run(["sudo ","/usr/sbin/ifdown", interface], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            # subprocess.run(["sudo","/usr/sbin/ifup", interface], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # subprocess.run(["/usr/bin/sudo ","/usr/sbin/ifdown", interface], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # subprocess.run(["/usr/bin/sudo","/usr/sbin/ifup", interface], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(["/usr/bin/systemctl", "restart","networking.service"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             return ok({"interface": interface, "ip": new_ip, "netmask": new_netmask}, "آی‌پی با موفقیت به‌روز شد.")
