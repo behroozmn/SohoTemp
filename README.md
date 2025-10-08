@@ -268,12 +268,15 @@ sudo mkdir -p /var/log/soho_core_api
 sudo chown user:user /var/log/soho_core_api
 sudo chmod 755 /var/log/soho_core_api
 ```
+
 sudo vim /etc/systemd/system/soho_core_api.service
 
 ```
 [Unit]
 Description=Gunicorn daemon for soho_core_api
 After=network.target
+Before=nginx.service
+
 
 [Service]
 User=www-data
@@ -287,7 +290,7 @@ ExecStart=/opt/soho_core_api/.venv/bin/gunicorn \
           --workers 10 \
           --access-logfile /var/log/soho_core_api/access.log \
           --error-logfile /var/log/soho_core_api/error.log \
-          --log-level info \
+          --log-level debug \
           soho_core_api.wsgi:application
 
 Restart=always
@@ -295,6 +298,10 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target  # نشان می‌دهد که این سرویس باید هنگام بوت سیستم (در حالت عادی چندکاربره) به‌صورت خودکار اجرا شود. 
+```
+
+```shell
+sudo systemctl enable soho_core_api.service
 ```
 
 
