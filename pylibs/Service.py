@@ -79,7 +79,7 @@ class ServiceManager:
                             "systemd-sysext.service", "systemd-sysusers.service", "systemd-timesyncd.service", "systemd-tmpfiles-clean.service", "systemd-tmpfiles-setup-dev.service",
                             "systemd-tmpfiles-setup.service", "systemd-udev-settle.service", "systemd-udev-trigger.service", "systemd-udevd.service", "systemd-update-utmp-runlevel.service",
                             "systemd-update-utmp.service", "systemd-user-sessions.service","nmbd.service","samba-ad-dc.service","user-runtime-dir@1000.service","user@1000.service",
-                            "zfs-mount.service","zfs-share.service","zfs-volume-wait.service","zfs-zed.service","zfs-import-cache.service","zfs-load-module.service"}:
+                            "zfs-mount.service","zfs-share.service","zfs-volume-wait.service","zfs-zed.service","zfs-import-cache.service","zfs-load-module.service","systemd-networkd.service"}:
                     continue
                 load = parts[1]
                 active = parts[2]
