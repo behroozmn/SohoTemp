@@ -195,8 +195,9 @@ Error:
 ```shell
 server {
     listen 80;
-    server_name _;  # یا دامنه واقعی شما مثل example.com
+    server_name _;
 
+    # 1.(React)
     location / {
         proxy_pass http://127.0.0.1:5173;
         proxy_http_version 1.1;
@@ -208,6 +209,92 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_cache_bypass $http_upgrade;
     }
+
+    # 2.(DRF API)
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /media/ {
+        proxy_pass http://127.0.0.1:8000;
+    }
+    location /static/ {
+        proxy_pass http://127.0.0.1:8000;
+    }
 }
 
 ```
+
+
+## CORS
+File:setting.py
+```shell
+pip install django-cors-headers
+```
+
+```python
+
+INSTALLED_APPS = [
+    ...
+    'corsheaders',
+    ...
+]
+# اضافه کردن middleware در بالاتر از CommonMiddleware
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    ...
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://192.168.100.108:5173",
+    "http://192.168.100.108",
+    "http://10.0.20.245:5173",
+    "http://127.0.0.1:5173",
+]
+```
+
+
+## soho_core_api
+
+```shell
+sudo mkdir -p /var/log/soho_core_api
+sudo chown user:user /var/log/soho_core_api
+sudo chmod 755 /var/log/soho_core_api
+```
+sudo vim /etc/systemd/system/soho_core_api.service
+
+```
+[Unit]
+Description=Gunicorn daemon for soho_core_api
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/soho_core_api
+Environment="PATH=/opt/soho_core_api/.venv/bin"
+
+# ذخیره لاگ‌ها در فایل‌های جداگانه
+ExecStart=/opt/soho_core_api/.venv/bin/gunicorn \
+          --bind 0.0.0.0:8000 \
+          --workers 10 \
+          --access-logfile /var/log/soho_core_api/access.log \
+          --error-logfile /var/log/soho_core_api/error.log \
+          --log-level info \
+          soho_core_api.wsgi:application
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target  # نشان می‌دهد که این سرویس باید هنگام بوت سیستم (در حالت عادی چندکاربره) به‌صورت خودکار اجرا شود. 
+```
+
+
