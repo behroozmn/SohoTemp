@@ -277,8 +277,8 @@ valid users = {valid_users_str}
         Parse output of: sudo pdbedit -L -v
         Handles blocks separated by '---------------'
         """
-        if os.geteuid() != 0:
-            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+        # if os.geteuid() != 0:
+        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         try:
             result = subprocess.run(["/usr/bin/sudo","/usr/bin/pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
