@@ -26,10 +26,10 @@ class SystemManager:
         try:
             if action == 'shutdown':
                 # استفاده از systemctl برای خاموش کردن
-                subprocess.run(['/usr/bin/sudo', 'systemctl', 'poweroff'], check=True, timeout=10)
+                subprocess.run(['/usr/bin/sudo', '/usr/bin/systemctl', 'poweroff'], check=True, timeout=10)
             elif action == 'restart':
                 # استفاده از systemctl برای ریستارت
-                subprocess.run(['/usr/bin/sudo', 'systemctl', 'reboot'], check=True, timeout=10)
+                subprocess.run(['/usr/bin/sudo', '/usr/bin/systemctl', 'reboot'], check=True, timeout=10)
 
             # این خط معمولاً اجرا نمی‌شود چون سیستم خاموش/ریست می‌شود!
             return ok({"action": action}, "دستور ارسال شد. سیستم در حال خاموش/ریست شدن است.")
