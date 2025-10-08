@@ -283,7 +283,7 @@ WorkingDirectory=/opt/soho_core_api
 Environment="PATH=/opt/soho_core_api/.venv/bin"
 
 # ذخیره لاگ‌ها در فایل‌های جداگانه
-ExecStart=/opt/soho_core_api/.venv/bin/gunicorn \
+ExecStart=/usr/bin/sudo /opt/soho_core_api/.venv/bin/gunicorn \
           --bind 0.0.0.0:8000 \
           --workers 10 \
           --access-logfile /var/log/soho_core_api/access.log \
@@ -305,4 +305,35 @@ sudo systemctl start soho_core_api.service
 
 ```
 
+
+
+# Permision
+
+```shell
+sudo cat /etc/sudoers.d/Behrooz 
+[sudo] password for user: 
+user	ALL=(ALL) NOPASSWD: /usr/bin/nmap
+user	ALL=(ALL) NOPASSWD: /usr/bin/apt
+user	ALL=(ALL) NOPASSWD: /usr/bin/sudo
+user	ALL=(ALL) NOPASSWD: /usr/bin/chmod
+user	ALL=(ALL) NOPASSWD: /usr/bin/chown
+user	ALL=(ALL) NOPASSWD: /usr/bin/vim
+user	ALL=(ALL) NOPASSWD: /usr/bin/systemctl
+user	ALL=(ALL) NOPASSWD: /usr/bin/updatedb
+user	ALL=(ALL) NOPASSWD: /usr/bin/dpkg
+user	ALL=(ALL) NOPASSWD: /usr/sbin/shutdown
+user	ALL=(ALL) NOPASSWD: /usr/bin/killall
+user	ALL=(ALL) NOPASSWD: /usr/bin/kill
+user	ALL=(ALL) NOPASSWD: /usr/bin/lnav
+user	ALL=(ALL) NOPASSWD: /usr/bin/ls
+user	ALL=(ALL) NOPASSWD: /usr/sbin/ifdown
+user	ALL=(ALL) NOPASSWD: /usr/sbin/ifup
+user	ALL=(ALL) NOPASSWD: /usr/bin/systemctl
+user	ALL=(ALL) NOPASSWD: /usr/bin/zpool
+user	ALL=(ALL) NOPASSWD: /usr/bin/zfs
+user	ALL=(ALL) NOPASSWD: /usr/sbin/wipefs
+user	ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd
+user	ALL=(ALL) NOPASSWD: /usr/bin/pdbedit
+user	ALL=(ALL) NOPASSWD: /opt/soho_core_api/.venv/bin/gunicorn
+```
 
