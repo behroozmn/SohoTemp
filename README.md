@@ -264,9 +264,9 @@ CORS_ALLOWED_ORIGINS = [
 ## soho_core_api
 
 ```shell
-sudo mkdir -p /var/log/soho_core_api
-sudo chown user:user /var/log/soho_core_api
-sudo chmod 755 /var/log/soho_core_api
+sudo mkdir -p /var/log/soho
+sudo chown user:user /var/log/soho
+sudo chmod 777 /var/log/soho
 ```
 
 sudo vim /etc/systemd/system/soho_core_api.service
@@ -302,6 +302,9 @@ WantedBy=multi-user.target  # نشان می‌دهد که این سرویس با
 
 ```shell
 sudo systemctl enable soho_core_api.service
+sudo systemctl daemon-reload
+sudo systemctl start soho_core_api.service
+
 ```
 
 
