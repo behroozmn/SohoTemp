@@ -260,7 +260,7 @@ class Disk:
         try:
             # اجرای دستور wipefs
             result = subprocess.run(
-                ["wipefs", "-a", device_path],
+                ["/usr/bin/sudo","/usr/sbin/wipefs", "-a", device_path],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -309,7 +309,7 @@ class Disk:
             # مرحله 1: حذف لیبل ZFS (اگر وجود داشته باشد)
             try:
                 subprocess.run(
-                    ["zfs", "clearlabel", f"{device_path}1"],
+                    ["/usr/bin/sudo","/usr/bin/zfs", "clearlabel", f"{device_path}1"],
                     check=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
@@ -319,7 +319,7 @@ class Disk:
                 pass
 
             subprocess.run(
-                ["wipefs", "-a", device_path],
+                ["/usr/bin/sudo","/usr/sbin/wipefs", "-a", device_path],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
