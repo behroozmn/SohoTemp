@@ -32,8 +32,8 @@ class SambaManager:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         # --- بررسی دسترسی ---
-        if os.geteuid() != 0:
-            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+        # if os.geteuid() != 0:
+        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         if not os.path.isabs(path):
             return fail("Path must be an absolute path.", extra="نام فایل را باید کامل وارد نمایید")
@@ -91,8 +91,8 @@ valid users = {valid_users_str}
             True  -> if block was found and removed
             False -> if block not found
         """
-        if os.geteuid() != 0:
-            raise PermissionError("This function must be run as root (sudo).")
+        # if os.geteuid() != 0:
+        #     raise PermissionError("This function must be run as root (sudo).")
 
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(f"Config file not found: {self.config_path}")
@@ -174,8 +174,8 @@ valid users = {valid_users_str}
         Equivalent to: echo -e "pass\npass" | smbpasswd -a -s username
         Does NOT enable the user (you must call enable_samba_user separately).
         """
-        if os.geteuid() != 0:
-            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+        # if os.geteuid() != 0:
+        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         if not username or not isinstance(username, str):
             return fail("Username must be a non-empty string.")
@@ -211,8 +211,8 @@ valid users = {valid_users_str}
         Enable an existing Samba user.
         Equivalent to: smbpasswd -e username
         """
-        if os.geteuid() != 0:
-            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+        # if os.geteuid() != 0:
+        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         if not username or not isinstance(username, str):
             return fail("Username must be a non-empty string.")
@@ -242,8 +242,8 @@ valid users = {valid_users_str}
         Equivalent to: echo -e "newpass\nnewpass" | smbpasswd -s username
         Requires root privileges.
         """
-        if os.geteuid() != 0:
-            return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+        # if os.geteuid() != 0:
+        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         if not username or not isinstance(username, str):
             return fail("Username must be a non-empty string.")
