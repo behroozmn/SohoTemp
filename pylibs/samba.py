@@ -277,6 +277,9 @@ valid users = {valid_users_str}
         Parse output of: sudo pdbedit -L -v
         Handles blocks separated by '---------------'
         """
+
+
+        # TODO:// این قسمت بررسی دسترسی از نوع یوزر هست که من باید اونو با سودو انحام دهم پس نیاز به این بررسی نیست
         # if os.geteuid() != 0:
         #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
