@@ -28,7 +28,7 @@ class FilesystemManager:
                 "mountpoint": getattr(vol, "mountpoint", None),
                 "type": "filesystem",
                 "type_number": getattr(vol, "type", None),
-            } for vol in all_filesystem]
+            } for vol in all_filesystem if vol.name != f'/{getattr(vol, "mountpoint", None)}' ]
             return ok(items)
         except Exception as exc:
             return fail(f"Error listing filesystem: {str(exc)}")
