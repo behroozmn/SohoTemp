@@ -46,7 +46,7 @@ class VolumeManager:
                 return fail("Missing required property: 'volsize' (e.g., '10G')")
 
             # ساخت دستور zfs create
-            cmd = ["zfs", "create", "-V", properties["volsize"]]
+            cmd = ["/usr/bin/sudo", "/usr/bin/zfs", "create", "-V", properties["volsize"]]
             for key, value in properties.items():
                 if key != "volsize":
                     cmd += ["-o", f"{key}={value}"]
@@ -68,7 +68,7 @@ class VolumeManager:
     def delete(self, volume_name: str):
         import subprocess
         try:
-            cmd = ["zfs", "destroy", volume_name]  # اجرای دستور: zfs destroy volume_name
+            cmd = ["/usr/bin/sudo", "/usr/bin/zfs", "destroy", volume_name]  # اجرای دستور: zfs destroy volume_name
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return ok({
                 "status": "موفقیت‌آمیز حذف شد",

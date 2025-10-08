@@ -36,7 +36,7 @@ class FilesystemManager:
     def create(self, filesystem_name: str, properties: Dict[str, str]=None):
         try:
             # zfs create p1/ds1 -o quota=100g -o reservation=50G
-            cmd: List[str] = ["zfs", "create"]
+            cmd: List[str] = ["/usr/bin/sudo","/usr/bin/zfs", "create"]
 
             # اگر پراپرتی‌ها وجود داشتن، هر کدوم رو با -o اضافه کن
             if properties:
@@ -60,7 +60,7 @@ class FilesystemManager:
 
     def delete(self, filesystem_name: str):
         try:
-            cmd = ["zfs", "destroy", filesystem_name]  # اجرای دستور: zfs destroy filesystem_name
+            cmd = ["/usr/bin/sudo","/usr/bin/zfs", "destroy", filesystem_name]  # اجرای دستور: zfs destroy filesystem_name
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return ok({
                 "status": "موفقیت‌آمیز حذف شد",

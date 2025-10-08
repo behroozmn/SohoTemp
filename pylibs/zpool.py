@@ -43,7 +43,7 @@ def _get_wwn_from_device_path(device_path: str) -> str:
             with open(wwn_path, "r") as f:
                 wwn = f.read().strip()
                 if wwn:
-                    return wwn.replace("naa.","wwn-0x")
+                    return wwn.replace("naa.", "wwn-0x")
 
         # fallback: سریال دیسک (اگر WWN نبود)
         serial_path = f"/sys/block/{disk_name}/device/serial"
@@ -56,6 +56,7 @@ def _get_wwn_from_device_path(device_path: str) -> str:
     except Exception:
         pass
     return ""
+
 
 class ZpoolManager:
     def __init__(self) -> None:
@@ -108,15 +109,13 @@ class ZpoolManager:
         try:
             if pool_name and devices and vdev_type:
                 if vdev_type == "disk":
-                    cmd = ["zpool", "create", pool_name] + devices
+                    cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "create", pool_name] + devices
                 else:
-                    cmd = ["zpool", "create", pool_name, vdev_type] + devices
+                    cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "create", pool_name, vdev_type] + devices
                 subprocess.run(cmd, check=True)
                 return ok({"message": "Pool با موفقیت ساخته شد."})
             else:
-                return fail("محتویات آرگومان‌های ورودی خالی است",
-                            "create_pool",
-                            {"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type})
+                return fail("محتویات آرگومان‌های ورودی خالی است", "create_pool", {"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type})
         except subprocess.CalledProcessError as exc:
             return fail(f"خطا در اجرای دستور zpool: {exc}")
         except Exception as exc:
@@ -124,7 +123,7 @@ class ZpoolManager:
 
     def pool_delete(self, pool_name: str):
         try:
-            cmd = ["zpool", "destroy", pool_name]
+            cmd = ["/usr/bin/sudo","/usr/bin/zpool", "destroy", pool_name]
             subprocess.run(cmd, check=True)
             return ok({"message": "Pool با موفقیت حذف شد."})
         except subprocess.CalledProcessError as cpe:
