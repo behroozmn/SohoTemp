@@ -192,25 +192,21 @@ Error:
 
 
 # NGINX
+
 ```shell
 server {
     listen 80;
     server_name _;
 
-    # 1.(React)
+    # 1. سرو فایل‌های استاتیک React (از dist)
     location / {
-        proxy_pass http://127.0.0.1:5173;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_cache_bypass $http_upgrade;
+        root /opt/soho_ui_react/dist;
+        try_files $uri $uri/ /index.html;
+        expires 10m;
+        add_header Cache-Control "public, immutable";
     }
 
-    # 2.(DRF API)
+    # 2. API → Django (Gunicorn)
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -220,9 +216,11 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # 3. فایل‌های مدیا و استاتیک (از Django)
     location /media/ {
         proxy_pass http://127.0.0.1:8000;
     }
+
     location /static/ {
         proxy_pass http://127.0.0.1:8000;
     }
