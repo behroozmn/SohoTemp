@@ -28,9 +28,9 @@ class FilesystemManager:
                 "mountpoint": getattr(vol, "mountpoint", None),
                 "type": "filesystem",
                 "type_number": getattr(vol, "type", None),
-                "Used:": self.zfs_used(vol.name),
-                "Available:": self.zfs_available(vol.name),
-                "Referenced:": self.zfs_referenced(vol.name),
+                "Used": self.zfs_used(vol.name),
+                "Available": self.zfs_available(vol.name),
+                "Referenced": self.zfs_referenced(vol.name),
             } for vol in all_filesystem if vol.name]
             return ok(items)
         except Exception as exc:
