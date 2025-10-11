@@ -28,6 +28,9 @@ class FilesystemManager:
                 "mountpoint": getattr(vol, "mountpoint", None),
                 "type": "filesystem",
                 "type_number": getattr(vol, "type", None),
+                "Used:": self.zfs_used(vol.name),
+                "Available:": self.zfs_available(vol.name),
+                "Referenced:": self.zfs_referenced(vol.name),
             } for vol in all_filesystem if vol.name != getattr(vol, "mountpoint", None).replace("/", "") ]
             return ok(items)
         except Exception as exc:
@@ -74,3 +77,33 @@ class FilesystemManager:
             return fail(f"Error deleting volume: {stderr}")
         except Exception as exc:
             return fail(f"Error deleting volume: {str(exc)}")
+
+    def zfs_used(self, dataset: str) -> str:
+        """Returns the 'used' space of the ZFS dataset as a human-readable string (e.g., '10G')."""
+        result = subprocess.run(
+            ["zfs", "get", "-H", "-o", "value", "used", dataset],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+
+    def zfs_available(self, dataset: str) -> str:
+        """Returns the 'available' space of the ZFS dataset as a human-readable string (e.g., '250G')."""
+        result = subprocess.run(
+            ["zfs", "get", "-H", "-o", "value", "available", dataset],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+
+    def zfs_referenced(self, dataset: str) -> str:
+        """Returns the 'referenced' space of the ZFS dataset as a human-readable string (e.g., '8G')."""
+        result = subprocess.run(
+            ["zfs", "get", "-H", "-o", "value", "referenced", dataset],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
