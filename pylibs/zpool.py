@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 import subprocess
 import os
 
+from pylibs.file import FileManager
+
 
 def ok(data: Any) -> Dict[str, Any]:
     """Return a success envelope (DRF-ready)."""
@@ -122,14 +124,19 @@ class ZpoolManager:
             return fail(f"خطای غیرمنتظره: {exc}")
 
     def pool_delete(self, pool_name: str):
-        try:
-            cmd = ["/usr/bin/sudo","/usr/bin/zpool", "destroy", pool_name]
-            subprocess.run(cmd, check=True)
-            return ok({"message": "Pool با موفقیت حذف شد."})
-        except subprocess.CalledProcessError as cpe:
-            return fail(f"خطا در حذف pool: {cpe}")
-        except Exception as exc:
-            return fail(f"خطای غیرمنتظره: {exc}")
+        obj_file = FileManager()
+        if not obj_file.string_exists_in_file(pool_name, "/etc/samba/smb.conf"):
+            try:
+                cmd = ["/usr/bin/sudo","/usr/bin/zpool", "destroy", pool_name]
+                subprocess.run(cmd, check=True)
+                return ok({"message": "Pool با موفقیت حذف شد."})
+            except subprocess.CalledProcessError as cpe:
+                return fail(f"خطا در حذف pool: {cpe}")
+            except Exception as exc:
+                return fail(f"خطای غیرمنتظره: {exc}")
+        else:
+            return fail(f"pool {pool_name} is bussy in shareConfiguration:")
+
 
     def list_pool_devices(self, pool_name: str) -> Dict[str, Any]:
         """

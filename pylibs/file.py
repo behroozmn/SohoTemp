@@ -24,14 +24,7 @@ class FileManager:
     def __init__(self, config_path: str = "/etc/samba/smb.conf") -> None:
         self.config_path = config_path
 
-    def set_permissions(
-            self,
-            path: str,
-            mode: str,
-            owner: str,
-            group: str,
-            recursive: bool = True
-    ) -> Dict[str, Any]:
+    def set_permissions(self, path: str, mode: str, owner: str, group: str, recursive: bool = True) -> Dict[str, Any]:
         """Set ownership and permissions on an existing path (recursive by default)."""
         if not os.path.exists(path):
             return fail(f"Path does not exist: {path}", code="path_not_found")
@@ -73,13 +66,7 @@ class FileManager:
             return fail(f"Error setting permissions: {str(e)}", code="os_error", extra=str(e))
 
     # TODO: اگر چندین دایرکتوری تو در تو بسازه دایرکتوری میانی دسترسی یوزری خواهند داشت که برنامه پایتون را ران کرده است
-    def create_directory(
-            self,
-            path: str,
-            mode: str,
-            owner: str,
-            group: str
-    ) -> Dict[str, Any]:
+    def create_directory(self, path: str, mode: str, owner: str, group: str) -> Dict[str, Any]:
         """Create a directory with given permissions, owner, and group. Do nothing if exists."""
         if os.path.exists(path):
             return ok({"path": path}, detail="Path already exists. No action taken.")
@@ -149,3 +136,31 @@ class FileManager:
                     return f.read()
         except Exception:
             return None
+
+    def string_exists_in_file(self, search_string: str, file_path: str) -> bool| Dict[str, Any]:
+        """
+        Check if a given string exists in the specified file.
+
+        Args:
+            search_string (str): The string to search for.
+            file_path (str): Path to the file to search in.
+
+        Returns:
+            Dict with "data" = True/False if found, or error if file not accessible.
+        """
+        if not isinstance(search_string, str) or not isinstance(file_path, str):
+            return fail("Both 'search_string' and 'file_path' must be strings.", "invalid_input")
+
+        if not os.path.isfile(file_path):
+            return fail(f"File not found: {file_path}", "file_not_found")
+
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    if search_string in line:
+                        return True
+            return False
+        except PermissionError:
+            return fail(f"Permission denied reading file: {file_path}", "permission_denied")
+        except Exception as e:
+            return fail(f"Error reading file: {str(e)}", "io_error")

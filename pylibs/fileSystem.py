@@ -5,6 +5,7 @@ import libzfs
 from typing import Any, Dict, Optional, List
 import subprocess
 
+from pylibs.file import FileManager
 
 
 def ok(data: Any) -> Dict[str, Any]:
@@ -36,10 +37,10 @@ class FilesystemManager:
         except Exception as exc:
             return fail(f"Error listing filesystem: {str(exc)}")
 
-    def create(self, filesystem_name: str, properties: Dict[str, str]=None):
+    def create(self, filesystem_name: str, properties: Dict[str, str] = None):
         try:
             # zfs create p1/ds1 -o quota=100g -o reservation=50G
-            cmd: List[str] = ["/usr/bin/sudo","/usr/bin/zfs", "create"]
+            cmd: List[str] = ["/usr/bin/sudo", "/usr/bin/zfs", "create"]
 
             # اگر پراپرتی‌ها وجود داشتن، هر کدوم رو با -o اضافه کن
             if properties:
@@ -62,21 +63,22 @@ class FilesystemManager:
             return fail(f"Error creating volume: {str(exc)}")
 
     def delete(self, filesystem_name: str):
-        try:
-            cmd = ["/usr/bin/sudo","/usr/bin/zfs", "destroy", filesystem_name]  # اجرای دستور: zfs destroy filesystem_name
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            return ok({
-                "status": "موفقیت‌آمیز حذف شد",
-                "name": filesystem_name
-            })
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr.strip() if e.stderr else str(e)
-            # بررسی خطا برای حالتی که volume وجود ندارد
-            if "dataset does not exist" in stderr or "no such dataset" in stderr.lower():
-                return fail(f"Volume '{filesystem_name}' not found", code="not_found")
-            return fail(f"Error deleting volume: {stderr}")
-        except Exception as exc:
-            return fail(f"Error deleting volume: {str(exc)}")
+        obj_file = FileManager()
+        if not obj_file.string_exists_in_file(filesystem_name, "/etc/samba/smb.conf"):
+            try:
+                cmd = ["/usr/bin/sudo", "/usr/bin/zfs", "destroy", filesystem_name]  # اجرای دستور: zfs destroy filesystem_name
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                return ok({"status": "موفقیت‌آمیز حذف شد", "name": filesystem_name})
+            except subprocess.CalledProcessError as e:
+                stderr = e.stderr.strip() if e.stderr else str(e)
+                # بررسی خطا برای حالتی که volume وجود ندارد
+                if "dataset does not exist" in stderr or "no such dataset" in stderr.lower():
+                    return fail(f"Volume '{filesystem_name}' not found", code="not_found")
+                return fail(f"Error deleting volume: {stderr}")
+            except Exception as exc:
+                return fail(f"Error deleting volume: {str(exc)}")
+        else:
+            return fail(f"filesystem {filesystem_name} is bussy in shareConfiguration:")
 
     def zfs_used(self, dataset: str) -> str:
         """Returns the 'used' space of the ZFS dataset as a human-readable string (e.g., '10G')."""
