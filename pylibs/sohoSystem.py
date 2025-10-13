@@ -17,6 +17,7 @@ def ok(data: Any, details: Any = None) -> Dict[str, Any]:
         "details": details or {}
     }
 
+
 def fail(message: str, code: str = "service_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -24,6 +25,7 @@ def fail(message: str, code: str = "service_error", extra: Optional[Dict[str, An
         "data": None,
         "details": {}
     }
+
 
 class OSManagement:
     def __init__(self, config_path: str = "/etc/passwd") -> None:
@@ -66,7 +68,7 @@ class OSManagement:
         except Exception as e:
             return fail(f"Unexpected error while reading user list: {str(e)}", extra={"exception": str(e)})
 
-    def add_user(self, username: str,login_shell: str = "/bin/bash"):
+    def add_user(self, username: str, login_shell: str = "/bin/bash"):
         """
         Add a new system user with:
           - No home directory (-M)
@@ -89,7 +91,7 @@ class OSManagement:
 
         try:
             result = subprocess.run(
-                ["/usr/bin/sudo","/usr/sbin/useradd", "-M", "-s", login_shell, username],
+                ["/usr/bin/sudo", "/usr/sbin/useradd", "-M", "-s", login_shell, username],
                 capture_output=True,
                 text=True,
                 check=False
@@ -156,14 +158,7 @@ class WebManager:
     """
 
     @staticmethod
-    def create_user(
-        username: str,
-        email: str,
-        password: str,
-        is_superuser: bool = False,
-        first_name: str = "",
-        last_name: str = ""
-    ) -> Dict[str, Any]:
+    def create_user(username: str, email: str, password: str, is_superuser: bool = False, first_name: str = "", last_name: str = "") -> Dict[str, Any]:
         """
         Create a new Django user (superuser or regular).
         Endpoint: POST /api/users/create/

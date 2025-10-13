@@ -1,7 +1,7 @@
 # url_pool.py
 
 from django.urls import path
-from soho_core_api.views_collection import view_systems
+from soho_core_api.views_collection import view_system_os
 
 urlpatterns = [
     path("user/", view_systems.UserListView.as_view(), name="osuser-list"),
