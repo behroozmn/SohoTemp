@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework import status
 from pylibs.sohoSystem import OSManagement
 
-class SystemPowerView(APIView):
+class OSpowerView(APIView):
     permission_classes = [IsAdminUser]  # فقط ادمین‌ها
 
     def get(self, request,action):
