@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser  # فقط ادمین‌ها
 from rest_framework import status
 
-from pylibs.networkmanager import NetworkManager
+from pylibs.networkManager import NetworkManager
 
 
 @api_view(['GET'])
