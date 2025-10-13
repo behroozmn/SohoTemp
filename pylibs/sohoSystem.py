@@ -8,7 +8,6 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 
-
 def ok(data: Any, details: Any = None) -> Dict[str, Any]:
     return {
         "ok": True,
