@@ -22,12 +22,7 @@ class SambaManager:
     def __init__(self, config_path: str = "/etc/samba/smb.conf") -> None:
         self.config_path = config_path
 
-    def add_samba_share_block(self, share_name, path,
-                              create_mask="0777", directory_mask="0777",
-                              valid_users=None,
-                              available=True, browseable=True,
-                              read_only=False, guest_ok=False, inherit_permissions=False,
-                              max_connections="0"):
+    def add_samba_share_block(self, share_name, path, create_mask="0777", directory_mask="0777", valid_users=None, available=True, browseable=True, read_only=False, guest_ok=False, inherit_permissions=False, max_connections="0"):
         # --- ثبت زمان ---
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -158,7 +153,7 @@ valid users = {valid_users_str}
             shares = {}
             for section in config.sections():
                 # Skip global section (usually named 'global')
-                if section.lower() in {'global', 'printers', 'print$','Files'.lower(),'homes'}:
+                if section.lower() in {'global', 'printers', 'print$', 'Files'.lower(), 'homes'}:
                     continue
                 # Convert section to dict
                 shares[section] = dict(config[section])
@@ -188,7 +183,7 @@ valid users = {valid_users_str}
 
         try:
             passwd_input = f"{password}\n{password}\n"
-            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba user created successfully (password set).")
@@ -218,7 +213,7 @@ valid users = {valid_users_str}
             return fail("Username must be a non-empty string.")
 
         try:
-            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba user enabled successfully.")
@@ -254,7 +249,7 @@ valid users = {valid_users_str}
         try:
             # دو بار رمز عبور جدید را به smbpasswd می‌دهیم
             passwd_input = f"{new_password}\n{new_password}\n"
-            result = subprocess.run(["/usr/bin/sudo","/usr/bin/smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
 
             if result.returncode == 0:
                 return ok({"username": username}, detail="Samba password changed successfully.")
@@ -278,13 +273,12 @@ valid users = {valid_users_str}
         Handles blocks separated by '---------------'
         """
 
-
         # TODO:// این قسمت بررسی دسترسی از نوع یوزر هست که من باید اونو با سودو انحام دهم پس نیاز به این بررسی نیست
         # if os.geteuid() != 0:
         #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
 
         try:
-            result = subprocess.run(["/usr/bin/sudo","/usr/bin/pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
+            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
 
             if result.returncode != 0:
                 stderr = result.stderr.strip()
@@ -336,3 +330,38 @@ valid users = {valid_users_str}
             return fail("pdbedit command not found. Is Samba installed?", code="command_missing")
         except Exception as e:
             return fail(f"Exception during listing Samba users: {str(e)}", code="exception", extra=str(e))
+
+    def delete_samba_user(self, username: str) -> Dict[str, Any]:
+        """
+        Delete a Samba user non-interactively.
+        Equivalent to: smbpasswd -x username
+        Requires root privileges (uses sudo).
+        """
+        if not username or not isinstance(username, str):
+            return fail("Username must be a non-empty string.")
+
+        if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
+            return fail("Invalid username: only letters, digits, ., -, _ allowed.")
+
+        try:
+            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-x", username], capture_output=True, text=True, timeout=10)
+
+            if result.returncode == 0:
+                return ok({"username": username}, detail=f"Samba user '{username}' deleted successfully.")
+            else:
+                stderr = result.stderr.strip()
+                if "does not exist" in stderr.lower() or "not found" in stderr.lower():
+                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
+                else:
+                    return fail(f"Failed to delete Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
+
+        except subprocess.TimeoutExpired:
+            return fail("smbpasswd delete command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
+        except Exception as e:
+            return fail(
+                f"Exception during Samba user deletion: {str(e)}",
+                code="exception",
+                extra=str(e)
+            )

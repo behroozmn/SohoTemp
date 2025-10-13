@@ -10,4 +10,7 @@ urlpatterns = [
     path('user/enable/', view_share_samba.SambaUserEnableView.as_view()),
     path('user/passwd/', view_share_samba.SambaUserChangePasswordView.as_view()),
     path('user/list/', view_share_samba.SambaUserListView.as_view()),
+
+    path("user/delete/<str:username>/", view_share_samba.SambaUserDeleteView.as_view()),
+
 ]
