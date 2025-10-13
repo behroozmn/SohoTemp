@@ -24,7 +24,7 @@ class SystemManagements:
     def __init__(self, config_path: str = "/etc/passwd") -> None:
         self.config_path = config_path
 
-    def list_users(self, include_system: bool = True) -> Dict[str, Any]:
+    def list_users(self, include_system: bool = False) -> Dict[str, Any]:
         """
         Return a list of Linux system users.
 
