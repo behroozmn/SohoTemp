@@ -115,3 +115,12 @@ class SambaUserListView(APIView):
             return Response(result, status=status.HTTP_200_OK)
         else:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SambaUserDeleteView(APIView):
+    def delete(self, request, username):
+        smb = SambaManager()
+        result = smb.delete_samba_user(username)
+        if result["ok"]:
+            return Response(result["data"])
+        return Response(result["error"], status=404 if "not found" in result["error"]["message"].lower() else 400)
