@@ -20,7 +20,7 @@ def fail(message: str, code: str = "service_error", extra: Optional[Dict[str, An
         "details": {}
     }
 
-class SystemManagements:
+class OSManagement:
     def __init__(self, config_path: str = "/etc/passwd") -> None:
         self.config_path = config_path
 
@@ -141,3 +141,7 @@ class SystemManagements:
             return fail("عدم دسترسی: نیاز به دسترسی root دارد.", code="permission_denied")
         except Exception as e:
             return fail(f"خطای غیرمنتظره: {str(e)}", code="unexpected_error")
+
+
+class WebManager:
+    pass
