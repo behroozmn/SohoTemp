@@ -7,6 +7,8 @@ import os
 import shutil
 from datetime import datetime
 
+from pylibs.file import FileManager
+
 
 def ok(data: Any, detail: Any = None) -> Dict[str, Any]:
     """Return a success envelope (DRF-ready)."""
@@ -342,26 +344,25 @@ valid users = {valid_users_str}
 
         if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
             return fail("Invalid username: only letters, digits, ., -, _ allowed.")
+        obj_file = FileManager()
+        if not obj_file.string_exists_in_file(username, "/etc/samba/smb.conf"):
+            try:
+                result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-x", username], capture_output=True, text=True, timeout=10)
 
-        try:
-            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-x", username], capture_output=True, text=True, timeout=10)
-
-            if result.returncode == 0:
-                return ok({"username": username}, detail=f"Samba user '{username}' deleted successfully.")
-            else:
-                stderr = result.stderr.strip()
-                if "does not exist" in stderr.lower() or "not found" in stderr.lower():
-                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
+                if result.returncode == 0:
+                    return ok({"username": username}, detail=f"Samba user '{username}' deleted successfully.")
                 else:
-                    return fail(f"Failed to delete Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
+                    stderr = result.stderr.strip()
+                    if "does not exist" in stderr.lower() or "not found" in stderr.lower():
+                        return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
+                    else:
+                        return fail(f"Failed to delete Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
 
-        except subprocess.TimeoutExpired:
-            return fail("smbpasswd delete command timed out.", code="timeout")
-        except FileNotFoundError:
-            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
-        except Exception as e:
-            return fail(
-                f"Exception during Samba user deletion: {str(e)}",
-                code="exception",
-                extra=str(e)
-            )
+            except subprocess.TimeoutExpired:
+                return fail("smbpasswd delete command timed out.", code="timeout")
+            except FileNotFoundError:
+                return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
+            except Exception as e:
+                return fail(f"Exception during Samba user deletion: {str(e)}", code="exception", extra=str(e))
+        else:
+            return fail(f"user {username} is ussing in shareConfiguration:")
