@@ -34,3 +34,12 @@ class UserCreateView(APIView):
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserDeleteView(APIView):
+    def delete(self, request, username):
+        osm = OSManagement()
+        result = osm.delete_user(username, remove_home=False)
+        if result["ok"]:
+            return Response(result["data"])
+        return Response(result["error"], status=404 if "not found" in result["error"]["message"].lower() else 400)

@@ -148,6 +148,77 @@ class OSManagement:
         except Exception as e:
             return fail(f"خطای غیرمنتظره: {str(e)}", code="unexpected_error")
 
+    def delete_user(self, username: str, remove_home: bool = False) -> Dict[str, Any]:
+        """
+        Delete a Linux system user.
+
+        Args:
+            username (str): The username to delete.
+            remove_home (bool): If True, also delete the user's home directory and mail spool.
+
+        Returns:
+            Dict in ok()/fail() format.
+        """
+        if not username or not isinstance(username, str):
+            return fail("Username must be a non-empty string.")
+
+        if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
+            return fail("Invalid username: only letters, digits, ., -, _ allowed.")
+
+        try:
+            # Build command
+            cmd = ["/usr/bin/sudo", "/usr/sbin/userdel"]
+            if remove_home:
+                cmd.append("-r")
+            cmd.append(username)
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+
+            if result.returncode == 0:
+                details = f"User '{username}' deleted successfully."
+                if remove_home:
+                    details += " Home directory and mail spool were also removed."
+                return ok(
+                    {"username": username, "removed_home": remove_home},
+                    details=details
+                )
+            else:
+                stderr = result.stderr.strip()
+                if "cannot remove" in stderr.lower() and "home" in stderr.lower():
+                    return fail(
+                        f"User deleted but failed to remove home directory: {stderr}",
+                        code="partial_deletion",
+                        extra={"stderr": stderr}
+                    )
+                elif "user does not exist" in stderr.lower() or "cannot find" in stderr.lower():
+                    return fail(
+                        f"User '{username}' does not exist.",
+                        code="user_not_found",
+                        extra={"stderr": stderr}
+                    )
+                else:
+                    return fail(
+                        f"Failed to delete user: {stderr}",
+                        code="user_deletion_failed",
+                        extra={"stderr": stderr, "stdout": result.stdout}
+                    )
+
+        except subprocess.TimeoutExpired:
+            return fail("userdel command timed out.", code="timeout")
+        except FileNotFoundError:
+            return fail("userdel command not found – is this a Linux system?", code="command_missing")
+        except Exception as e:
+            return fail(
+                f"Exception during user deletion: {str(e)}",
+                code="exception",
+                extra={"exception": str(e)}
+            )
+
 
 class WebManager:
     """
