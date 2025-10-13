@@ -27,11 +27,9 @@ class SystemManagements:
     def list_users(self, include_system: bool = False) -> Dict[str, Any]:
         """
         Return a list of Linux system users.
-
         Args:
-            include_system (bool): If False (default), exclude system users (UID < 1000).
-                                   If True, include all users from /etc/passwd.
-
+            include_system (bool): If False (default), exclude system users (UID < 1000)
+                                   If True, include all users from /etc/passwd
         Returns:
             Dict in the format of ok() or fail().
         """
@@ -50,16 +48,12 @@ class SystemManagements:
                         uid = int(parts[2])
                     except ValueError:
                         continue
-
                     # Exclude system users by default (UID < 1000)
                     if not include_system and uid < 1000:
                         continue
-
                     users.append(username)
-
             users.sort()
             return ok(users, details={"count": len(users), "include_system": include_system})
-
         except FileNotFoundError:
             return fail("/etc/passwd not found – are you on a Linux system?")
         except PermissionError:
