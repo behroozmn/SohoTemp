@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from pylibs.File import FileManager  # مسیر واردات را با پروژه‌تان تطبیق دهید
+from pylibs.file import FileManager  # مسیر واردات را با پروژه‌تان تطبیق دهید
 
 
 class SetPermissionsView(APIView):

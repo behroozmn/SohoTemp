@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework import status
-from pylibs.systemSoho import SystemManagements
+from pylibs.sohoOS import SystemManagements
 
 class SystemPowerView(APIView):
     permission_classes = [IsAdminUser]  # فقط ادمین‌ها
