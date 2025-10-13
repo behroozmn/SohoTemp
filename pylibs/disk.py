@@ -4,7 +4,7 @@ import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 import glob
 import re
-from pylibs.File import FileManager
+from pylibs.file import FileManager
 
 
 def ok(data: Any, details: Any = None) -> Dict[str, Any]:
