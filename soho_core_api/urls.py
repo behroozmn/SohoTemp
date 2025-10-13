@@ -47,7 +47,7 @@ urlpatterns = [
 
     path("api/service/", include("soho_core_api.urls_collection.url_service")),
 
-    path("api/os/", include("soho_core_api.urls_collection.url_os")),
+    path("api/os/", include("soho_core_api.urls_collection.url_system")),
     path("api/dir/", include("soho_core_api.urls_collection.url_file")),
 
 ]
