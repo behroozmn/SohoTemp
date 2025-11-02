@@ -16,12 +16,22 @@ apt install sudo
 
 su user
 sudo -i
-sudo apt install bash-completion vim sudo lshw wget curl build-essential nmap mlocate net-tools python3-venv python3-packaging python3-distlib python3-wheel  \
+
+# Note: نصب ابزارهای عمومی سیستم عامل
+sudo apt install bash-completion vim lshw wget curl build-essential  mlocate net-tools wget 
+
+# Note: نصب بسته‌های تخصصی سیستم عامل
+sudo apt install cmake nmap
+
+#note: نصب بسته های کرنلی برای سیستم عامل
+sudo apt install linux-headers-$(uname -r)
+
+sudo apt install  python3-venv python3-packaging python3-distlib python3-wheel  \
                 python3-pip python3-venv python3-cython-blis build-essential make gcc autoconf libtool alien python3-setuptools python3-cffi python3-distutils  \
-                libpython3-stdlib libelf-dev python3 python3-dev fakeroot linux-headers-$(uname -r) zlib1g-dev uuid-dev libblkid-dev libselinux-dev libssl-dev parted lsscsi wget \
+                libpython3-stdlib libelf-dev python3 python3-dev fakeroot  zlib1g-dev uuid-dev libblkid-dev libselinux-dev libssl-dev parted lsscsi  \
                 git git autoconf automake libtool alien fakeroot dkms libffi-dev libselinux1-dev  libncurses5-dev libsystemd-dev pkg-config  debconf debconf-utils file  libc6-dev  \
                 lsb-release perl  linux-libc-dev libudev1  libuuid1 init-system-helpers libblkid1 libatomic1  libssl3 zlib1g libcurl4 libblkid-dev uuid-dev libudev-dev libssl-dev \
-                zlib1g-dev libaio-dev libattr1-dev cmake
+                zlib1g-dev libaio-dev libattr1-dev 
 sudo shutdown -r now
 ```
 
