@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',  # behroozMohamadinasab
     'drf_spectacular',  # behroozMohamadinasab
-    'rest_framework.authtoken',  # behroozMohamadinasab
+    'rest_framework_simplejwt',  # behroozMohamadinasab
     'corsheaders',  # # behroozMohamadinasab
 ]
 
@@ -146,9 +146,44 @@ REST_FRAMEWORK = {
     # 'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.BasicAuthentication'], # behrooz:[For Basic authentication]
     # 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'] # behrooz:[For Basic  authentication]
 
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],  # behrooz:[For Token authentication]
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']  # behrooz:[For Token authentication]
+    # 'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],  # behrooz:[For Token authentication]
+    # 'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']  # behrooz:[For Token authentication]
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
 }
+
+
+from datetime import timedelta
+
+# تنظیمات JWT (اختیاری ولی توصیه می‌شود)
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),        # اعتبار Access Token
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),          # اعتبار Refresh Token
+    'ROTATE_REFRESH_TOKENS': True,                        # بعد از استفاده، refresh token قدیمی منقضی شود
+    'BLACKLIST_AFTER_ROTATION': True,                     # refresh token های قدیمی در لیست سیاه قرار بگیرند
+    'UPDATE_LAST_LOGIN': True,                            # آخرین ورود کاربر به‌روزرسانی شود
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    'JTI_CLAIM': 'jti',
+}
+
+
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Your Project API',
@@ -156,8 +191,6 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
-
-
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = '/media/'

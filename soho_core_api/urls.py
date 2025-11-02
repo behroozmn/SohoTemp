@@ -23,12 +23,10 @@ import soho_core_api.views_collection.view_django_accounts
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-
-    path('api/auth/', include('rest_framework.urls')),
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # Swagger
     path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger
-    path('auth-token/', obtain_auth_token, name='generate_auth_token'),
-    path('logout/', soho_core_api.views_collection.view_django_accounts.LogoutView.as_view()),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # Swagger
+
+    path("api/auth/", include("soho_core_api.urls_collection.url_auth")),
     path("api/cpu/", include("soho_core_api.urls_collection.url_cpu")),
     path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
     path("api/net/", include("soho_core_api.urls_collection.url_network")),
