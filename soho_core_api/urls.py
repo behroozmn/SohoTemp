@@ -19,34 +19,25 @@ from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
 
+import soho_core_api.views_collection.view_django_accounts
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/auth/', include('rest_framework.urls')),
-
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # Swagger
-
     path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger
-
     path('auth-token/', obtain_auth_token, name='generate_auth_token'),
-
+    path('logout/', soho_core_api.views_collection.view_django_accounts.LogoutView.as_view()),
     path("api/cpu/", include("soho_core_api.urls_collection.url_cpu")),
-
     path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
-
     path("api/net/", include("soho_core_api.urls_collection.url_network")),
-
     path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
-
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
-
     path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
-
     path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
-
     path("api/service/", include("soho_core_api.urls_collection.url_service")),
-
     path("api/os/", include("soho_core_api.urls_collection.url_system_os")),
     path("api/web/", include("soho_core_api.urls_collection.url_system_web")),
     path("api/dir/", include("soho_core_api.urls_collection.url_file")),
