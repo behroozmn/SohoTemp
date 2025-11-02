@@ -211,50 +211,6 @@ CORS_ALLOWED_ORIGINS = [
 ]
 ```
 
-# ExeptionHandler
-
-Success:
-
-```
-{
-    "ok": true,
-    "error": null,
-    "message": "",
-    "data": ["john", "mary", "root"],
-    "details": {
-        "count": 3,
-        "include_system": true
-    },
-    "meta": {
-        "timestamp": "2025-09-24T12:34:56Z",
-        "response_status_code": ""
-    },
-    "request_data": {}
-}
-```
-
-Error:
-
-```
-{
-    "ok": false,
-    "error": {
-        "code": "modules_error",
-        "message": "Unexpected error while reading user list",
-        "extra": {
-            "exception": "PermissionError"
-            "exception_etails": 
-        }
-    },
-    "data": null,
-    "details": {},
-    "meta": {
-        "timestamp": "2025-09-24T12:45:00Z",
-        "response_status_code": ""
-    }
-}
-```
-
 # NGINX
 
 ```shell
