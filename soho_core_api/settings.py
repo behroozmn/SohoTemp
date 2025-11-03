@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'rest_framework',  # behroozMohamadinasab
     'drf_spectacular',  # behroozMohamadinasab
     'rest_framework_simplejwt',  # behroozMohamadinasab
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',  # # behroozMohamadinasab
 ]
 
