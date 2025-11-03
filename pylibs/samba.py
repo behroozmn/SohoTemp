@@ -61,6 +61,24 @@ valid users = {valid_users_str}
 #End: {share_name} - CreatedTime: {timestamp}
 """
 
+
+
+        # comment = Server Share A
+        # browseable = yes
+        # writable = yes
+        # guest ok = no
+        # valid users = zand
+        # path = /Pool1/FF2
+        # create mask = 0777
+        # directory mask = 0777
+        # max connections = 0
+        # read only = No
+        # available = Yes
+        # inherit permissions = No
+
+
+
+
         # --- ایجاد نسخه پشتیبان با تاریخ ---
         backup_path = f"{self.config_path}.backup_{timestamp}"
         shutil.copy2(self.config_path, backup_path)
