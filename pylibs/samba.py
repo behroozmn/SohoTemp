@@ -48,21 +48,17 @@ class SambaManager:
         # Build the share block exactly as requested
         share_block = f"""#Begin: {share_name}
 [{share_name}]
+browseable = {'Yes' if browseable else 'No'}
 path = {path}
 create mask = {create_mask}
-directory mask = {directory_mask}
-max connections = {max_connections}
-read only = {'Yes' if read_only else 'No'}
-available = {'Yes' if available else 'No'}
+writable = yes
 guest ok = {'Yes' if guest_ok else 'No'}
-browseable = {'Yes' if browseable else 'No'}
-inherit permissions = {'Yes' if inherit_permissions else 'No'}
 valid users = {valid_users_str}
 #End: {share_name} - CreatedTime: {timestamp}
 """
 
 
-
+        ######## Combine Behrooz And Zand Config
         # comment = Server Share A
         # browseable = yes
         # writable = yes
@@ -76,7 +72,21 @@ valid users = {valid_users_str}
         # available = Yes
         # inherit permissions = No
 
-
+        # Soho LastCOnfig
+        ##################share_block = f"""#Begin: {share_name}
+        ##################[{share_name}]
+        ##################path = {path}
+        ##################create mask = {create_mask}
+        ##################directory mask = {directory_mask}
+        ##################max connections = {max_connections}
+        ##################read only = {'Yes' if read_only else 'No'}
+        ##################available = {'Yes' if available else 'No'}
+        ##################guest ok = {'Yes' if guest_ok else 'No'}
+        ##################browseable = {'Yes' if browseable else 'No'}
+        ##################inherit permissions = {'Yes' if inherit_permissions else 'No'}
+        ##################valid users = {valid_users_str}
+        ###################End: {share_name} - CreatedTime: {timestamp}
+        ##################"""
 
 
         # --- ایجاد نسخه پشتیبان با تاریخ ---
