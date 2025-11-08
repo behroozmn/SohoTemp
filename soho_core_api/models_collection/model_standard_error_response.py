@@ -5,7 +5,7 @@ from django.utils import timezone
 
 
 
-class StandardErrorResponseLog(models.Model):
+class StandardErrorResponseModel(models.Model):
     ok = models.BooleanField(default=False)
     error_code = models.CharField(max_length=100)
     error_message = models.TextField()

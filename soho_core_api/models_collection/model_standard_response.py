@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 
 
-class StandardResponseLog(models.Model):
+class StandardResponseModel(models.Model):
     ok = models.BooleanField(default=True)
     message = models.TextField(blank=True)
     data = models.JSONField(default=dict, blank=True)
