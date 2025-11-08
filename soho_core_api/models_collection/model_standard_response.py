@@ -1,0 +1,17 @@
+from django.db import models
+from django.utils import timezone
+
+
+class StandardResponseLog(models.Model):
+    ok = models.BooleanField(default=True)
+    message = models.TextField(blank=True)
+    data = models.JSONField(default=dict, blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    meta = models.JSONField()
+    request_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Success Response @ {self.created_at.isoformat()}"
+
+
