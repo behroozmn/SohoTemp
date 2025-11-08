@@ -24,7 +24,7 @@ def fail(message: str, code: str = "disk_error", extra: Optional[Dict[str, Any]]
         "details": {}
     }
 
-class Disk:
+class DiskTemp:
 
     def __init__(self):
         try:

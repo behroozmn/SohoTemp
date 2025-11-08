@@ -3,13 +3,13 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from pylibs.disk import Disk, DiskManager
+from pylibs.disktemp import DiskTemp, DiskManager
 
 
 @api_view(['GET'])
 def disk(myrequest):
     try:
-        disk_object = Disk()
+        disk_object = DiskTemp()
         return Response(disk_object.to_dict(), status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status.HTTP_200_OK)
@@ -17,7 +17,7 @@ def disk(myrequest):
 
 class DiskWwnView(APIView):
     def get(self, request):
-        disk_object = Disk()
+        disk_object = DiskTemp()
 
         result = disk_object.get_disks_wwn_mapping()
         if result["ok"]:
@@ -27,7 +27,7 @@ class DiskWwnView(APIView):
 
 class DiskFreeView(APIView):
     def get(self, request):
-        disk_object = Disk()
+        disk_object = DiskTemp()
         result = disk_object.list_unpartitioned_disks()
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -37,7 +37,7 @@ class DiskFreeView(APIView):
 class DiskDeleteView(APIView):
     def delete(self, request):
         disk = request.data.get("disk_path")
-        disk_object = Disk()
+        disk_object = DiskTemp()
         result = disk_object.wipe_disk_clean(disk)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
