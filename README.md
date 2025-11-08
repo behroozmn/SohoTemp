@@ -105,6 +105,7 @@ pip install markdown
 pip install django-filter 
 pip install psutil
 pip install django-cors-headers
+pip install djangorestframework-simplejwt
 
 
 python3 manage.py makemigrations
