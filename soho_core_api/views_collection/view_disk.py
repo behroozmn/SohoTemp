@@ -44,12 +44,11 @@ class DiskDeleteView(APIView):
         return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 class DiskListView(APIView):
     def get(self, request):
         obj_dm = DiskManager()
-        disks=obj_dm.get_disks_all(contain_os_disk=True)
-        disk_dictionary={}
+        disks = obj_dm.get_disks_all(contain_os_disk=True)
+        disk_dictionary = {}
         for disk in disks:
             disk_info = obj_dm.get_disk_info(disk)
 
@@ -60,3 +59,15 @@ class DiskListView(APIView):
 
         return Response(disk_dictionary, status=status.HTTP_200_OK)
 
+class DiskTestSuccessView(APIView):
+    def get(self, request):
+        from pylibs import StandardResponse
+        return StandardResponse(data={"user": "ali"}, message="User fetched", save_to_db=True)
+
+
+
+
+class DiskTestFailedView(APIView):
+    def get(self, request):
+        from pylibs import StandardErrorResponse
+        return StandardErrorResponse(error_code="auth_failed", error_message="Invalid token", save_to_db=True )

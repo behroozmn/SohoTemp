@@ -20,8 +20,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Models
-from soho_core_api.models_collection.model_standard_response import StandardResponseModel
-from soho_core_api.models_collection.model_standard_error_response import StandardErrorResponseModel
+from soho_core_api.models import StandardResponseModel
+from soho_core_api.models import StandardErrorResponseModel
 
 
 

@@ -35,11 +35,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'soho_core_api',
     'rest_framework',  # behroozMohamadinasab
     'drf_spectacular',  # behroozMohamadinasab
     'rest_framework_simplejwt',  # behroozMohamadinasab
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',  # # behroozMohamadinasab
+
 ]
 
 MIDDLEWARE = [

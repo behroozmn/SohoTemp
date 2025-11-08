@@ -9,4 +9,6 @@ urlpatterns = [
     path('wwn/map/', view_disk.DiskWwnView.as_view()),
     path('free/', view_disk.DiskFreeView.as_view()),
     path('delete/', view_disk.DiskDeleteView.as_view()),
+    path('testok/', view_disk.DiskTestSuccessView.as_view()),
+    path('testnotok/', view_disk.DiskTestFailedView.as_view()),
 ]
