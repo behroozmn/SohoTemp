@@ -4,7 +4,7 @@ import psutil  # برای خواندن آمار سیستم
 from typing import Dict, Any, Optional, List  # تایپ‌هینت برای خوانایی بهتر
 import glob
 import re
-from pylibs.file import FileManager
+from pylibs.file import File_Temp
 
 
 def ok(data: Any, details: Any = None) -> Dict[str, Any]:
@@ -396,7 +396,7 @@ class DiskManager:
 
     def get_disk_info(self, disk: str) -> Dict[str, Optional[str]]:
         base = f"/sys/block/{disk}"
-        filemanager = FileManager()
+        filemanager = File_Temp()
         info = {
             "disk": disk,
             "model": filemanager.get_file_content(f"{base}/device/model"),

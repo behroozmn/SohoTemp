@@ -5,7 +5,7 @@ import libzfs
 from typing import Any, Dict, Optional, List
 import subprocess
 
-from pylibs.file import FileManager
+from pylibs.file import File_Temp
 
 
 def ok(data: Any) -> Dict[str, Any]:
@@ -63,7 +63,7 @@ class FilesystemManager:
             return fail(f"Error creating volume: {str(exc)}")
 
     def delete(self, filesystem_name: str):
-        obj_file = FileManager()
+        obj_file = File_Temp()
         if not obj_file.string_exists_in_file(filesystem_name, "/etc/samba/smb.conf"):
             try:
                 cmd = ["/usr/bin/sudo", "/usr/bin/zfs", "destroy", filesystem_name]  # اجرای دستور: zfs destroy filesystem_name

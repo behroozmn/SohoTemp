@@ -7,7 +7,7 @@ import os
 import shutil
 from datetime import datetime
 
-from pylibs.file import FileManager
+from pylibs.file import File_Temp
 
 
 def ok(data: Any, detail: Any = None) -> Dict[str, Any]:
@@ -372,7 +372,7 @@ valid users = {valid_users_str}
 
         if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
             return fail("Invalid username: only letters, digits, ., -, _ allowed.")
-        obj_file = FileManager()
+        obj_file = File_Temp()
         if not obj_file.string_exists_in_file(username, "/etc/samba/smb.conf"):
             try:
                 result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-x", username], capture_output=True, text=True, timeout=10)

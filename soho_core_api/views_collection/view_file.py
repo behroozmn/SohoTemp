@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from pylibs.file import FileManager  # مسیر واردات را با پروژه‌تان تطبیق دهید
+from pylibs.file import File_Temp  # مسیر واردات را با پروژه‌تان تطبیق دهید
 
 
 class SetPermissionsView(APIView):
@@ -18,7 +18,7 @@ class SetPermissionsView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        fm = FileManager()
+        fm = File_Temp()
         result = fm.set_permissions(path, mode, owner, group, recursive)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -36,7 +36,7 @@ class CreateDirectoryView(APIView):
             return Response(
                 {"ok": False, "error": {"code": "missing_fields", "message": "Missing required fields: path, owner, group"}}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        fm = FileManager()
+        fm = File_Temp()
         result = fm.create_directory(path, mode, owner, group)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)
@@ -50,7 +50,7 @@ class GetFileInfoView(APIView):
             return Response(
                 {"ok": False, "error": {"code": "missing_param", "message": "Missing 'path' query parameter"}}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        fm = FileManager()
+        fm = File_Temp()
         result = fm.get_file_info(path)
         if result["ok"]:
             return Response(result, status=status.HTTP_200_OK)

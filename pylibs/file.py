@@ -20,7 +20,7 @@ def fail(message: str, code: str = "samba_error", extra: str = None) -> Dict[str
     return {"ok": False, "error": {"code": code, "message": message, "extra": extra}}
 
 
-class FileManager:
+class File_Temp:
     def __init__(self, config_path: str = "/etc/samba/smb.conf") -> None:
         self.config_path = config_path
 
