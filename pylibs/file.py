@@ -137,7 +137,7 @@ class File_Temp:
         except Exception:
             return None
 
-    def string_exists_in_file(self, search_string: str, file_path: str) -> bool| Dict[str, Any]:
+    def string_exists_in_file(self, search_string: str, file_path: str) -> bool | Dict[str, Any]:
         """
         Check if a given string exists in the specified file.
 
@@ -164,3 +164,15 @@ class File_Temp:
             return fail(f"Permission denied reading file: {file_path}", "permission_denied")
         except Exception as e:
             return fail(f"Error reading file: {str(e)}", "io_error")
+
+
+class FileManager:
+
+    @classmethod
+    def read_strip(cls, path: str, default: str = None) -> str:
+        """خواندن یک فایل متنی و إستریپ(حذف ابتدا و انتها) آن"""
+        try:
+            with open(path, 'r') as f:
+                return f.read().strip()
+        except (OSError, IOError):
+            return default
