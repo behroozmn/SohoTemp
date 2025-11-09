@@ -159,8 +159,10 @@ from datetime import timedelta
 
 # تنظیمات JWT (اختیاری ولی توصیه می‌شود)
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),        # اعتبار Access Token
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),          # اعتبار Refresh Token
+    # 'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),        # اعتبار Access Token
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1000),        # اعتبار Access Token
+    # 'REFRESH_TOKEN_LIFETIME': timedelta(days=1),          # اعتبار Refresh Token
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1000),          # اعتبار Refresh Token
     'ROTATE_REFRESH_TOKENS': True,                        # بعد از استفاده، refresh token قدیمی منقضی شود
     'BLACKLIST_AFTER_ROTATION': True,                     # refresh token های قدیمی در لیست سیاه قرار بگیرند
     'UPDATE_LAST_LOGIN': True,                            # آخرین ورود کاربر به‌روزرسانی شود

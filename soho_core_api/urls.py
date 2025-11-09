@@ -25,12 +25,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/schema/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # Swagger
-
+    path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
     path("api/auth/", include("soho_core_api.urls_collection.url_auth")),
     path("api/cpu/", include("soho_core_api.urls_collection.url_cpu")),
     path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
     path("api/net/", include("soho_core_api.urls_collection.url_network")),
-    path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
     path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
