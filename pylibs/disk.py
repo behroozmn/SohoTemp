@@ -1,6 +1,7 @@
 import os
 import re
 import glob
+import subprocess
 from typing import Dict, Any, Optional, List, Tuple
 from pylibs.file import FileManager
 
@@ -215,66 +216,139 @@ class DiskManager:
         }
 
     def get_temperature_from_hwmon(self, disk: str) -> Optional[int]:
-        """سعی در خواندن دما از hwmon برای دیسک داده‌شده.
-
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Optional[int]: دمای دیسک به سانتی‌گراد یا None.
+        """
+        خواندن دما از hwmon با تطبیق مسیر دستگاه واقعی.
+        این روش برای دیسک‌هایی که توسط drivetemp یا سازنده پشتیبانی می‌شوند کار می‌کند.
         """
         if not os.path.exists(self.SYS_CLASS_HWMON):
             return None
+
         try:
+            # دریافت مسیر واقعی دستگاه دیسک
+            disk_device_path = os.path.realpath(f"/sys/block/{disk}/device")
+
             for hwmon_dir in os.listdir(self.SYS_CLASS_HWMON):
                 hwmon_path = os.path.join(self.SYS_CLASS_HWMON, hwmon_dir)
-                name_path = os.path.join(hwmon_path, "name")
-                if os.path.exists(name_path):
-                    name = FileManager.read_strip(name_path)
-                    if disk in name or "drivetemp" in name.lower():
+
+                # بررسی symlink device در hwmon
+                device_link = os.path.join(hwmon_path, "device")
+                if os.path.islink(device_link):
+                    hwmon_device_path = os.path.realpath(device_link)
+                    if hwmon_device_path == disk_device_path:
+                        # همان دستگاه است — حالا دما را بخوان
                         temp_path = os.path.join(hwmon_path, "temp1_input")
                         if os.path.exists(temp_path):
                             temp_raw = FileManager.read_strip(temp_path)
-                            if temp_raw.isdigit():
-                                return int(temp_raw) // 1000  # µ°C → °C
+                            if temp_raw.lstrip('-').isdigit():  # پشتیبانی از دمای منفی
+                                return int(temp_raw) // 1000
         except (OSError, ValueError, IOError):
             pass
         return None
 
-    def get_temperature_from_scsi(self, disk: str) -> Optional[int]:
-        """سعی در خواندن دما از scsi_disk برای دیسک‌های SCSI/SATA.
-
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Optional[int]: دمای دیسک به سانتی‌گراد یا None.
+    def get_temperature_from_device(self, disk: str) -> Optional[int]:
         """
-        if not os.path.exists(self.SYS_SCSI_DISK):
-            return None
+        خواندن دما مستقیماً از /sys/block/{disk}/device/temp (در هسته‌های جدید).
+        در هسته‌های ≥ 5.10، برخی درایورها این فایل را ارائه می‌دهند.
+        """
+        temp_path = f"/sys/block/{disk}/device/temp"
         try:
-            for scsi_entry in os.listdir(self.SYS_SCSI_DISK):
-                device_path = os.path.join(self.SYS_SCSI_DISK, scsi_entry, "device")
-                block_link = os.path.join(device_path, "block")
-                if os.path.exists(block_link):
-                    try:
-                        resolved = os.readlink(block_link)
-                        if resolved == disk:
-                            temp_path = os.path.join(device_path, "temperature")
-                            if os.path.exists(temp_path):
-                                temp_str = FileManager.read_strip(temp_path)
-                                if temp_str.isdigit():
-                                    return int(temp_str)
-                    except (OSError, ValueError):
-                        continue
-        except (OSError, IOError):
+            if os.path.exists(temp_path):
+                temp_str = FileManager.read_strip(temp_path)
+                if temp_str.lstrip('-').isdigit():
+                    # برخی سیستم‌ها دما را به میلی‌درجه می‌دهند، برخی به سانتی‌گراد
+                    temp = int(temp_str)
+                    if temp > 1000:  # احتمالاً میلی‌درجه است
+                        return temp // 1000
+                    else:
+                        return temp
+        except (OSError, ValueError, IOError):
             pass
         return None
 
-    def get_temperature(self, disk: str) -> Optional[int]:
-        """دریافت دمای دیسک از منابع مختلف سیستم.
-
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Optional[int]: دمای دیسک به سانتی‌گراد یا None.
+    def get_temperature_from_smartctl(self, disk: str) -> Optional[int]:  # ✅ self اضافه شد
         """
+        دریافت دمای هارد از طریق دستور smartctl برای IDهای 190 و 194.
+        این تابع بر اساس خروجی واقعی شما تست شده است.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda').
+
+        Returns:
+            Optional[int]: دمای دیسک به سانتی‌گراد یا None در صورت خطا یا عدم یافتن.
+        """
+        try:
+            device_path = f"/dev/{disk}"
+            result = subprocess.run(
+                ["/usr/bin/sudo", "/usr/sbin/smartctl", "-A", device_path],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False
+            )
+
+            if result.returncode != 0 or not result.stdout:
+                return None
+
+            for line in result.stdout.splitlines():
+                if re.match(r"^\s*(190|194)\s", line):
+                    parts = line.split()
+                    if len(parts) >= 10:
+                        raw_value = parts[9]
+                        match = re.match(r'^(\d+)', raw_value)
+                        if match:
+                            temp = int(match.group(1))
+                            if 0 <= temp <= 100:
+                                return temp
+            return None
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError, ValueError):
+            return None
+
+    def get_temperature(self, disk: str) -> Optional[int]:
+        """
+        دریافت دمای دیسک از منابع مختلف سیستم.
+        اولویت‌ها:
+        1. hwmon با تطبیق دقیق دستگاه
+        2. فایل temp مستقیم در /sys/block/{disk}/device/
+        3. روش قدیمی scsi (برای سیستم‌های enterprise)
+        4. دستور smartctl (آخرین راه‌حل)
+        """
+        # روش ۱: hwmon
         temp = self.get_temperature_from_hwmon(disk)
         if temp is not None:
             return temp
-        return self.get_temperature_from_scsi(disk)
+
+        # روش ۲: فایل temp مستقیم
+        temp = self.get_temperature_from_device(disk)
+        if temp is not None:
+            return temp
+
+        # روش ۳: scsi enterprise
+        if os.path.exists(self.SYS_SCSI_DISK):
+            try:
+                for scsi_entry in os.listdir(self.SYS_SCSI_DISK):
+                    device_path = os.path.join(self.SYS_SCSI_DISK, scsi_entry, "device")
+                    block_link = os.path.join(device_path, "block")
+                    if os.path.exists(block_link):
+                        try:
+                            resolved = os.readlink(block_link)
+                            if resolved == disk:
+                                temp_path = os.path.join(device_path, "temperature")
+                                if os.path.exists(temp_path):
+                                    temp_str = FileManager.read_strip(temp_path)
+                                    if temp_str.isdigit():
+                                        return int(temp_str)
+                        except (OSError, ValueError):
+                            continue
+            except (OSError, IOError):
+                pass
+
+        # روش ۴: smartctl (آخرین امید!)
+        temp = self.get_temperature_from_smartctl(disk)
+        if temp is not None:
+            return temp
+
+        return None
 
     def get_disk_info(self, disk: str) -> Dict[str, Any]:
         """جمع‌آوری تمام اطلاعات یک دیسک خاص.
