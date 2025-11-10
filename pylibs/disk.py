@@ -356,20 +356,26 @@ class DiskManager:
         return None
 
     def get_slot_number(self, disk: str) -> Optional[str]:
-        """دریافت شماره اسلات (slot) دیسک از فایل‌های سیستمی.
+        """
+        دریافت شماره اسلات (slot) دیسک از فایل‌های سیستمی.
 
-        این اطلاعات معمولاً در سرورهای enterprise (با backplane یا enclosure) در دسترس است.
-        مسیرهای رایج: /sys/block/sda/device/slot, /sys/class/scsi_disk/*/device/enclosure*
+        اولویت‌ها:
+        1. فایل مستقیم `/sys/block/{disk}/device/slot`
+        2. فایل‌های enclosure در `/sys/class/scsi_disk/`
+        3. استخراج از مسیر دستگاه (device_path) مانند:
+           /sys/devices/.../target3:0:0/3:0:0:0/block/sdd → slot = '3'
 
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Optional[str]: شماره اسلات (مثل '2') یا None اگر در دسترس نباشد.
+        Args:
+            disk (str): نام دیسک (مثل 'sda').
+
+        Returns:
+            Optional[str]: شماره اسلات (مثل '3') یا None اگر در دسترس نباشد.
         """
         # روش ۱: فایل مستقیم slot
         slot_path = f"/sys/block/{disk}/device/slot"
         if os.path.exists(slot_path):
             try:
-                with open(slot_path, 'r') as f:
-                    return f.read().strip()
+                return self._read_file(slot_path)
             except (OSError, IOError):
                 pass
 
@@ -384,15 +390,30 @@ class DiskManager:
                         try:
                             resolved = os.readlink(block_link)
                             if resolved == disk:
-                                # جستجوی فایل‌های مرتبط با enclosure/slot
                                 for fname in os.listdir(device_path):
                                     if "enclosure" in fname or "slot" in fname:
-                                        slot_val = FileManager.read_strip(os.path.join(device_path, fname))
+                                        slot_val = self._read_file(os.path.join(device_path, fname))
                                         if slot_val.isdigit():
                                             return slot_val
                         except (OSError, ValueError):
                             continue
             except (OSError, IOError):
                 pass
+
+        # روش ۳: استخراج از مسیر device_path
+        try:
+            device_path = os.path.realpath(f"/sys/block/{disk}")
+            # مسیر نمونه: /sys/devices/pci0000:00/.../target3:0:0/3:0:0:0/block/sdd
+            # ما به دنبال الگویی مثل ".../3:0:0:0/block/sdd" هستیم
+            match = re.search(r'/(\d+):0:0:0/block/' + re.escape(disk) + r'$', device_path)
+            if match:
+                return match.group(1)
+
+            # یا الگوی targetX:0:0
+            match2 = re.search(r'/target(\d+):0:0/', device_path)
+            if match2:
+                return match2.group(1)
+        except (OSError, IOError, TypeError):
+            pass
 
         return None
