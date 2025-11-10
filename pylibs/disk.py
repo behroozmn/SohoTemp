@@ -154,7 +154,7 @@ class DiskManager:
         except (OSError, IOError):
             return ""
 
-    def get_usage(self, disk: str) -> Dict[str, Optional[float]]:
+    def get_mounted_disk_size_usage(self, disk: str) -> Dict[str, Optional[float]]:
         """
         محاسبه حجم کل، مصرفی، آزاد و درصد استفاده برای دیسک.
         این تابع تمام پارتیشن‌های mount شده مربوط به دیسک را بررسی می‌کند.
@@ -355,7 +355,7 @@ class DiskManager:
         Args: disk (str): نام دیسک (مثل 'sda').
         Returns: Dict[str, Any]: دیکشنری کامل اطلاعات دیسک.
         """
-        usage = self.get_usage(disk)
+        usage = self.get_mounted_disk_size_usage(disk)
         return {
             "disk": disk,
             "model": self.get_model(disk),
@@ -366,7 +366,7 @@ class DiskManager:
             "logical_block_size": self.get_logical_block_size(disk),
             "scheduler": self.get_scheduler(disk),
             "wwid": self.get_wwid(disk),
-            "total_bytes": usage["total_bytes"],
+            "total_bytes": self.get_disk_total_size(disk),
             "used_bytes": usage["used_bytes"],
             "free_bytes": usage["free_bytes"],
             "usage_percent": usage["usage_percent"],
@@ -630,3 +630,14 @@ class DiskManager:
         except (OSError, IOError):
             pass
         return False
+
+    def get_disk_total_size(self, disk: str) -> Optional[int]:
+        """دریافت حجم خام دیسک از /sys/block/{disk}/size (به بایت)."""
+        try:
+            with open(f"/sys/block/{disk}/size", "r") as f:
+                sectors = f.read().strip()
+                if sectors.isdigit():
+                    return int(sectors) * 512
+        except (OSError, IOError, ValueError):
+            pass
+        return None
