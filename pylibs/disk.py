@@ -153,12 +153,16 @@ class DiskManager:
         except (OSError, IOError):
             return ""
 
-    def get_usage(self, disk: str) -> Dict[str, Optional[int]]:
-        """محاسبه حجم کل، مصرفی، آزاد و درصد استفاده برای دیسک.
+    def get_usage(self, disk: str) -> Dict[str, Optional[float]]:
+        """
+        محاسبه حجم کل، مصرفی، آزاد و درصد استفاده برای دیسک.
         این تابع تمام پارتیشن‌های mount شده مربوط به دیسک را بررسی می‌کند.
 
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Dict[str, Optional[int]]: دیکشنری شامل:
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1', 'mmcblk0').
+
+        Returns:
+            Dict[str, Optional[float]]: دیکشنری شامل:
                 - total_bytes: حجم کل (بایت)
                 - used_bytes: حجم مصرفی (بایت)
                 - free_bytes: حجم آزاد (بایت)
@@ -167,20 +171,31 @@ class DiskManager:
         total = used = free = 0
         mount_points = []
 
+        # ساخت الگوی regex برای پارتیشن‌های معتبر
+        if disk.startswith("nvme") or disk.startswith("mmcblk"):
+            # NVMe: nvme0n1 → nvme0n1p1, mmcblk0 → mmcblk0p1
+            partition_pattern = re.compile(rf"^{re.escape(disk)}p\d+$")
+        else:
+            # SATA/SCSI: sda → sda1, sda10, ...
+            partition_pattern = re.compile(rf"^{re.escape(disk)}\d+$")
+
         try:
             with open(self.PROC_MOUNTS, 'r') as f:
                 for line in f:
                     parts = line.split()
                     if len(parts) < 3 or not parts[0].startswith('/dev/'):
                         continue
-                    dev = parts[0]
+                    dev_path = parts[0]  # مثل /dev/sda1
                     mount_point = parts[1]
+                    dev_name = os.path.basename(dev_path)  # مثل sda1
+
                     # بررسی اینکه آیا پارتیشن متعلق به دیسک ما است
-                    if os.path.basename(dev).startswith(disk):
+                    if partition_pattern.match(dev_name):
                         mount_points.append(mount_point)
         except (OSError, IOError):
             pass
 
+        # جمع‌آوری آمار فضا
         for mp in mount_points:
             try:
                 stat = os.statvfs(mp)
@@ -285,6 +300,7 @@ class DiskManager:
             "wwn": self.get_wwn(disk),
             "uuid": self.get_uuid(disk),
             "slot_number": self.get_slot_number(disk),
+            "type": self.get_disk_type(disk),
         }
 
     def get_all_disks_info(self) -> List[Dict[str, Any]]:
@@ -295,64 +311,74 @@ class DiskManager:
         return [self.get_disk_info(disk) for disk in self.disks]
 
     def get_wwn(self, disk: str) -> str:
-        """دریافت World Wide Name (WWN) دیسک از فایل‌های سیستمی کرنل.
+        by_id_path = "/dev/disk/by-id"
+        if not os.path.exists(by_id_path):
+            return ""
 
-        WWN معمولاً در دیسک‌های enterprise (SCSI/SAS) در دسترس است.
-
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: str: WWN (مثل '0x5002538d40b3f2a3') یا رشته خالی اگر در دسترس نباشد.
-        """
-        # مسیرهای رایج برای WWN در لینوکس
-        wwn_paths = [
-            f"/sys/block/{disk}/device/wwid",
-            f"/sys/block/{disk}/device/vpd_pg83",
-            f"/sys/block/{disk}/wwid",  # برخی درایورها مستقیم اینجا می‌نویسند
-        ]
-        for path in wwn_paths:
-            try:
-                with open(path, 'r') as f:
-                    content = f.read().strip()
-                    if content and ("0x" in content or "naa." in content.lower()):
-                        return content
-            except (OSError, IOError):
-                continue
-        return ""
-
-    def get_uuid(self, disk: str) -> Optional[str]:
-        """دریافت UUID مربوط به پارتیشن‌های دیسک از سیستم فایل /dev/disk/by-uuid/.
-
-        این متد اولین UUID مرتبط با هر پارتیشن روی دیسک را برمی‌گرداند.
-        توجه: UUID متعلق به پارتیشن است، نه کل دیسک.
-
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Optional[str]: UUID (مثل '123e4567-e89b-12d3-a456-426614174000') یا None.
-        """
         try:
-            # الگوی پارتیشن‌های مربوط به دیسک: sda1, sda2, nvme0n1p1, ...
-            partition_pattern = f"/dev/{disk}[0-9]*"
-            partitions = glob.glob(partition_pattern)
+            wwn_links = glob.glob(os.path.join(by_id_path, "wwn-*")) # الگوی لینک‌های WWN: wwn-*
+            target_dev = f"../../{disk}"
 
-            # همچنین برای NVMe: nvme0n1p1, nvme0n1p2, ...
-            if "nvme" in disk:
-                partition_pattern = f"/dev/{disk}p[0-9]*"
-                partitions += glob.glob(partition_pattern)
-
-            # گشتن در /dev/disk/by-uuid/
-            uuid_dir = "/dev/disk/by-uuid"
-            if not os.path.exists(uuid_dir):
-                return None
-
-            for uuid_name in os.listdir(uuid_dir):
-                uuid_path = os.path.join(uuid_dir, uuid_name)
+            for link in wwn_links:
                 try:
-                    # بررسی اینکه آیا این UUID متعلق به یکی از پارتیشن‌های دیسک است
-                    resolved = os.path.realpath(uuid_path)
-                    if any(resolved == part for part in partitions):
-                        return uuid_name
+                    if os.path.realpath(link) == f"/dev/{disk}":  # بررسی مقصد لینک
+                        return os.path.basename(link)  # نام فایل (مثل 'wwn-0x5000c500e8272848') را برگردان
                 except (OSError, IOError):
                     continue
         except (OSError, IOError):
             pass
+
+        return ""
+
+    def get_uuid(self, disk: str) -> Optional[str]:
+        """
+        دریافت UUID مربوط به اولین پارتیشن معتبر روی دیسک از طریق /dev/disk/by-uuid/.
+
+        این متد بدون اجرای هیچ دستور لینوکسی (مثل blkid) عمل می‌کند و فقط از ساختار
+        سیستم فایل لینوکس (/dev/disk/by-uuid و /sys/block) استفاده می‌کند.
+
+        توجه: UUID متعلق به پارتیشن است، نه دیسک خام. اگر دیسک بدون پارتیشن باشد، None برمی‌گردد.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1', 'mmcblk0').
+
+        Returns:
+            Optional[str]: UUID پارتیشن (مثل 'a1b2c3d4-...') یا None اگر یافت نشد.
+        """
+        try:
+            # مرحله 1: دریافت لیست واقعی پارتیشن‌ها از /sys/block/{disk}/
+            sys_disk_path = f"/sys/block/{disk}"
+            if not os.path.exists(sys_disk_path):
+                return None
+
+            partitions: List[str] = []
+            for entry in os.listdir(sys_disk_path):
+                # پارتیشن‌ها زیردایرکتوری هستند و با نام دیسک شروع می‌شوند
+                if entry.startswith(disk) and entry != disk:
+                    partitions.append(f"/dev/{entry}")
+
+            if not partitions:
+                return None
+
+            # مرحله 2: جستجو در /dev/disk/by-uuid/
+            uuid_dir = "/dev/disk/by-uuid"
+            if not os.path.exists(uuid_dir):
+                return None
+
+            # مرحله 3: بررسی هر UUID برای تطابق با پارتیشن‌های دیسک
+            for uuid_name in sorted(os.listdir(uuid_dir)):  # مرتب‌سازی برای پیش‌بینی‌پذیری
+                uuid_path = os.path.join(uuid_dir, uuid_name)
+                try:
+                    resolved = os.path.realpath(uuid_path)
+                    if resolved in partitions:
+                        return uuid_name
+                except (OSError, IOError):
+                    continue
+
+        except (OSError, IOError, ValueError):
+            # هرگونه خطا به صورت ایمن نادیده گرفته می‌شود
+            pass
+
         return None
 
     def get_slot_number(self, disk: str) -> Optional[str]:
@@ -417,3 +443,71 @@ class DiskManager:
             pass
 
         return None
+
+    def get_disk_type(self, disk: str) -> str:
+        """
+        تشخیص نوع دیسک (NVMe, SATA, SCSI, VirtIO, MMC, IDE, و غیره) بدون اجرای دستور.
+
+        این تابع از ساختار مسیر دستگاه در /sys استفاده می‌کند تا نوع کنترلر یا پروتکل را شناسایی کند.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1', 'mmcblk0').
+
+        Returns:
+            str: نوع دیسک. مقادیر ممکن:
+                - 'nvme'
+                - 'sata'
+                - 'scsi'
+                - 'virtio'
+                - 'mmc'
+                - 'ide'
+                - 'usb'
+                - 'unknown'
+        """
+        try:
+            # دریافت مسیر واقعی دستگاه (realpath)
+            sys_block_path = f"/sys/block/{disk}"
+            if not os.path.exists(sys_block_path):
+                return "unknown"
+
+            # رسیدن به device symlink
+            device_path = os.path.realpath(os.path.join(sys_block_path, "device"))
+            device_path_str = device_path.lower()
+
+            # تشخیص بر اساس نام یا مسیر دستگاه
+            if "nvme" in device_path_str or disk.startswith("nvme"):
+                return "nvme"
+            elif "virtio" in device_path_str or disk.startswith("vd"):
+                return "virtio"
+            elif "mmc" in device_path_str or disk.startswith("mmcblk"):
+                return "mmc"
+            elif "usb" in device_path_str:
+                return "usb"
+            elif "ide" in device_path_str or disk.startswith("hd"):
+                return "ide"
+            elif "scsi" in device_path_str or any(
+                    disk.startswith(prefix) for prefix in ("sd", "sr")
+            ):
+                # اکنون باید بین SATA و SCSI تمایز بگذاریم
+                # SATA دیسک‌ها معمولاً از طریق کنترلرهای AHCI/ATA به عنوان SCSI در معرض هستند
+                # اما مسیر آن‌ها شامل 'ata' می‌شود
+                if "ata" in device_path_str:
+                    return "sata"
+                else:
+                    return "scsi"
+            else:
+                return "unknown"
+
+        except (OSError, IOError, ValueError):
+            return "unknown"
+
+    def has_partitions(self, disk: str) -> bool:
+        """آیا دیسک حداقل یک پارتیشن دارد؟"""
+        sys_path = f"/sys/block/{disk}"
+        try:
+            for entry in os.listdir(sys_path):
+                if entry.startswith(disk) and entry != disk:
+                    return True
+        except (OSError, IOError):
+            pass
+        return False
