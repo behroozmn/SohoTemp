@@ -439,49 +439,63 @@ class DiskManager:
         """
         دریافت UUID مربوط به اولین پارتیشن معتبر روی دیسک از طریق /dev/disk/by-uuid/.
 
-        این متد بدون اجرای هیچ دستور لینوکسی (مثل blkid) عمل می‌کند و فقط از ساختار
-        سیستم فایل لینوکس (/dev/disk/by-uuid و /sys/block) استفاده می‌کند.
-
-        توجه: UUID متعلق به پارتیشن است، نه دیسک خام. اگر دیسک بدون پارتیشن باشد، None برمی‌گردد.
+        این متد بدون اجرای هیچ دستور لینوکسی (مثل blkid) عمل می‌کند.
+        پشتیبانی کامل از انواع دیسک (SATA, NVMe, MMC) و UUIDهای عددی/رشته‌ای.
+        نکته: اگر دیسک خام در اختیار زد اف اس باشد آنگاه این مولفه برایش خالی خواهد بود
 
         Args:
-            disk (str): نام دیسک (مثل 'sda', 'nvme0n1', 'mmcblk0').
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1').
 
         Returns:
-            Optional[str]: UUID پارتیشن (مثل 'a1b2c3d4-...') یا None اگر یافت نشد.
+            Optional[str]: UUID پارتیشن یا None.
         """
         try:
-            # مرحله 1: دریافت لیست واقعی پارتیشن‌ها از /sys/block/{disk}/
-            sys_disk_path = f"/sys/block/{disk}"
-            if not os.path.exists(sys_disk_path):
-                return None
-
-            partitions: List[str] = []
-            for entry in os.listdir(sys_disk_path):
-                # پارتیشن‌ها زیردایرکتوری هستند و با نام دیسک شروع می‌شوند
-                if entry.startswith(disk) and entry != disk:
-                    partitions.append(f"/dev/{entry}")
-
-            if not partitions:
-                return None
-
-            # مرحله 2: جستجو در /dev/disk/by-uuid/
             uuid_dir = "/dev/disk/by-uuid"
             if not os.path.exists(uuid_dir):
                 return None
 
-            # مرحله 3: بررسی هر UUID برای تطابق با پارتیشن‌های دیسک
-            for uuid_name in sorted(os.listdir(uuid_dir)):  # مرتب‌سازی برای پیش‌بینی‌پذیری
+            # استخراج تمام پارتیشن‌های مرتبط با دیسک از /dev/disk/by-path/
+            # این روش قابل اعتمادتر از خواندن /sys/block است
+            by_path_dir = "/dev/disk/by-path"
+            if not os.path.exists(by_path_dir):
+                return None
+
+            # جمع‌آوری تمام دستگاه‌هایی که به دیسک ما مربوط می‌شوند
+            related_devices = set()
+            for entry in os.listdir(by_path_dir):
+                path = os.path.join(by_path_dir, entry)
+                try:
+                    resolved = os.path.realpath(path)
+                    if resolved.startswith(f"/dev/{disk}"):
+                        related_devices.add(resolved)
+                except (OSError, IOError):
+                    continue
+
+            if not related_devices:
+                # fallback به روش قدیمی اگر by-path کار نکرد
+                sys_disk_path = f"/sys/block/{disk}"
+                if os.path.exists(sys_disk_path):
+                    for entry in os.listdir(sys_disk_path):
+                        if entry != disk and entry.startswith(disk):
+                            # پشتیبانی از همه انواع پارتیشن
+                            if (disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk) and len(entry) > len(disk)) or \
+                                    (not disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk) and entry[len(disk):].isdigit()):
+                                related_devices.add(f"/dev/{entry}")
+
+            if not related_devices:
+                return None
+
+            # بررسی هر UUID برای تطابق با دستگاه‌های مرتبط
+            for uuid_name in sorted(os.listdir(uuid_dir)):
                 uuid_path = os.path.join(uuid_dir, uuid_name)
                 try:
                     resolved = os.path.realpath(uuid_path)
-                    if resolved in partitions:
+                    if resolved in related_devices:
                         return uuid_name
                 except (OSError, IOError):
                     continue
 
         except (OSError, IOError, ValueError):
-            # هرگونه خطا به صورت ایمن نادیده گرفته می‌شود
             pass
 
         return None
