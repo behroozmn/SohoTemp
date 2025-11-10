@@ -385,20 +385,51 @@ class DiskManager:
         return [self.get_disk_info(disk) for disk in self.disks]
 
     def get_wwn(self, disk: str) -> str:
+        """
+        دریافت WWN یا شناسه منحصر به فرد دیسک از /dev/disk/by-id.
+
+        این تابع هم برای دیسک‌های SATA/SCSI (با پیشوند wwn-)
+        و هم برای NVMe (با پیشوند nvme-) کار می‌کند.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda' یا 'nvme0n1').
+
+        Returns:
+            str: نام لینک منحصر به فرد (مثل 'wwn-0x5000...' یا 'nvme-nvme.10ec-...') یا رشته خالی.
+        """
         by_id_path = "/dev/disk/by-id"
         if not os.path.exists(by_id_path):
             return ""
 
         try:
-            wwn_links = glob.glob(os.path.join(by_id_path, "wwn-*")) # الگوی لینک‌های WWN: wwn-*
-            target_dev = f"../../{disk}"
+            # الگوی کلی: همه لینک‌ها
+            all_links = glob.glob(os.path.join(by_id_path, "*"))
+            target_real_path = os.path.realpath(f"/dev/{disk}")
 
-            for link in wwn_links:
+            wwn_candidate = None
+            nvme_candidate = None
+
+            for link in all_links:
                 try:
-                    if os.path.realpath(link) == f"/dev/{disk}":  # بررسی مقصد لینک
-                        return os.path.basename(link)  # نام فایل (مثل 'wwn-0x5000c500e8272848') را برگردان
+                    if os.path.realpath(link) == target_real_path:
+                        basename = os.path.basename(link)
+                        # اولویت 1: لینک‌های wwn-*
+                        if basename.startswith("wwn-"):
+                            return basename
+                        # اولویت 2: لینک‌های nvme-nvme.* (حاوی WWN واقعی NVMe)
+                        elif basename.startswith("nvme-nvme."):
+                            nvme_candidate = basename
+                        # اولویت 3: سایر لینک‌های nvme- (fallback)
+                        elif basename.startswith("nvme-"):
+                            if nvme_candidate is None:
+                                nvme_candidate = basename
                 except (OSError, IOError):
                     continue
+
+            # اگر wwn-* پیدا نشد، nvme-nvme.* را برگردان
+            if nvme_candidate:
+                return nvme_candidate
+
         except (OSError, IOError):
             pass
 
