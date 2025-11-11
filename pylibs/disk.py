@@ -27,12 +27,8 @@ class DiskManager:
 
     def __init__(self) -> None:
         """سازنده کلاس — محاسبه دیسک سیستم‌عامل و لیست تمام دیسک‌ها."""
-        self.os_disk: Optional[str] = self._get_os_disk()
+        self.os_disk: Optional[str] = self.get_os_disk()
         self.disks: List[str] = self._get_all_disk_names()
-
-    # ======================
-    # توابع داخلی کمکی (private)
-    # ======================
 
     def _is_valid_device_name(self, device_name: str) -> bool:
         """بررسی اعتبار نام دستگاه بلاکی.
@@ -55,61 +51,6 @@ class DiskManager:
             bool: مقدار «ترو» اگر بلاک دیوایس باشد.
         """
         return os.path.exists(f"{self.SYS_BLOCK}/{device_name}")
-
-    def _get_base_disk_from_partition(self, partition_name: str) -> Optional[str]:
-        """استخراج نام دیسک اصلی از نام پارتیشن.
-
-        مثال:
-            'sda1' → 'sda'
-            'nvme0n1p2' → 'nvme0n1'
-            'mmcblk0p1' → 'mmcblk0'
-
-        Args:
-            partition_name (str): نام پارتیشن.
-
-        Returns:
-            Optional[str]: نام دیسک اصلی یا None اگر نام معتبر نباشد.
-        """
-        # بررسی NVMe
-        nvme_match = re.match(r'^(nvme\d+n\d+)p\d+$', partition_name)
-        if nvme_match:
-            return nvme_match.group(1)
-
-        # بررسی MMC
-        mmc_match = re.match(r'^(mmcblk\d+)p\d+$', partition_name)
-        if mmc_match:
-            return mmc_match.group(1)
-
-        # بررسی SATA/SCSI
-        if re.match(r'^[a-z]+\d+$', partition_name):
-            base_candidate = re.sub(r'\d+$', '', partition_name)
-            if base_candidate and self._is_block_device(base_candidate):
-                return base_candidate
-
-        return None
-
-    # ======================
-    # توابع اصلی عمومی
-    # ======================
-
-    def _get_os_disk(self) -> Optional[str]:
-        """شناسایی دیسکی که سیستم‌عامل روی آن نصب شده (با mountpoint = /).
-
-        Returns:
-            Optional[str]: نام دیسک سیستم‌عامل (مثل 'sda') یا None در صورت شکست.
-        """
-        try:
-            with open(self.PROC_MOUNTS, 'r') as f:
-                for line in f:
-                    parts = line.split()
-                    if len(parts) >= 3 and parts[1] == '/' and parts[0].startswith('/dev/'):
-                        dev_name = os.path.basename(parts[0])  # مثال: 'sda2'
-                        for disk in os.listdir(self.SYS_BLOCK):
-                            if dev_name.startswith(disk):
-                                return disk
-        except (OSError, IOError, ValueError):
-            pass
-        return None
 
     def _get_all_disk_names(self, contain_os_disk: bool = True) -> List[str]:
         """بازیابی لیست تمام دیسک‌های فیزیکی سیستم با فیلتر کردن دستگاه‌های مجازی.
@@ -169,6 +110,38 @@ class DiskManager:
         except (OSError, IOError):
             pass
         return False
+
+    def get_disk_name_from_partition_name(self, partition_name: str) -> Optional[str]:
+        """استخراج نام دیسک اصلی از نام پارتیشن.
+
+        مثال:
+            'sda1' → 'sda'
+            'nvme0n1p2' → 'nvme0n1'
+            'mmcblk0p1' → 'mmcblk0'
+
+        Args:
+            partition_name (str): نام پارتیشن.
+
+        Returns:
+            Optional[str]: نام دیسک اصلی یا None اگر نام معتبر نباشد.
+        """
+        # بررسی NVMe
+        nvme_match = re.match(r'^(nvme\d+n\d+)p\d+$', partition_name)
+        if nvme_match:
+            return nvme_match.group(1)
+
+        # بررسی MMC
+        mmc_match = re.match(r'^(mmcblk\d+)p\d+$', partition_name)
+        if mmc_match:
+            return mmc_match.group(1)
+
+        # بررسی SATA/SCSI
+        if re.match(r'^[a-z]+\d+$', partition_name):
+            base_candidate = re.sub(r'\d+$', '', partition_name)
+            if base_candidate and self._is_block_device(base_candidate):
+                return base_candidate
+
+        return None
 
     def get_disk_type(self, disk: str) -> str:
         """تشخیص نوع دیسک بدون اجرای دستور.
@@ -372,7 +345,7 @@ class DiskManager:
             is_partition = False
 
             # تشخیص پارتیشن و استخراج دیسک اصلی
-            base_disk = self._get_base_disk_from_partition(entry)
+            base_disk = self.get_disk_name_from_partition_name(entry)
             if base_disk is not None:
                 is_partition = True
             else:
@@ -486,6 +459,25 @@ class DiskManager:
             return nvme_candidate or ""
         except (OSError, IOError):
             return ""
+
+    def get_os_disk(self) -> Optional[str]:
+        """شناسایی دیسکی که سیستم‌عامل روی آن نصب شده (با mountpoint = /).
+
+        Returns:
+            Optional[str]: نام دیسک سیستم‌عامل (مثل 'sda') یا None در صورت شکست.
+        """
+        try:
+            with open(self.PROC_MOUNTS, 'r') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 3 and parts[1] == '/' and parts[0].startswith('/dev/'):
+                        dev_name = os.path.basename(parts[0])  # مثال: 'sda2'
+                        for disk in os.listdir(self.SYS_BLOCK):
+                            if dev_name.startswith(disk):
+                                return disk
+        except (OSError, IOError, ValueError):
+            pass
+        return None
 
     def get_partition_mount_info(self, partition_name: str) -> Optional[Dict[str, Any]]:
         """دریافت اطلاعات mount یک پارتیشن خاص از /proc/mounts.
@@ -770,10 +762,6 @@ class DiskManager:
             List[Dict[str, Any]]: لیستی از دیکشنری‌های اطلاعات دیسک.
         """
         return [self.get_disk_info(disk) for disk in self.disks]
-
-    # ======================
-    # توابع عملیاتی (wipe, clear)
-    # ======================
 
     def disk_wipe_signatures(self, device_path: str) -> bool:
         """پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن با wipefs.
