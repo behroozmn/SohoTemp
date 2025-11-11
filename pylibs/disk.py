@@ -351,12 +351,17 @@ class DiskManager:
         return None
 
     def get_disk_info(self, disk: str) -> Dict[str, Any]:
-        """جمع‌آوری تمام اطلاعات یک دیسک خاص.
-        Args: disk (str): نام دیسک (مثل 'sda').
-        Returns: Dict[str, Any]: دیکشنری کامل اطلاعات دیسک.
         """
-        usage = self.get_mounted_disk_size_usage(disk)
-        return {
+        جمع‌آوری تمام اطلاعات یک دیسک خاص، همراه با اطلاعات پارتیشن‌ها (در صورت وجود).
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda').
+
+        Returns:
+            Dict[str, Any]: دیکشنری کامل اطلاعات دیسک و پارتیشن‌ها.
+        """
+        # اطلاعات پایه دیسک
+        disk_info = {
             "disk": disk,
             "model": self.get_model(disk),
             "vendor": self.get_vendor(disk),
@@ -367,9 +372,6 @@ class DiskManager:
             "scheduler": self.get_scheduler(disk),
             "wwid": self.get_wwid(disk),
             "total_bytes": self.get_disk_total_size(disk),
-            "used_bytes": usage["used_bytes"],
-            "free_bytes": usage["free_bytes"],
-            "usage_percent": usage["usage_percent"],
             "temperature_celsius": self.get_temperature(disk),
             "wwn": self.get_wwn(disk),
             "uuid": self.get_uuid(disk),
@@ -377,6 +379,93 @@ class DiskManager:
             "type": self.get_disk_type(disk),
             "has_partition": self.has_partitions(disk),
         }
+
+        # اگر دیسک پارتیشن نداشت، فقط فضای کل دیسک را اضافه کن
+        if not self.has_partitions(disk):
+            disk_info.update({
+                "used_bytes": None,
+                "free_bytes": None,
+                "usage_percent": None,
+                "partitions": []  # لیست خالی برای یکدستی
+            })
+            return disk_info
+
+        # اگر پارتیشن داشت:
+        # ۱. اطلاعات فضای کل دیسک را از تابع مخصوص دریافت کن
+        usage = self.get_mounted_disk_size_usage(disk)
+        disk_info.update({
+            "used_bytes": usage["used_bytes"],
+            "free_bytes": usage["free_bytes"],
+            "usage_percent": usage["usage_percent"],
+        })
+
+        # ۲. اطلاعات هر پارتیشن را جمع‌آوری کن
+        partitions_info = []
+        sys_disk_path = f"/sys/block/{disk}"
+
+        try:
+            for entry in os.listdir(sys_disk_path):
+                if entry == disk:
+                    continue
+                # تشخیص پارتیشن (پشتیبانی از همه انواع)
+                if (disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk) and len(entry) > len(disk)) or \
+                        (not disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk)):
+
+                    partition_name = entry
+                    partition_path = f"/dev/{partition_name}"
+
+                    # الف) حجم پارتیشن (از /sys/block)
+                    size_bytes = None
+                    try:
+                        with open(f"/sys/block/{disk}/{partition_name}/size", "r") as f:
+                            sectors = f.read().strip()
+                            if sectors.isdigit():
+                                size_bytes = int(sectors) * 512
+                    except (OSError, IOError, ValueError):
+                        pass
+
+                    # ب) WWN پارتیشن (از /dev/disk/by-id)
+                    wwn = ""
+                    try:
+                        by_id_path = "/dev/disk/by-id"
+                        if os.path.exists(by_id_path):
+                            for link in os.listdir(by_id_path):
+                                if link.startswith(("wwn-", "nvme-")):
+                                    full_link = os.path.join(by_id_path, link)
+                                    try:
+                                        if os.path.realpath(full_link) == partition_path:
+                                            wwn = link
+                                            break
+                                    except (OSError, IOError):
+                                        continue
+                    except (OSError, IOError):
+                        pass
+
+                    # ج) فایل‌سیستم (از /proc/mounts یا /dev/disk/by-uuid)
+                    filesystem = None
+                    try:
+                        with open(self.PROC_MOUNTS, 'r') as f:
+                            for line in f:
+                                parts = line.split()
+                                if len(parts) >= 3 and parts[0] == partition_path:
+                                    filesystem = parts[2]
+                                    break
+                    except (OSError, IOError):
+                        pass
+
+                    # اضافه کردن اطلاعات پارتیشن
+                    partitions_info.append({
+                        "name": partition_name,
+                        "path": partition_path,
+                        "size_bytes": size_bytes,
+                        "wwn": wwn,
+                        "filesystem": filesystem,
+                    })
+        except (OSError, IOError):
+            pass
+
+        disk_info["partitions"] = partitions_info
+        return disk_info
 
     def get_all_disks_info(self) -> List[Dict[str, Any]]:
         """جمع‌آوری اطلاعات تمام دیسک‌های سیستم.
