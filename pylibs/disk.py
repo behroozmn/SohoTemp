@@ -17,10 +17,6 @@ class DiskManager:
     SYS_CLASS_HWMON: str = "/sys/class/hwmon"
     SYS_SCSI_DISK: str = "/sys/class/scsi_disk"
 
-    def __init__(self) -> None:
-        self.os_disk: Optional[str] = self.get_os_disk()
-        self.disks: List[str] = self.get_all_disk_name()
-
     def get_all_disk_name(self, contain_os_disk: bool = True, exclude: tuple = ('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')) -> List[str]:
         """بازیابی لیست تمام دیسک‌های فیزیکی سیستم با فیلتر کردن دستگاه‌های مجازی.
 
@@ -46,6 +42,118 @@ class DiskManager:
             # ثبت خطا یا پرش به لیست خالی
             pass
         return sorted(found_disks)
+
+    def __init__(self) -> None:
+        self.os_disk: Optional[str] = self.get_os_disk()
+        self.disks: List[str] = self.get_all_disk_name()
+
+    def get_disk_info(self, disk: str) -> Dict[str, Any]:
+        """
+        جمع‌آوری تمام اطلاعات یک دیسک خاص، همراه با اطلاعات پارتیشن‌ها (در صورت وجود).
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda').
+
+        Returns:
+            Dict[str, Any]: دیکشنری کامل اطلاعات دیسک و پارتیشن‌ها.
+        """
+        # اطلاعات پایه دیسک
+        has_partition = self.has_partitions(disk)
+        disk_info = {
+            "disk": disk,
+            "model": self.get_model(disk),
+            "vendor": self.get_vendor(disk),
+            "state": self.get_stat(disk),
+            "device_path": self.get_path(disk),
+            "physical_block_size": self.get_physical_block_size(disk),
+            "logical_block_size": self.get_logical_block_size(disk),
+            "scheduler": self.get_scheduler(disk),
+            "wwid": self.get_wwid(disk),
+            "total_bytes": self.get_total_size(disk),
+            "temperature_celsius": self.get_temperature(disk),
+            "wwn": self.get_wwn_by_entry(disk),
+            "uuid": self.get_uuid(disk),
+            "slot_number": self.get_slot_number(disk),
+            "type": self.get_disk_type(disk),
+            "has_partition": has_partition,
+        }
+
+        # اگر دیسک پارتیشن نداشت، فقط فضای کل دیسک را اضافه کن
+        if not has_partition:
+            disk_info.update({
+                "used_bytes": None,
+                "free_bytes": None,
+                "usage_percent": None,
+                "partitions": []  # لیست خالی برای یکدستی
+            })
+            return disk_info
+
+        # اگر پارتیشن داشت:
+        # ۱. اطلاعات فضای کل دیسک را از تابع مخصوص دریافت کن
+        usage = self.get_mounted_disk_size_usage(disk)
+        disk_info.update({
+            "used_bytes": usage["used_bytes"],
+            "free_bytes": usage["free_bytes"],
+            "usage_percent": usage["usage_percent"],
+        })
+
+        # ۲. اطلاعات هر پارتیشن را جمع‌آوری کن
+        partitions_info = []
+        sys_disk_path = f"/sys/block/{disk}"
+
+        try:
+            for entry in os.listdir(sys_disk_path):
+                if entry == disk:
+                    continue
+                # تشخیص پارتیشن (پشتیبانی از همه انواع)
+                if (disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk) and len(entry) > len(disk)) or \
+                        (not disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk)):
+
+                    partition_name = entry
+                    partition_path = f"/dev/{partition_name}"
+                    size_bytes = self.get_total_size(partition_name)
+
+                    # دریافت اطلاعات mount (ممکن است None باشد!)
+                    info_partition = self.get_partition_mount_info(partition_name)
+
+                    # ✅ اصلاح اصلی: بررسی None قبل از دسترسی به فیلدها
+                    if info_partition is not None:
+                        mount_point = info_partition["mount_point"]
+                        filesystem = info_partition["filesystem"]
+                        options = info_partition["options"]
+                        dump = info_partition["dump"]
+                        fsck = info_partition["fsck"]
+                    else:
+                        # اگر mount نشده باشد، همه فیلدها None باشند
+                        mount_point = None
+                        filesystem = None
+                        options = None
+                        dump = None
+                        fsck = None
+
+                    partitions_info.append({
+                        "name": partition_name,
+                        "path": partition_path,
+                        "size_bytes": size_bytes,
+                        "wwn": self.get_wwn_by_entry(partition_name),
+                        "mount_point": mount_point,
+                        "filesystem": filesystem,
+                        "options": options,
+                        "dump": dump,
+                        "fsck": fsck,
+                    })
+        except (OSError, IOError):
+            pass
+
+        disk_info["partitions"] = partitions_info
+        return disk_info
+
+    def get_disks_info_all(self) -> List[Dict[str, Any]]:
+        """جمع‌آوری اطلاعات تمام دیسک‌های سیستم.
+
+        Returns: List[Dict[str, Any]]: لیستی از دیکشنری‌های اطلاعات دیسک.
+        """
+        return [self.get_disk_info(disk) for disk in self.disks]
 
     def get_os_disk(self) -> Optional[str]:
         """شناسایی دیسکی که سیستم‌عامل روی آن نصب شده (با mountpoint = /).
@@ -349,112 +457,6 @@ class DiskManager:
             return temp
 
         return None
-
-    def get_disk_info(self, disk: str) -> Dict[str, Any]:
-        """
-        جمع‌آوری تمام اطلاعات یک دیسک خاص، همراه با اطلاعات پارتیشن‌ها (در صورت وجود).
-
-        Args:
-            disk (str): نام دیسک (مثل 'sda').
-
-        Returns:
-            Dict[str, Any]: دیکشنری کامل اطلاعات دیسک و پارتیشن‌ها.
-        """
-        # اطلاعات پایه دیسک
-        disk_info = {
-            "disk": disk,
-            "model": self.get_model(disk),
-            "vendor": self.get_vendor(disk),
-            "state": self.get_stat(disk),
-            "device_path": self.get_path(disk),
-            "physical_block_size": self.get_physical_block_size(disk),
-            "logical_block_size": self.get_logical_block_size(disk),
-            "scheduler": self.get_scheduler(disk),
-            "wwid": self.get_wwid(disk),
-            "total_bytes": self.get_total_size(disk),
-            "temperature_celsius": self.get_temperature(disk),
-            "wwn": self.get_wwn_by_entry(disk),
-            "uuid": self.get_uuid(disk),
-            "slot_number": self.get_slot_number(disk),
-            "type": self.get_disk_type(disk),
-            "has_partition": self.has_partitions(disk),
-        }
-
-        # اگر دیسک پارتیشن نداشت، فقط فضای کل دیسک را اضافه کن
-        if not self.has_partitions(disk):
-            disk_info.update({
-                "used_bytes": None,
-                "free_bytes": None,
-                "usage_percent": None,
-                "partitions": []  # لیست خالی برای یکدستی
-            })
-            return disk_info
-
-        # اگر پارتیشن داشت:
-        # ۱. اطلاعات فضای کل دیسک را از تابع مخصوص دریافت کن
-        usage = self.get_mounted_disk_size_usage(disk)
-        disk_info.update({
-            "used_bytes": usage["used_bytes"],
-            "free_bytes": usage["free_bytes"],
-            "usage_percent": usage["usage_percent"],
-        })
-
-        # ۲. اطلاعات هر پارتیشن را جمع‌آوری کن
-        partitions_info = []
-        sys_disk_path = f"/sys/block/{disk}"
-
-        try:
-            for entry in os.listdir(sys_disk_path):
-                if entry == disk:
-                    continue
-                # تشخیص پارتیشن (پشتیبانی از همه انواع)
-                if (disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk) and len(entry) > len(disk)) or \
-                        (not disk.startswith(("nvme", "mmcblk")) and entry.startswith(disk)):
-
-                    partition_name = entry
-                    partition_path = f"/dev/{partition_name}"
-                    size_bytes = self.get_total_size(partition_name)
-
-                    # دریافت اطلاعات mount (ممکن است None باشد!)
-                    info_partition = self.get_partition_mount_info(partition_name)
-
-                    # ✅ اصلاح اصلی: بررسی None قبل از دسترسی به فیلدها
-                    if info_partition is not None:
-                        mount_point = info_partition["mount_point"]
-                        filesystem = info_partition["filesystem"]
-                        options = info_partition["options"]
-                        dump = info_partition["dump"]
-                        fsck = info_partition["fsck"]
-                    else:
-                        # اگر mount نشده باشد، همه فیلدها None باشند
-                        mount_point = None
-                        filesystem = None
-                        options = None
-                        dump = None
-                        fsck = None
-
-                    partitions_info.append({
-                        "name": partition_name,
-                        "path": partition_path,
-                        "size_bytes": size_bytes,
-                        "wwn": self.get_wwn_by_entry(partition_name),
-                        "mount_point": mount_point,
-                        "filesystem": filesystem,
-                        "options": options,
-                        "dump": dump,
-                        "fsck": fsck,
-                    })
-        except (OSError, IOError):
-            pass
-
-        disk_info["partitions"] = partitions_info
-        return disk_info
-    def get_all_disks_info(self) -> List[Dict[str, Any]]:
-        """جمع‌آوری اطلاعات تمام دیسک‌های سیستم.
-
-        Returns: List[Dict[str, Any]]: لیستی از دیکشنری‌های اطلاعات دیسک.
-        """
-        return [self.get_disk_info(disk) for disk in self.disks]
 
     def get_wwn_by_entry(self, entry: str) -> str:
         """
@@ -811,15 +813,15 @@ class DiskManager:
 
         return None
 
-    def wipe_disk(self, device_path: str) -> bool:
+    def disk_wipe_signatures(self, device_path: str) -> bool:
         """
-        پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن از یک دستگاه بلاکی.
+        پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن با wipefs.
 
         Args:
             device_path (str): مسیر کامل دستگاه (مثل '/dev/sda')
 
         Returns:
-            bool: True اگر عملیات موفق بود، در غیر این صورت False.
+            bool: True در صورت موفقیت، False در غیر این صورت.
         """
         if not isinstance(device_path, str) or not device_path.strip():
             return False
@@ -846,18 +848,18 @@ class DiskManager:
                 timeout=120
             )
             return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        except Exception:
             return False
 
-    def wipe_disk_clean(self, device_path: str) -> bool:
+    def disk_clear_zfs_label(self, device_path: str) -> bool:
         """
-        پاک‌سازی کامل یک دیسک از هر اثر فایل‌سیستم، پارتیشن، یا ZFS label.
+        پاک‌کردن لیبل ZFS از یک دستگاه با zpool labelclear.
 
         Args:
             device_path (str): مسیر کامل دستگاه (مثل '/dev/sda')
 
         Returns:
-            bool: True اگر عملیات موفق بود، در غیر این صورت False.
+            bool: True در صورت موفقیت یا اگر ZFS نصب نیست/لیبل نداشت، False در صورت خطا جدی.
         """
         if not isinstance(device_path, str) or not device_path.strip():
             return False
@@ -877,27 +879,33 @@ class DiskManager:
             return False
 
         try:
-            # مرحله ۱: پاک‌کردن لیبل ZFS (در صورت وجود)
-            try:
-                subprocess.run(
-                    ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", device_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    check=True
-                )
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-                pass  # نادیده گرفتن خطاها
-
-            # مرحله ۲: پاک‌کردن همه سیگنچرها
+            # تلاش برای پاک‌کردن لیبل ZFS
             result = subprocess.run(
-                ["/usr/bin/sudo", "/usr/sbin/wipefs", "-af", device_path],
+                ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", device_path],
                 capture_output=True,
                 text=True,
-                timeout=120,
-                check=False
+                timeout=30
             )
-            return result.returncode == 0
-
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            # اگر دستور اجرا شد (حتی اگر لیبل نداشت)، موفق در نظر گرفته می‌شود
+            return result.returncode in (0, 1)  # بعضی نسخه‌ها برای "no label" کد 1 می‌دهند
+        except FileNotFoundError:
+            # اگر zpool نصب نیست، فرض می‌کنیم ZFS وجود ندارد → عملیات موفق است
+            return True
+        except Exception:
             return False
+
+    def has_os_on_disk(self, disk: str) -> bool:
+        """
+        بررسی اینکه آیا سیستم‌عامل روی دیسک داده‌شده نصب شده است.
+
+        این تابع بر اساس mountpoint '/' در /proc/mounts کار می‌کند.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1')
+
+        Returns:
+            bool: True اگر سیستم‌عامل روی این دیسک نصب شده باشد، در غیر این صورت False.
+        """
+        if not isinstance(disk, str):
+            return False
+        return disk == self.os_disk

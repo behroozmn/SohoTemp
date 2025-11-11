@@ -11,7 +11,7 @@ class DiskListView(APIView):
         from pylibs import (StandardResponse,StandardErrorResponse)
         from pylibs.disk import DiskManager
         obj_disk = DiskManager()
-        return StandardResponse(data=obj_disk.get_all_disks_info(), message="User fetched", save_to_db=True)
+        return StandardResponse(data=obj_disk.get_disks_info_all(), message="User fetched", save_to_db=True)
 
 class DiskTestSuccessView(APIView):
     def get(self, request):
