@@ -371,9 +371,9 @@ class DiskManager:
             "logical_block_size": self.get_logical_block_size(disk),
             "scheduler": self.get_scheduler(disk),
             "wwid": self.get_wwid(disk),
-            "total_bytes": self.get_disk_total_size(disk),
+            "total_bytes": self.get_total_size(disk),
             "temperature_celsius": self.get_temperature(disk),
-            "wwn": self.get_wwn(disk),
+            "wwn": self.get_wwn_by_entry(disk),
             "uuid": self.get_uuid(disk),
             "slot_number": self.get_slot_number(disk),
             "type": self.get_disk_type(disk),
@@ -413,60 +413,42 @@ class DiskManager:
 
                     partition_name = entry
                     partition_path = f"/dev/{partition_name}"
+                    size_bytes = self.get_total_size(partition_name)
 
-                    # الف) حجم پارتیشن (از /sys/block)
-                    size_bytes = None
-                    try:
-                        with open(f"/sys/block/{disk}/{partition_name}/size", "r") as f:
-                            sectors = f.read().strip()
-                            if sectors.isdigit():
-                                size_bytes = int(sectors) * 512
-                    except (OSError, IOError, ValueError):
-                        pass
+                    # دریافت اطلاعات mount (ممکن است None باشد!)
+                    info_partition = self.get_partition_mount_info(partition_name)
 
-                    # ب) WWN پارتیشن (از /dev/disk/by-id)
-                    wwn = ""
-                    try:
-                        by_id_path = "/dev/disk/by-id"
-                        if os.path.exists(by_id_path):
-                            for link in os.listdir(by_id_path):
-                                if link.startswith(("wwn-", "nvme-")):
-                                    full_link = os.path.join(by_id_path, link)
-                                    try:
-                                        if os.path.realpath(full_link) == partition_path:
-                                            wwn = link
-                                            break
-                                    except (OSError, IOError):
-                                        continue
-                    except (OSError, IOError):
-                        pass
+                    # ✅ اصلاح اصلی: بررسی None قبل از دسترسی به فیلدها
+                    if info_partition is not None:
+                        mount_point = info_partition["mount_point"]
+                        filesystem = info_partition["filesystem"]
+                        options = info_partition["options"]
+                        dump = info_partition["dump"]
+                        fsck = info_partition["fsck"]
+                    else:
+                        # اگر mount نشده باشد، همه فیلدها None باشند
+                        mount_point = None
+                        filesystem = None
+                        options = None
+                        dump = None
+                        fsck = None
 
-                    # ج) فایل‌سیستم (از /proc/mounts یا /dev/disk/by-uuid)
-                    filesystem = None
-                    try:
-                        with open(self.PROC_MOUNTS, 'r') as f:
-                            for line in f:
-                                parts = line.split()
-                                if len(parts) >= 3 and parts[0] == partition_path:
-                                    filesystem = parts[2]
-                                    break
-                    except (OSError, IOError):
-                        pass
-
-                    # اضافه کردن اطلاعات پارتیشن
                     partitions_info.append({
                         "name": partition_name,
                         "path": partition_path,
                         "size_bytes": size_bytes,
-                        "wwn": wwn,
+                        "wwn": self.get_wwn_by_entry(partition_name),
+                        "mount_point": mount_point,
                         "filesystem": filesystem,
+                        "options": options,
+                        "dump": dump,
+                        "fsck": fsck,
                     })
         except (OSError, IOError):
             pass
 
         disk_info["partitions"] = partitions_info
         return disk_info
-
     def get_all_disks_info(self) -> List[Dict[str, Any]]:
         """جمع‌آوری اطلاعات تمام دیسک‌های سیستم.
 
@@ -474,49 +456,57 @@ class DiskManager:
         """
         return [self.get_disk_info(disk) for disk in self.disks]
 
-    def get_wwn(self, disk: str) -> str:
+    def get_wwn_by_entry(self, entry: str) -> str:
         """
-        دریافت WWN یا شناسه منحصر به فرد دیسک از /dev/disk/by-id.
+        دریافت WWN یا شناسه منحصر به فرد برای یک دیسک یا پارتیشن.
 
-        این تابع هم برای دیسک‌های SATA/SCSI (با پیشوند wwn-)
-        و هم برای NVMe (با پیشوند nvme-) کار می‌کند.
+        این تابع هم برای دیسک‌های کامل (مثل 'sda', 'nvme0n1')
+        و هم برای پارتیشن‌ها (مثل 'sda1', 'nvme0n1p1') کار می‌کند.
 
         Args:
-            disk (str): نام دیسک (مثل 'sda' یا 'nvme0n1').
+            entry (str): نام دیسک یا پارتیشن (مثل 'sda', 'sda1', 'nvme0n1', 'nvme0n1p1').
 
         Returns:
-            str: نام لینک منحصر به فرد (مثل 'wwn-0x5000...' یا 'nvme-nvme.10ec-...') یا رشته خالی.
+            str: شناسه منحصربه‌فرد (مثل 'wwn-0x5000...' یا 'nvme-nvme.10ec-...') یا رشته خالی.
         """
         by_id_path = "/dev/disk/by-id"
         if not os.path.exists(by_id_path):
             return ""
 
         try:
+            # ساخت مسیر واقعی دستگاه
+            target_path = f"/dev/{entry}"
+            target_real_path = os.path.realpath(target_path)
+
             # الگوی کلی: همه لینک‌ها
             all_links = glob.glob(os.path.join(by_id_path, "*"))
-            target_real_path = os.path.realpath(f"/dev/{disk}")
 
             wwn_candidate = None
             nvme_candidate = None
 
             for link in all_links:
                 try:
-                    if os.path.realpath(link) == target_real_path:
+                    link_real = os.path.realpath(link)
+                    if link_real == target_real_path:
                         basename = os.path.basename(link)
+
                         # اولویت 1: لینک‌های wwn-*
                         if basename.startswith("wwn-"):
                             return basename
-                        # اولویت 2: لینک‌های nvme-nvme.* (حاوی WWN واقعی NVMe)
+
+                        # اولویت 2: لینک‌های nvme-nvme.* (حاوی EUI/NGUID واقعی)
                         elif basename.startswith("nvme-nvme."):
                             nvme_candidate = basename
+
                         # اولویت 3: سایر لینک‌های nvme- (fallback)
                         elif basename.startswith("nvme-"):
                             if nvme_candidate is None:
                                 nvme_candidate = basename
+
                 except (OSError, IOError):
                     continue
 
-            # اگر wwn-* پیدا نشد، nvme-nvme.* را برگردان
+            # اگر wwn پیدا نشد، nvme candidate را برگردان
             if nvme_candidate:
                 return nvme_candidate
 
@@ -721,13 +711,193 @@ class DiskManager:
             pass
         return False
 
-    def get_disk_total_size(self, disk: str) -> Optional[int]:
-        """دریافت حجم خام دیسک از /sys/block/{disk}/size (به بایت)."""
+    def get_total_size(self, entry: str) -> Optional[int]:
+        """
+        دریافت حجم کل (به بایت) برای یک دیسک یا پارتیشن.
+
+        - اگر ورودی یک دیسک باشد (مثل 'sda', 'nvme0n1') → حجم کل دیسک را برمی‌گرداند.
+        - اگر ورودی یک پارتیشن باشد (مثل 'sda1', 'nvme0n1p1') → حجم آن پارتیشن را برمی‌گرداند.
+
+        Args:
+            entry (str): نام دیسک یا پارتیشن (مثل 'sda', 'sda1', 'nvme0n1', 'nvme0n1p1').
+
+        Returns:
+            Optional[int]: حجم به بایت یا None در صورت خطا یا عدم وجود.
+        """
         try:
-            with open(f"/sys/block/{disk}/size", "r") as f:
-                sectors = f.read().strip()
-                if sectors.isdigit():
-                    return int(sectors) * 512
+            # بررسی الگوهای پارتیشن
+            is_partition = False
+            base_disk = entry
+
+            # NVMe: nvme0n1p1 → base = nvme0n1
+            nvme_match = re.match(r'^(nvme\d+n\d+)p\d+$', entry)
+            if nvme_match:
+                is_partition = True
+                base_disk = nvme_match.group(1)
+
+            # MMC: mmcblk0p1 → base = mmcblk0
+            mmc_match = re.match(r'^(mmcblk\d+)p\d+$', entry)
+            if mmc_match:
+                is_partition = True
+                base_disk = mmc_match.group(1)
+
+            # SATA/SCSI: sda1, sdab123, sda10 → base = sda, sdab
+            if not is_partition:
+                # اگر شامل عدد در انتها باشد و با حرف شروع شود
+                if re.match(r'^[a-z]+\d+$', entry):
+                    # حذف اعداد از انتها تا پایه دیسک به دست آید
+                    base_candidate = re.sub(r'\d+$', '', entry)
+                    # تأیید اینکه پایه واقعاً یک دیسک است
+                    if base_candidate and os.path.exists(f"/sys/block/{base_candidate}"):
+                        is_partition = True
+                        base_disk = base_candidate
+
+            # تعیین مسیر فایل size
+            if is_partition:
+                size_path = f"/sys/block/{base_disk}/{entry}/size"
+            else:
+                size_path = f"/sys/block/{entry}/size"
+
+            # خواندن و تبدیل به بایت
+            if os.path.exists(size_path):
+                with open(size_path, 'r') as f:
+                    raw = f.read().strip()
+                    if raw.isdigit():
+                        return int(raw) * 512  # سکتور → بایت
+
         except (OSError, IOError, ValueError):
             pass
+
         return None
+
+    def get_partition_mount_info(self, partition_name: str) -> Optional[Dict[str, Any]]:
+        """
+        دریافت اطلاعات mount یک پارتیشن خاص از /proc/mounts.
+
+        Args:
+            partition_name (str): نام پارتیشن بدون مسیر (مثل 'nvme0n1p2', 'sda1').
+
+        Returns:
+            Optional[Dict[str, Any]]: اطلاعات پارتیشن شامل:
+                - device: مسیر دستگاه (مثل '/dev/nvme0n1p2')
+                - mount_point: نقطه mount (مثل '/')
+                - filesystem: نوع فایل‌سیستم (مثل 'ext4')
+                - options: لیست گزینه‌های mount
+                - dump: فیلد dump (معمولاً 0)
+                - fsck: فیلد fsck (معمولاً 0)
+                یا None اگر پارتیشن mount نشده باشد.
+        """
+        device_path = f"/dev/{partition_name}"
+
+        try:
+            with open(self.PROC_MOUNTS, 'r') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) < 6:
+                        continue
+
+                    # بررسی اینکه آیا این خط مربوط به پارتیشن ما است
+                    if parts[0] == device_path:
+                        return {
+                            "device": parts[0],  # تغییر نام از "path" به "device" برای انسجام
+                            "mount_point": parts[1],
+                            "filesystem": parts[2],
+                            "options": parts[3].split(','),
+                            "dump": int(parts[4]),
+                            "fsck": int(parts[5]),
+                        }
+        except (OSError, IOError, ValueError):
+            pass
+
+        return None
+
+    def wipe_disk(self, device_path: str) -> bool:
+        """
+        پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن از یک دستگاه بلاکی.
+
+        Args:
+            device_path (str): مسیر کامل دستگاه (مثل '/dev/sda')
+
+        Returns:
+            bool: True اگر عملیات موفق بود، در غیر این صورت False.
+        """
+        if not isinstance(device_path, str) or not device_path.strip():
+            return False
+
+        device_path = device_path.strip()
+        if not device_path.startswith("/dev/"):
+            return False
+
+        device_name = os.path.basename(device_path)
+        if not re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$', device_name):
+            return False
+
+        if not os.path.exists(device_path):
+            return False
+
+        if not os.path.exists(f"/sys/block/{device_name}"):
+            return False
+
+        try:
+            result = subprocess.run(
+                ["/usr/bin/sudo", "/usr/sbin/wipefs", "-a", device_path],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            return False
+
+    def wipe_disk_clean(self, device_path: str) -> bool:
+        """
+        پاک‌سازی کامل یک دیسک از هر اثر فایل‌سیستم، پارتیشن، یا ZFS label.
+
+        Args:
+            device_path (str): مسیر کامل دستگاه (مثل '/dev/sda')
+
+        Returns:
+            bool: True اگر عملیات موفق بود، در غیر این صورت False.
+        """
+        if not isinstance(device_path, str) or not device_path.strip():
+            return False
+
+        device_path = device_path.strip()
+        if not device_path.startswith("/dev/"):
+            return False
+
+        device_name = os.path.basename(device_path)
+        if not re.match(r'^(sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$', device_name):
+            return False
+
+        if not os.path.exists(device_path):
+            return False
+
+        if not os.path.exists(f"/sys/block/{device_name}"):
+            return False
+
+        try:
+            # مرحله ۱: پاک‌کردن لیبل ZFS (در صورت وجود)
+            try:
+                subprocess.run(
+                    ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", device_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=True
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+                pass  # نادیده گرفتن خطاها
+
+            # مرحله ۲: پاک‌کردن همه سیگنچرها
+            result = subprocess.run(
+                ["/usr/bin/sudo", "/usr/sbin/wipefs", "-af", device_path],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False
+            )
+            return result.returncode == 0
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            return False
