@@ -798,7 +798,12 @@ class DiskManager:
             return False
 
     def disk_clear_zfs_label(self, device_path: str) -> bool:
-        """پاک‌کردن لیبل «زِد اف اس» از یک دستگاه با zpool labelclear.
+        """پاک‌کردن لیبل «زِد اف اس» از اولین پارتیشن یک دیسک با zpool labelclear.
+
+        این تابع:
+        1. نام دیسک را از device_path استخراج می‌کند
+        2. اولین پارتیشن آن دیسک را پیدا می‌کند (مثل sda1, nvme0n1p1)
+        3. دستور zpool labelclear را روی آن پارتیشن اجرا می‌کند
 
         Args:
             device_path (str): مسیر کامل دستگاه (مثل '/dev/sda').
@@ -806,6 +811,7 @@ class DiskManager:
         Returns:
             bool: مقدار «ترو» در صورت موفقیت یا اگر «زِد اف اس» نصب نیست، مقدار «فالس» در صورت خطا جدی.
         """
+        # اعتبارسنجی اولیه - همان منطق کلاس شما
         if not isinstance(device_path, str) or not device_path.strip():
             return False
 
@@ -820,16 +826,41 @@ class DiskManager:
         if not self._is_block_device(device_name):
             return False
 
+        # پیدا کردن اولین پارتیشن
+        sys_disk_path = f"{self.SYS_BLOCK}/{device_name}"
+        partitions = []
+
+        try:
+            for entry in os.listdir(sys_disk_path):
+                if entry == device_name:
+                    continue
+                # بررسی اینکه آیا پارتیشن است (همان منطق کلاس شما در get_disk_info)
+                if (device_name.startswith(("nvme", "mmcblk")) and entry.startswith(device_name) and len(entry) > len(device_name)) or \
+                        (not device_name.startswith(("nvme", "mmcblk")) and entry.startswith(device_name)):
+                    partitions.append(entry)
+        except (OSError, IOError):
+            return False
+
+        # اگر پارتیشنی وجود نداشت، روی خود دیسک عمل کن (برای سازگاری)
+        if not partitions:
+            target_path = device_path
+        else:
+            # مرتب‌سازی هوشمند برای پیدا کردن اولین پارتیشن (sda1 قبل از sda10)
+            partitions.sort(key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+            first_partition = partitions[0]
+            target_path = f"/dev/{first_partition}"
+
+        # اجرای دستور روی مسیر هدف (اولین پارتیشن یا خود دیسک)
         try:
             result = subprocess.run(
-                ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", device_path],
+                ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", target_path],
                 capture_output=True,
                 text=True,
                 timeout=30
             )
             return result.returncode in (0, 1)
         except FileNotFoundError:
-            # اگر zpool نصب نیست، فرض می‌کنیم «زِد اف اس» وجود ندارد
+            # اگر zpool نصب نیست، فرض می‌کنیم ZFS وجود ندارد → موفقیت
             return True
         except Exception:
             return False
