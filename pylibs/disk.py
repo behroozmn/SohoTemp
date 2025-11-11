@@ -375,6 +375,7 @@ class DiskManager:
             "uuid": self.get_uuid(disk),
             "slot_number": self.get_slot_number(disk),
             "type": self.get_disk_type(disk),
+            "has_partition": self.has_partitions(disk),
         }
 
     def get_all_disks_info(self) -> List[Dict[str, Any]]:
