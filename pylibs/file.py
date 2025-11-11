@@ -169,7 +169,7 @@ class File_Temp:
 class FileManager:
 
     @classmethod
-    def read_strip(cls, path: str, default: str = None) -> str:
+    def read_strip(cls, path: str, default: str = "") -> str:
         """خواندن یک فایل متنی و إستریپ(حذف ابتدا و انتها) آن
             Args:
                 path (str): مسیر فایل.

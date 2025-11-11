@@ -56,18 +56,6 @@ class DiskManager:
         """
         return os.path.exists(f"{self.SYS_BLOCK}/{device_name}")
 
-    def _read_file_safe(self, path: str, default: str = "") -> str:
-        """خواندن ایمن یک فایل با استفاده از FileManager.
-
-        Args:
-            path (str): مسیر فایل.
-            default (str): مقدار پیش‌فرض در صورت خطا.
-
-        Returns:
-            str: محتوای فایل یا مقدار پیش‌فرض.
-        """
-        return FileManager.read_strip(path, default)
-
     def _get_base_disk_from_partition(self, partition_name: str) -> Optional[str]:
         """استخراج نام دیسک اصلی از نام پارتیشن.
 
@@ -241,7 +229,7 @@ class DiskManager:
         # روش ۱: فایل مستقیم slot
         slot_path = f"{self.SYS_BLOCK}/{disk}/device/slot"
         if os.path.exists(slot_path):
-            return self._read_file_safe(slot_path)
+            return FileManager.read_strip(slot_path)
 
         # روش ۲: جستجو در scsi_disk برای enclosure
         if os.path.exists(self.SYS_SCSI_DISK):
@@ -255,7 +243,7 @@ class DiskManager:
                             if resolved == disk:
                                 for fname in os.listdir(device_path):
                                     if "enclosure" in fname or "slot" in fname:
-                                        slot_val = self._read_file_safe(os.path.join(device_path, fname))
+                                        slot_val = FileManager.read_strip(os.path.join(device_path, fname))
                                         if slot_val.isdigit():
                                             return slot_val
                         except (OSError, ValueError):
@@ -288,7 +276,7 @@ class DiskManager:
         Returns:
             str: نام مدل دیسک یا رشته خالی در صورت عدم دسترسی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/device/model")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/device/model")
 
     def get_vendor(self, disk: str) -> str:
         """دریافت نام تولیدکننده (vendor) دیسک.
@@ -299,7 +287,7 @@ class DiskManager:
         Returns:
             str: نام vendor یا رشته خالی در صورت عدم دسترسی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/device/vendor")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/device/vendor")
 
     def get_stat(self, disk: str) -> str:
         """دریافت وضعیت فعلی دیسک (مثل 'running').
@@ -310,7 +298,7 @@ class DiskManager:
         Returns:
             str: وضعیت دیسک یا رشته خالی در صورت عدم دسترسی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/device/state")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/device/state")
 
     def get_physical_block_size(self, disk: str) -> str:
         """دریافت اندازه فیزیکی بلاک دیسک به بایت.
@@ -321,7 +309,7 @@ class DiskManager:
         Returns:
             str: اندازه بلاک فیزیکی (معمولاً '512' یا '4096') یا رشته خالی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/queue/physical_block_size")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/queue/physical_block_size")
 
     def get_logical_block_size(self, disk: str) -> str:
         """دریافت اندازه منطقی بلاک دیسک به بایت.
@@ -332,7 +320,7 @@ class DiskManager:
         Returns:
             str: اندازه بلاک منطقی (معمولاً '512') یا رشته خالی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/queue/logical_block_size")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/queue/logical_block_size")
 
     def get_scheduler(self, disk: str) -> str:
         """دریافت الگوریتم زمان‌بندی I/O دیسک.
@@ -343,7 +331,7 @@ class DiskManager:
         Returns:
             str: نام scheduler (مثل 'mq-deadline [none]') یا رشته خالی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/queue/scheduler")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/queue/scheduler")
 
     def get_wwid(self, disk: str) -> str:
         """دریافت شناسه جهانی WWID دیسک (اگر در دسترس باشد).
@@ -354,7 +342,7 @@ class DiskManager:
         Returns:
             str: WWID (مثل '0x5002538d...') یا رشته خالی.
         """
-        return self._read_file_safe(f"{self.SYS_BLOCK}/{disk}/device/wwid")
+        return FileManager.read_strip(f"{self.SYS_BLOCK}/{disk}/device/wwid")
 
     def get_path(self, disk: str) -> str:
         """دریافت مسیر واقعی (realpath) دیسک در سیستم فایل.
@@ -398,7 +386,7 @@ class DiskManager:
                 size_path = f"{self.SYS_BLOCK}/{entry}/size"
 
             if os.path.exists(size_path):
-                raw = self._read_file_safe(size_path)
+                raw = FileManager.read_strip(size_path)
                 if raw.isdigit():
                     return int(raw) * 512  # سکتور → بایت
         except (OSError, IOError, ValueError):
@@ -615,7 +603,7 @@ class DiskManager:
                     if hwmon_device_path == disk_device_path:
                         temp_path = os.path.join(hwmon_path, "temp1_input")
                         if os.path.exists(temp_path):
-                            temp_raw = self._read_file_safe(temp_path)
+                            temp_raw = FileManager.read_strip(temp_path)
                             if temp_raw.lstrip('-').isdigit():
                                 return int(temp_raw) // 1000
         except (OSError, ValueError, IOError):
@@ -627,7 +615,7 @@ class DiskManager:
         temp_path = f"{self.SYS_BLOCK}/{disk}/device/temp"
         try:
             if os.path.exists(temp_path):
-                temp_str = self._read_file_safe(temp_path)
+                temp_str = FileManager.read_strip(temp_path)
                 if temp_str.lstrip('-').isdigit():
                     temp = int(temp_str)
                     return temp // 1000 if temp > 1000 else temp
@@ -650,7 +638,7 @@ class DiskManager:
                         if resolved == disk:
                             temp_path = os.path.join(device_path, "temperature")
                             if os.path.exists(temp_path):
-                                temp_str = self._read_file_safe(temp_path)
+                                temp_str = FileManager.read_strip(temp_path)
                                 if temp_str.isdigit():
                                     return int(temp_str)
                     except (OSError, ValueError):
