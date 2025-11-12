@@ -11,13 +11,15 @@ logger = logging.getLogger(__name__)
 
 def _validate_disk_name(disk_name: str) -> tuple[bool, str | None]:
     """
-    اعتبارسنجی نام دیسک.
+    اعتبارسنجی نام دیسک.یعنی بررسی می‌کند که: ۱-آیا نام دیسک وجود دارد(خالی یا نان نباشد) ۲-رشته باشد
+    چرا نیاز است؟ برای جلوگیری از خطا در مراحل بعدی وقتی ورودی کاربر مخرب یا نامعتبر باشد.
 
     Args:
         disk_name (str): نام دیسک برای بررسی.
 
-    Returns:
-        tuple[bool, str | None]: (موفقیت, پیام خطا یا None)
+    Returns: tuple[bool, str | None]:
+        Validate: (True, None)
+        Invalidate: (False, "نام دیسک معتبر نیست.")
     """
     if not disk_name or not isinstance(disk_name, str):
         return False, "نام دیسک معتبر نیست."
@@ -31,8 +33,11 @@ def _get_disk_manager_and_validate(disk_name: str) -> tuple[DiskManager | None, 
     Args:
         disk_name (str): نام دیسک.
 
-    Returns:
-        tuple[DiskManager | None, str | None]: (manager یا None, پیام خطا یا None)
+    Returns: tuple[DiskManager | None, str | None]
+        Validate: (<DiskManager object>, None)
+
+        Invalidate: (None, "متن خطا")
+
     """
     is_valid, error_msg = _validate_disk_name(disk_name)
     if not is_valid:
