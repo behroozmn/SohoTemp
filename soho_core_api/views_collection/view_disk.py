@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 
 def _validate_disk_name(disk_name: str) -> tuple[bool, str | None]:
     """
-    اعتبارسنجی نام دیسک.یعنی بررسی می‌کند که: ۱-آیا نام دیسک وجود دارد(خالی یا نان نباشد) ۲-رشته باشد
+    اعتبارسنجی نام دیسک. یعنی بررسی می‌کند که:
+    ۱- آیا نام دیسک وجود دارد (خالی یا None نباشد)
+    ۲- رشته باشد
     چرا نیاز است؟ برای جلوگیری از خطا در مراحل بعدی وقتی ورودی کاربر مخرب یا نامعتبر باشد.
 
     Args:
@@ -35,9 +37,7 @@ def _get_disk_manager_and_validate(disk_name: str) -> tuple[DiskManager | None, 
 
     Returns: tuple[DiskManager | None, str | None]
         Validate: (<DiskManager object>, None)
-
         Invalidate: (None, "متن خطا")
-
     """
     is_valid, error_msg = _validate_disk_name(disk_name)
     if not is_valid:
@@ -51,6 +51,9 @@ def _get_disk_manager_and_validate(disk_name: str) -> tuple[DiskManager | None, 
     except Exception as e:
         logger.error(f"Error creating DiskManager: {str(e)}")
         return None, "خطا در ایجاد منیجر دیسک."
+
+
+# ------------------------ APIهای عمومی (بدون نیاز به نام دیسک) ------------------------
 
 
 class DiskListView(APIView):
@@ -78,6 +81,84 @@ class DiskListView(APIView):
             )
 
 
+class DiskNameListView(APIView):
+    """دریافت لیست نام تمام دیسک‌های فیزیکی (مثل ['sda', 'nvme0n1'])."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            obj_disk = DiskManager()
+            disk_names = obj_disk.disks
+            return StandardResponse(
+                data={"disk_names": disk_names},
+                message="لیست نام دیسک‌ها با موفقیت دریافت شد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskNameListView: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_names_error",
+                error_message="خطا در دریافت لیست نام دیسک‌ها.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskCountView(APIView):
+    """دریافت تعداد دیسک‌های فیزیکی سیستم."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            obj_disk = DiskManager()
+            count = len(obj_disk.disks)
+            return StandardResponse(
+                data={"disk_count": count},
+                message="تعداد دیسک‌ها با موفقیت شمارش شد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskCountView: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_count_error",
+                error_message="خطا در شمارش دیسک‌ها.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class OSdiskView(APIView):
+    """دریافت نام دیسکی که سیستم‌عامل روی آن نصب شده است."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            obj_disk = DiskManager()
+            os_disk = obj_disk.os_disk
+            return StandardResponse(
+                data={"os_disk": os_disk},
+                message="دیسک سیستم‌عامل با موفقیت شناسایی شد." if os_disk else "دیسک سیستم‌عامل یافت نشد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in OSdiskView: {str(e)}")
+            return StandardErrorResponse(
+                error_code="os_disk_error",
+                error_message="خطا در شناسایی دیسک سیستم‌عامل.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+# ------------------------ APIهای مربوط به یک دیسک خاص ------------------------
+
+
 class DiskDetailView(APIView):
     """دریافت جزئیات یک دیسک خاص بر اساس نام آن."""
     permission_classes = [IsAuthenticated]
@@ -86,11 +167,12 @@ class DiskDetailView(APIView):
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
                 return StandardErrorResponse(
                     error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
                     error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
                     request_data=dict(request.query_params),
-                    status=404 if "یافت نشد" in (error_msg or "") else 400
+                    status=status_code
                 )
 
             disk_info = obj_disk.get_disk_info(disk_name)
@@ -109,6 +191,322 @@ class DiskDetailView(APIView):
                 request_data=dict(request.query_params),
                 save_to_db=True
             )
+
+
+class DiskPartitionCountView(APIView):
+    """دریافت تعداد پارتیشن‌های یک دیسک بر اساس نام آن."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            count = obj_disk.get_partition_count(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "partition_count": count},
+                message=f"تعداد پارتیشن‌های دیسک '{disk_name}' با موفقیت دریافت شد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskPartitionCountView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="partition_count_error",
+                error_message=f"خطا در دریافت تعداد پارتیشن‌های دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskPartitionNamesView(APIView):
+    """دریافت لیست نام پارتیشن‌های یک دیسک بر اساس نام آن."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            names = obj_disk.get_partition_names(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "partition_names": names},
+                message=f"لیست پارتیشن‌های دیسک '{disk_name}' با موفقیت دریافت شد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskPartitionNamesView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="partition_names_error",
+                error_message=f"خطا در دریافت لیست پارتیشن‌های دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskTypeView(APIView):
+    """دریافت نوع دیسک (NVMe, SATA, SCSI, USB, ...)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            disk_type = obj_disk.get_disk_type(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "type": disk_type},
+                message=f"نوع دیسک '{disk_name}' با موفقیت دریافت شد.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskTypeView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_type_error",
+                error_message=f"خطا در دریافت نوع دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskTemperatureView(APIView):
+    """دریافت دمای دیسک (در صورت پشتیبانی)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            temp = obj_disk.get_temperature(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "temperature_celsius": temp},
+                message=f"دمای دیسک '{disk_name}' با موفقیت دریافت شد." if temp is not None else f"دمای دیسک '{disk_name}' در دسترس نیست.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskTemperatureView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_temperature_error",
+                error_message=f"خطا در دریافت دمای دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskHasOSView(APIView):
+    """بررسی اینکه آیا سیستم‌عامل روی دیسک نصب شده است."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            has_os = obj_disk.has_os_on_disk(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "has_os": has_os},
+                message=f"دیسک '{disk_name}' {'سیستم‌عامل دارد.' if has_os else 'سیستم‌عامل ندارد.'}",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskHasOSView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_has_os_error",
+                error_message=f"خطا در بررسی وجود سیستم‌عامل روی دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskHasPartitionsView(APIView):
+    """بررسی اینکه آیا دیسک پارتیشن دارد."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            has_partitions = obj_disk.has_partitions(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "has_partitions": has_partitions},
+                message=f"دیسک '{disk_name}' {'دارای پارتیشن است.' if has_partitions else 'فاقد پارتیشن است.'}",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskHasPartitionsView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_has_partitions_error",
+                error_message=f"خطا در بررسی وجود پارتیشن روی دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class DiskTotalSizeView(APIView):
+    """دریافت حجم کل دیسک به بایت."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, disk_name):
+        try:
+            obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
+            if obj_disk is None:
+                status_code = 404 if "یافت نشد" in (error_msg or "") else 400
+                return StandardErrorResponse(
+                    error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                    error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
+                    request_data=dict(request.query_params),
+                    status=status_code
+                )
+
+            total_size = obj_disk.get_total_size(disk_name)
+            return StandardResponse(
+                data={"disk": disk_name, "total_bytes": total_size},
+                message=f"حجم کل دیسک '{disk_name}' با موفقیت دریافت شد." if total_size is not None else f"حجم دیسک '{disk_name}' در دسترس نیست.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in DiskTotalSizeView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_total_size_error",
+                error_message=f"خطا در دریافت حجم کل دیسک '{disk_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+# ------------------------ APIهای مربوط به پارتیشن ------------------------
+
+
+class PartitionIsMountedView(APIView):
+    """بررسی اینکه آیا یک پارتیشن خاص mount شده است."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, partition_name):
+        try:
+            # اعتبارسنجی مقدماتی نام پارتیشن
+            if not partition_name or not isinstance(partition_name, str):
+                return StandardErrorResponse(
+                    error_code="invalid_partition_name",
+                    error_message="نام پارتیشن معتبر نیست.",
+                    request_data=dict(request.query_params),
+                    status=400
+                )
+
+            obj_disk = DiskManager()
+            mount_info = obj_disk.get_partition_mount_info(partition_name)
+            is_mounted = mount_info is not None
+            return StandardResponse(
+                data={
+                    "partition": partition_name,
+                    "is_mounted": is_mounted,
+                    "mount_info": mount_info
+                },
+                message=f"پارتیشن '{partition_name}' {'mount شده است.' if is_mounted else 'mount نشده است.'}",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in PartitionIsMountedView for {partition_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="partition_mount_check_error",
+                error_message=f"خطا در بررسی mount بودن پارتیشن '{partition_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+class PartitionTotalSizeView(APIView):
+    """دریافت حجم کل یک پارتیشن به بایت."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, partition_name):
+        try:
+            if not partition_name or not isinstance(partition_name, str):
+                return StandardErrorResponse(
+                    error_code="invalid_partition_name",
+                    error_message="نام پارتیشن معتبر نیست.",
+                    request_data=dict(request.query_params),
+                    status=400
+                )
+
+            obj_disk = DiskManager()
+            total_size = obj_disk.get_total_size(partition_name)
+            return StandardResponse(
+                data={"partition": partition_name, "total_bytes": total_size},
+                message=f"حجم کل پارتیشن '{partition_name}' با موفقیت دریافت شد." if total_size is not None else f"حجم پارتیشن '{partition_name}' در دسترس نیست.",
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+        except Exception as e:
+            logger.error(f"Error in PartitionTotalSizeView for {partition_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="partition_total_size_error",
+                error_message=f"خطا در دریافت حجم کل پارتیشن '{partition_name}'.",
+                exception=e,
+                request_data=dict(request.query_params),
+                save_to_db=True
+            )
+
+
+# ------------------------ APIهای عملیاتی (پاک‌کردن) ------------------------
 
 
 class DiskWipeSignaturesView(APIView):

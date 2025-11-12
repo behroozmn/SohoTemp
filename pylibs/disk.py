@@ -853,7 +853,7 @@ class DiskManager:
         # اجرای دستور روی مسیر هدف (اولین پارتیشن یا خود دیسک)
         try:
             result = subprocess.run(
-                ["/usr/bin/sudo", "/sbin/zpool", "labelclear", "-f", target_path],
+                ["/usr/bin/sudo", "/usr/bin/zpool", "labelclear", "-f", target_path],
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -864,3 +864,55 @@ class DiskManager:
             return True
         except Exception:
             return False
+
+    def get_partition_count(self, disk: str) -> int:
+        """دریافت تعداد پارتیشن‌های یک دیسک.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1').
+
+        Returns:
+            int: تعداد پارتیشن‌ها (۰ تا n).
+        """
+        return len(self.get_partition_names(disk))
+
+    def get_partition_names(self, disk: str) -> List[str]:
+        """دریافت لیست نام پارتیشن‌های یک دیسک.
+
+        این متد با استفاده از ساختار دایرکتوری /sys/block/{disk}/
+        پارتیشن‌ها را شناسایی می‌کند. برای دیسک‌های NVMe و MMC هم پشتیبانی می‌شود.
+
+        Args:
+            disk (str): نام دیسک (مثل 'sda', 'nvme0n1', 'mmcblk0').
+
+        Returns:
+            List[str]: لیستی از نام پارتیشن‌ها (مثل ['sda1', 'sda2'] یا ['nvme0n1p1', 'nvme0n1p2']).
+        """
+        if not self._is_valid_device_name(disk) or not self._is_block_device(disk):
+            return []
+
+        sys_disk_path = f"{self.SYS_BLOCK}/{disk}"
+        partition_names = []
+
+        try:
+            for entry in os.listdir(sys_disk_path):
+                if entry == disk:
+                    continue
+                # بررسی الگوی پارتیشن برای انواع مختلف دیسک
+                if disk.startswith(("nvme", "mmcblk")):
+                    # مثلاً nvme0n1 → nvme0n1p1, mmcblk0 → mmcblk0p1
+                    if entry.startswith(disk) and len(entry) > len(disk):
+                        # بررسی اینکه بعد از نام دیسک، یک 'p' و سپس عدد بیاید
+                        suffix = entry[len(disk):]
+                        if re.match(r'^p\d+$', suffix):
+                            partition_names.append(entry)
+                else:
+                    # مثلاً sda → sda1, sda10
+                    if entry.startswith(disk) and entry[len(disk):].isdigit():
+                        partition_names.append(entry)
+        except (OSError, IOError):
+            pass
+
+        # مرتب‌سازی هوشمند: sda1 قبل از sda10
+        partition_names.sort(key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+        return partition_names
