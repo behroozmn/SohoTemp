@@ -10,24 +10,39 @@ logger = logging.getLogger(__name__)
 
 
 def _str_to_bool(value) -> bool:
-    """تبدیل رشته به بولین با پشتیبانی از 'true'/'false' حساس به حروف کوچک/بزرگ."""
+    """فقط در صورتی True برمی‌گرداند که مقدار دقیقاً 'true' باشد (بدون حساسیت به کوچک/بزرگی)."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.lower() in ('true', '1', 'yes', 'on')
-    return bool(value)
+        return value.strip().lower() == "true"
+    return False
 
 
-def _get_save_to_db_flag(request_data: dict) -> bool:
-    """استخراج و تبدیل مقدار save_to_db از بدنه یا query_params."""
-    return _str_to_bool(request_data.get("save_to_db", False))
+def _get_save_to_db_flag(request) -> bool:
+    """
+    استخراج و تبدیل مقدار save_to_db از بدنه یا query_params.
+    این تابع به‌صورت خودکار تشخیص می‌دهد که درخواست GET است یا POST
+    و مقدار را از محل مناسب می‌خواند.
+    """
+    try:
+        if hasattr(request, "method"):
+            if request.method.upper() == "GET":
+                raw_value = request.query_params.get("save_to_db", False)
+            else:
+                raw_value = request.data.get("save_to_db", request.query_params.get("save_to_db", False))
+        elif isinstance(request, dict):
+            raw_value = request.get("save_to_db", False)
+        else:
+            raw_value = False
+    except Exception as e:
+        logger.warning(f"Error parsing save_to_db flag: {e}")
+        raw_value = False
+    return _str_to_bool(raw_value)
 
 
 def _validate_disk_name(disk_name: str) -> tuple[bool, str | None]:
     """
-    اعتبارسنجی نام دیسک. یعنی بررسی می‌کند که:
-    ۱- آیا نام دیسک وجود دارد (خالی یا None نباشد)
-    ۲- رشته باشد
+    اعتبارسنجی نام دیسک.یعنی بررسی می‌کند که: ۱-آیا نام دیسک وجود دارد(خالی یا نان نباشد) ۲-رشته باشد
     چرا نیاز است؟ برای جلوگیری از خطا در مراحل بعدی وقتی ورودی کاربر مخرب یا نامعتبر باشد.
 
     Args:
@@ -71,10 +86,11 @@ def _get_disk_manager_and_validate(disk_name: str) -> tuple[DiskManager | None, 
 
 
 class DiskListView(APIView):
+    """دریافت لیست تمام دیسک‌های سیستم با جزئیات کامل."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk = DiskManager()
             disks_info = obj_disk.get_disks_info_all()
@@ -96,10 +112,11 @@ class DiskListView(APIView):
 
 
 class DiskNameListView(APIView):
+    """دریافت لیست نام تمام دیسک‌های فیزیکی (مثل ['sda', 'nvme0n1'])."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk = DiskManager()
             disk_names = obj_disk.disks
@@ -121,10 +138,11 @@ class DiskNameListView(APIView):
 
 
 class DiskCountView(APIView):
+    """دریافت تعداد دیسک‌های فیزیکی سیستم."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk = DiskManager()
             count = len(obj_disk.disks)
@@ -146,10 +164,11 @@ class DiskCountView(APIView):
 
 
 class OSdiskView(APIView):
+    """دریافت نام دیسکی که سیستم‌عامل روی آن نصب شده است."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk = DiskManager()
             os_disk = obj_disk.os_disk
@@ -174,10 +193,11 @@ class OSdiskView(APIView):
 
 
 class DiskDetailView(APIView):
+    """دریافت جزئیات یک دیسک خاص بر اساس نام آن."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -208,10 +228,11 @@ class DiskDetailView(APIView):
 
 
 class DiskPartitionCountView(APIView):
+    """دریافت تعداد پارتیشن‌های یک دیسک بر اساس نام آن."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -242,10 +263,11 @@ class DiskPartitionCountView(APIView):
 
 
 class DiskPartitionNamesView(APIView):
+    """دریافت لیست نام پارتیشن‌های یک دیسک بر اساس نام آن."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -276,10 +298,11 @@ class DiskPartitionNamesView(APIView):
 
 
 class DiskTypeView(APIView):
+    """دریافت نوع دیسک (NVMe, SATA, SCSI, USB, ...)."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -310,10 +333,11 @@ class DiskTypeView(APIView):
 
 
 class DiskTemperatureView(APIView):
+    """دریافت دمای دیسک (در صورت پشتیبانی)."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -344,10 +368,11 @@ class DiskTemperatureView(APIView):
 
 
 class DiskHasOSView(APIView):
+    """بررسی اینکه آیا سیستم‌عامل روی دیسک نصب شده است."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -378,10 +403,11 @@ class DiskHasOSView(APIView):
 
 
 class DiskHasPartitionsView(APIView):
+    """بررسی اینکه آیا دیسک پارتیشن دارد."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -412,10 +438,11 @@ class DiskHasPartitionsView(APIView):
 
 
 class DiskTotalSizeView(APIView):
+    """دریافت حجم کل دیسک به بایت."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -449,10 +476,11 @@ class DiskTotalSizeView(APIView):
 
 
 class PartitionIsMountedView(APIView):
+    """بررسی اینکه آیا یک پارتیشن خاص mount شده است."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, partition_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         if not partition_name or not isinstance(partition_name, str):
             return StandardErrorResponse(
                 error_code="invalid_partition_name",
@@ -488,10 +516,11 @@ class PartitionIsMountedView(APIView):
 
 
 class PartitionTotalSizeView(APIView):
+    """دریافت حجم کل یک پارتیشن به بایت."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, partition_name):
-        save_to_db = _get_save_to_db_flag(dict(request.query_params))
+        save_to_db = _get_save_to_db_flag(request)
         if not partition_name or not isinstance(partition_name, str):
             return StandardErrorResponse(
                 error_code="invalid_partition_name",
@@ -525,10 +554,11 @@ class PartitionTotalSizeView(APIView):
 
 
 class DiskWipeSignaturesView(APIView):
+    """پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن از یک دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request.data)
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -579,10 +609,11 @@ class DiskWipeSignaturesView(APIView):
 
 
 class DiskClearZFSLabelView(APIView):
+    """پاک‌کردن لیبل ZFS از یک دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request.data)
+        save_to_db = _get_save_to_db_flag(request)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
