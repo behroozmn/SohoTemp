@@ -16,13 +16,14 @@ from rest_framework.response import Response
 from django.utils import timezone
 from django.conf import settings
 import logging
+from typing import Any, Type, Union
+from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
 
 # Models
 from soho_core_api.models import StandardResponseModel
 from soho_core_api.models import StandardErrorResponseModel
-
 
 
 def _get_status_text(status_code: int) -> str:
@@ -35,6 +36,103 @@ def _get_status_text(status_code: int) -> str:
         return HTTPStatus(status_code).phrase
     except ValueError:
         return "Unknown"
+
+
+def get_request_param(request: Union[Request, dict], param_name: str, return_type: Type = str, default: Any = None) -> Any:
+    """
+    استخراج یک پارامتر از درخواست HTTP (در هر متدی: GET, POST, PUT, PATCH, DELETE و غیره)و تبدیل آن به نوع مشخص‌شده.
+
+    این تابع به‌صورت هوشمند منبع پارامتر را تشخیص می‌دهد:
+    - برای درخواست‌های GET: فقط از query_params
+    - برای سایر متد‌ها: اول از body (request.data) و سپس از query_params
+
+    پشتیبانی از انواع بازگشتی:
+    - `str`: بدون تغییر (رشته تمیزشده)
+    - `int`: تبدیل عددی (در صورت معتبر)
+    - `float`: تبدیل اعشاری (در صورت معتبر)
+    - `bool`: فقط در صورتی True است که مقدار دقیقاً 'true' باشد (حروف کوچک/بزرگ مهم نیست)
+
+    اگر پارامتر وجود نداشته باشد یا تبدیل امکان‌پذیر نباشد، مقدار `default` بازگردانده می‌شود.
+
+    Args:
+        request (Request | dict): شیء درخواست Django REST یا یک دیکشنری (برای سازگاری).
+        param_name (str): نام پارامتر مورد نظر (مثلاً "save_to_db", "disk_name", "count").
+        return_type (Type): نوع داده‌ی خروجی. یکی از: str, int, float, bool.
+        default (Any): مقدار پیش‌فرض در صورت عدم وجود یا خطا.
+
+    Returns:
+        Any: مقدار تبدیل‌شده یا مقدار پیش‌فرض.
+
+    Examples:
+        # GET /api/disk/?save_to_db=true
+        save_flag = get_request_param(request, "save_to_db", bool, False)  # → True
+
+        # POST {"count": "5"}
+        count = get_request_param(request, "count", int, 1)  # → 5
+
+        # GET /api/disk/?name=sda1
+        name = get_request_param(request, "name", str, "default")  # → "sda1"
+    """
+    # مرحله ۱: خواندن مقدار خام
+    raw_value = None
+    try:
+        if hasattr(request, "method"):
+            method = request.method.upper()
+            if method == "GET":
+                raw_value = request.query_params.get(param_name, None)
+            else:
+                # اول از body (POST/PUT/PATCH/DELETE)
+                raw_value = request.data.get(param_name, None)
+                # اگر در body نبود، از query_params بگیر (پشتیبانی از ?param=... در POST)
+                if raw_value is None:
+                    raw_value = request.query_params.get(param_name, None)
+        elif isinstance(request, dict):
+            raw_value = request.get(param_name, None)
+        else:
+            raw_value = None
+    except Exception as e:
+        logger.warning(f"Error accessing param '{param_name}' from request: {e}")
+        return default
+
+    # اگر مقداری وجود نداشت
+    if raw_value is None or raw_value == "":
+        return default
+
+    # مرحله ۲: تبدیل به نوع مورد نظر
+    try:
+        if return_type == bool:
+            if isinstance(raw_value, bool):
+                return raw_value
+            if isinstance(raw_value, str):
+                return raw_value.strip().lower() == "true"
+            return bool(raw_value)
+
+        elif return_type == int:
+            if isinstance(raw_value, int):
+                return raw_value
+            if isinstance(raw_value, str):
+                return int(raw_value.strip())
+            raise ValueError("Cannot convert to int")
+
+        elif return_type == float:
+            if isinstance(raw_value, float):
+                return raw_value
+            if isinstance(raw_value, (int, str)):
+                return float(raw_value)
+            raise ValueError("Cannot convert to float")
+
+        elif return_type == str:
+            if isinstance(raw_value, str):
+                return raw_value.strip()
+            return str(raw_value)
+
+        else:
+            # اگر نوع پشتیبانی‌نشده باشد، همان مقدار خام را برگردان
+            return raw_value
+
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Type conversion failed for param '{param_name}' ({raw_value}) to {return_type}: {e}")
+        return default
 
 
 class StandardResponse(Response):

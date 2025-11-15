@@ -2,42 +2,12 @@
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from pylibs import StandardResponse, StandardErrorResponse
+from pylibs import StandardResponse, StandardErrorResponse, get_request_param
 from pylibs.disk import DiskManager
 import logging
 
 logger = logging.getLogger(__name__)
 
-
-def _str_to_bool(value) -> bool:
-    """فقط در صورتی True برمی‌گرداند که مقدار دقیقاً 'true' باشد (بدون حساسیت به کوچک/بزرگی)."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() == "true"
-    return False
-
-
-def _get_save_to_db_flag(request) -> bool:
-    """
-    استخراج و تبدیل مقدار save_to_db از بدنه یا query_params.
-    این تابع به‌صورت خودکار تشخیص می‌دهد که درخواست GET است یا POST
-    و مقدار را از محل مناسب می‌خواند.
-    """
-    try:
-        if hasattr(request, "method"):
-            if request.method.upper() == "GET":
-                raw_value = request.query_params.get("save_to_db", False)
-            else:
-                raw_value = request.data.get("save_to_db", request.query_params.get("save_to_db", False))
-        elif isinstance(request, dict):
-            raw_value = request.get("save_to_db", False)
-        else:
-            raw_value = False
-    except Exception as e:
-        logger.warning(f"Error parsing save_to_db flag: {e}")
-        raw_value = False
-    return _str_to_bool(raw_value)
 
 
 def _validate_disk_name(disk_name: str) -> tuple[bool, str | None]:
@@ -90,7 +60,7 @@ class DiskListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk = DiskManager()
             disks_info = obj_disk.get_disks_info_all()
@@ -116,7 +86,7 @@ class DiskNameListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk = DiskManager()
             disk_names = obj_disk.disks
@@ -142,7 +112,7 @@ class DiskCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk = DiskManager()
             count = len(obj_disk.disks)
@@ -168,7 +138,7 @@ class OSdiskView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk = DiskManager()
             os_disk = obj_disk.os_disk
@@ -197,7 +167,7 @@ class DiskDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -232,7 +202,7 @@ class DiskPartitionCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -267,7 +237,7 @@ class DiskPartitionNamesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -302,7 +272,7 @@ class DiskTypeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -337,7 +307,7 @@ class DiskTemperatureView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -372,7 +342,7 @@ class DiskHasOSView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -407,7 +377,7 @@ class DiskHasPartitionsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -442,7 +412,7 @@ class DiskTotalSizeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -480,7 +450,7 @@ class PartitionIsMountedView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, partition_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         if not partition_name or not isinstance(partition_name, str):
             return StandardErrorResponse(
                 error_code="invalid_partition_name",
@@ -520,7 +490,7 @@ class PartitionTotalSizeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, partition_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         if not partition_name or not isinstance(partition_name, str):
             return StandardErrorResponse(
                 error_code="invalid_partition_name",
@@ -558,7 +528,7 @@ class DiskWipeSignaturesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
@@ -613,7 +583,7 @@ class DiskClearZFSLabelView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
-        save_to_db = _get_save_to_db_flag(request)
+        save_to_db = get_request_param(request, "save_to_db", bool,False)
         try:
             obj_disk, error_msg = _get_disk_manager_and_validate(disk_name)
             if obj_disk is None:
