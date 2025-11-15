@@ -7,6 +7,7 @@ from pylibs.disk import DiskManager
 from django.utils import timezone
 import logging
 
+
 from soho_core_api.models import Disks
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,6 @@ def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
                 'last_update': timezone.now(),
             }
         )
-
 
 def db_update_disk_single(disk_info: Dict[str, Any]) -> None:
     """
@@ -258,6 +258,7 @@ class OSdiskView(APIView):
                 request_data=request_data,
                 save_to_db=save_to_db
             )
+
 
 
 class DiskView(DiskValidationMixin, APIView):
@@ -586,4 +587,67 @@ class DiskClearZFSLabelView(DiskValidationMixin, OSDiskProtectionMixin, APIView)
                 request_data=request_data,
                 status=500,
                 save_to_db=save_to_db
+            )
+
+class DiskBlinkLEDView(DiskValidationMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, disk_name):  # ← از URL می‌آید
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        duration = get_request_param(request, "duration", float, 10.0)
+        interval = get_request_param(request, "interval", float, 0.5)
+
+        if duration <= 0 or interval <= 0:
+            return StandardErrorResponse(
+                error_code="invalid_parameters",
+                error_message="مقدار duration و interval باید مثبت باشد.",
+                request_data=request.data,
+                status=400
+            )
+
+        obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request.data)
+        if isinstance(obj_disk, StandardErrorResponse):
+            return obj_disk
+
+        try:
+            # ✅ فراخوانی صحیح به عنوان static method
+            DiskManager.blink_disk_led(disk_name, duration=duration, interval=interval)
+            return StandardResponse(
+                data={"disk": disk_name, "duration_sec": duration, "interval_sec": interval},
+                message=f"LED دیسک '{disk_name}' به مدت {duration} ثانیه چشمک زد.",
+                request_data=request.data,
+                save_to_db=save_to_db
+            )
+        except PermissionError:
+            logger.error(f"Permission error in DiskBlinkLEDView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="permission_denied",
+                error_message="دسترسی به دیسک نیاز به امتیاز root دارد.",
+                request_data=request.data,
+                status=403
+            )
+        except FileNotFoundError as e:
+            logger.error(f"File not found in DiskBlinkLEDView: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_device_missing",
+                error_message=f"دستگاه دیسک '/dev/{disk_name}' یافت نشد.",
+                request_data=request.data,
+                status=404
+            )
+        except OSError as e:
+            logger.error(f"OS error in DiskBlinkLEDView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="disk_io_error",
+                error_message=f"خطا در دسترسی به دیسک: {str(e)}",
+                request_data=request.data,
+                status=500
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in DiskBlinkLEDView for {disk_name}: {str(e)}")
+            return StandardErrorResponse(
+                error_code="blink_led_error",
+                error_message="خطای غیرمنتظره در چشمک‌زدن LED دیسک.",
+                exception=e,
+                request_data=request.data,
+                status=500
             )
