@@ -386,14 +386,18 @@ class DiskWipeSignaturesView(APIView):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
         try:
-            obj_disk, error_msg = DiskManager(), None
             if not disk_name or not isinstance(disk_name, str):
-                error_msg = "نام دیسک معتبر نیست."
-            else:
-                validator = DiskValidationMixin()
-                obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
-                if isinstance(obj_disk, StandardErrorResponse):
-                    return obj_disk
+                return StandardErrorResponse(
+                    error_code="invalid_disk_name",
+                    error_message="نام دیسک معتبر نیست.",
+                    request_data=request_data,
+                    status=400,
+                    save_to_db=save_to_db
+                )
+            validator = DiskValidationMixin()
+            obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
+            if isinstance(obj_disk, StandardErrorResponse):
+                return obj_disk
 
             if obj_disk.has_os_on_disk(disk_name):
                 return StandardErrorResponse(
@@ -440,14 +444,18 @@ class DiskClearZFSLabelView(APIView):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
         try:
-            obj_disk, error_msg = DiskManager(), None
             if not disk_name or not isinstance(disk_name, str):
-                error_msg = "نام دیسک معتبر نیست."
-            else:
-                validator = DiskValidationMixin()
-                obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
-                if isinstance(obj_disk, StandardErrorResponse):
-                    return obj_disk
+                return StandardErrorResponse(
+                    error_code="invalid_disk_name",
+                    error_message="نام دیسک معتبر نیست.",
+                    request_data=request_data,
+                    status=400,
+                    save_to_db=save_to_db
+                )
+            validator = DiskValidationMixin()
+            obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
+            if isinstance(obj_disk, StandardErrorResponse):
+                return obj_disk
 
             if obj_disk.has_os_on_disk(disk_name):
                 return StandardErrorResponse(
