@@ -64,7 +64,7 @@ class Disks(models.Model):
     partitions_data = models.JSONField(default=list, blank=True)
 
     # 🔹 فیلد جدید: زمان آخرین بروزرسانی
-    last_update = models.DateTimeField(default=timezone.now, db_index=True)
+    last_update = models.DateTimeField(auto_now=True, db_index=True) # TODO: زمان باید براساس تایم‌زون باشه
 
     class Meta:
         db_table = 'disks'

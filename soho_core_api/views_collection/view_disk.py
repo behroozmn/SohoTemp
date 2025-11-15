@@ -66,7 +66,6 @@ def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
                 'free_bytes': disk_data.get('free_bytes'),
                 'usage_percent': disk_data.get('usage_percent'),
                 'partitions_data': disk_data.get('partitions', []),
-                'last_update': timezone.now(),
             }
         )
 
@@ -117,7 +116,6 @@ def db_update_disk_single(disk_info: Dict[str, Any]) -> None:
             'free_bytes': disk_info.get('free_bytes'),
             'usage_percent': disk_info.get('usage_percent'),
             'partitions_data': disk_info.get('partitions', []),
-            'last_update': timezone.now(),
         }
     )
 
