@@ -50,7 +50,22 @@ class DiskValidationMixin:
         return obj_disk
 
 
-# ------------------------ APIهای عمومی (بدون disk_name) ------------------------
+class OSDiskProtectionMixin:
+    """Mixin برای جلوگیری از عملیات روی دیسک سیستم‌عامل."""
+
+    def check_os_disk_protection(self, obj_disk: DiskManager, disk_name: str, save_to_db: bool, request_data: dict):
+        if obj_disk.has_os_on_disk(disk_name):
+            return StandardErrorResponse(
+                error_code="os_disk_protected",
+                error_message=f"پاک‌کردن دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
+                request_data=request_data,
+                status=403,
+                save_to_db=save_to_db
+            )
+        return None
+
+
+# ------------------------ APIهای عمومی ------------------------
 
 
 class DiskNameListView(APIView):
@@ -62,9 +77,8 @@ class DiskNameListView(APIView):
         request_data = dict(request.query_params)
         try:
             obj_disk = DiskManager()
-            disk_names = obj_disk.disks
             return StandardResponse(
-                data={"disk_names": disk_names},
+                data={"disk_names": obj_disk.disks},
                 message="لیست نام دیسک‌ها با موفقیت دریافت شد.",
                 request_data=request_data,
                 save_to_db=save_to_db
@@ -132,9 +146,6 @@ class OSdiskView(APIView):
                 request_data=request_data,
                 save_to_db=save_to_db
             )
-
-
-# ------------------------ APIهای ادغام‌شده (لیست + جزئیات) ------------------------
 
 
 class DiskView(DiskValidationMixin, APIView):
@@ -325,7 +336,6 @@ class PartitionIsMountedView(APIView):
                 status=400,
                 save_to_db=save_to_db
             )
-
         try:
             obj_disk = DiskManager()
             mount_info = obj_disk.get_partition_mount_info(partition_name)
@@ -366,7 +376,6 @@ class PartitionTotalSizeView(APIView):
                 status=400,
                 save_to_db=save_to_db
             )
-
         try:
             obj_disk = DiskManager()
             total_size = obj_disk.get_total_size(partition_name)
@@ -390,25 +399,21 @@ class PartitionTotalSizeView(APIView):
 # ------------------------ APIهای عملیاتی (POST) ------------------------
 
 
-class DiskWipeSignaturesView(DiskValidationMixin, APIView):
-    """پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن از یک دیسک."""
+class DiskWipeSignaturesView(DiskValidationMixin, OSDiskProtectionMixin, APIView):
+    """پاک‌کردن سیگنچرهای دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
+
         obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
         if isinstance(obj_disk, StandardErrorResponse):
             return obj_disk
 
-        if obj_disk.has_os_on_disk(disk_name):
-            return StandardErrorResponse(
-                error_code="os_disk_protected",
-                error_message=f"پاک‌کردن دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
-                request_data=request_data,
-                status=403,
-                save_to_db=save_to_db
-            )
+        os_error = self.check_os_disk_protection(obj_disk, disk_name, save_to_db, request_data)
+        if os_error is not None:
+            return os_error
 
         device_path = f"/dev/{disk_name}"
         success = obj_disk.disk_wipe_signatures(device_path)
@@ -429,25 +434,21 @@ class DiskWipeSignaturesView(DiskValidationMixin, APIView):
             )
 
 
-class DiskClearZFSLabelView(DiskValidationMixin, APIView):
-    """پاک‌کردن لیبل ZFS از یک دیسک."""
+class DiskClearZFSLabelView(DiskValidationMixin, OSDiskProtectionMixin, APIView):
+    """پاک‌کردن لیبل ZFS دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
+
         obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
         if isinstance(obj_disk, StandardErrorResponse):
             return obj_disk
 
-        if obj_disk.has_os_on_disk(disk_name):
-            return StandardErrorResponse(
-                error_code="os_disk_protected",
-                error_message=f"پاک‌کردن لیبل دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
-                request_data=request_data,
-                status=403,
-                save_to_db=save_to_db
-            )
+        os_error = self.check_os_disk_protection(obj_disk, disk_name, save_to_db, request_data)
+        if os_error is not None:
+            return os_error
 
         device_path = f"/dev/{disk_name}"
         success = obj_disk.disk_clear_zfs_label(device_path)
