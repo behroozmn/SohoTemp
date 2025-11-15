@@ -32,10 +32,10 @@ class DiskValidationMixin:
             return None, "خطا در ایجاد منیجر دیسک."
 
     def validate_disk_and_get_manager(
-            self,
-            disk_name: str,
-            save_to_db: bool,
-            request_data: dict
+        self,
+        disk_name: str,
+        save_to_db: bool,
+        request_data: dict,
     ) -> DiskManager | StandardErrorResponse:
         obj_disk, error_msg = self._get_disk_manager_and_validate(disk_name)
         if obj_disk is None:
@@ -48,6 +48,9 @@ class DiskValidationMixin:
                 save_to_db=save_to_db
             )
         return obj_disk
+
+
+# ------------------------ APIهای عمومی (بدون disk_name) ------------------------
 
 
 class DiskNameListView(APIView):
@@ -130,15 +133,18 @@ class OSdiskView(APIView):
                 save_to_db=save_to_db
             )
 
+
+# ------------------------ APIهای ادغام‌شده (لیست + جزئیات) ------------------------
+
+
 class DiskView(DiskValidationMixin, APIView):
-    """دریافت لیست تمام دیسک‌ها (اگر disk_name داده نشود) یا جزئیات یک دیسک خاص (اگر disk_name داده شود)."""
+    """دریافت لیست تمام دیسک‌ها (اگر disk_name داده نشود) یا جزئیات یک دیسک خاص."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, disk_name=None):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
 
-        # اگر disk_name داده نشده باشد → لیست تمام دیسک‌ها
         if disk_name is None:
             try:
                 obj_disk = DiskManager()
@@ -159,7 +165,6 @@ class DiskView(DiskValidationMixin, APIView):
                     save_to_db=save_to_db
                 )
 
-        # اگر disk_name داده شده باشد → جزئیات یک دیسک خاص
         obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
         if isinstance(obj_disk, StandardErrorResponse):
             return obj_disk
@@ -171,6 +176,10 @@ class DiskView(DiskValidationMixin, APIView):
             request_data=request_data,
             save_to_db=save_to_db
         )
+
+
+# ------------------------ APIهای مربوط به یک دیسک خاص ------------------------
+
 
 class DiskPartitionCountView(DiskValidationMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -378,117 +387,82 @@ class PartitionTotalSizeView(APIView):
             )
 
 
-class DiskWipeSignaturesView(APIView):
+# ------------------------ APIهای عملیاتی (POST) ------------------------
+
+
+class DiskWipeSignaturesView(DiskValidationMixin, APIView):
     """پاک‌کردن تمام سیگنچرهای فایل‌سیستم و پارتیشن از یک دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
-        try:
-            if not disk_name or not isinstance(disk_name, str):
-                return StandardErrorResponse(
-                    error_code="invalid_disk_name",
-                    error_message="نام دیسک معتبر نیست.",
-                    request_data=request_data,
-                    status=400,
-                    save_to_db=save_to_db
-                )
-            validator = DiskValidationMixin()
-            obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
-            if isinstance(obj_disk, StandardErrorResponse):
-                return obj_disk
+        obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
+        if isinstance(obj_disk, StandardErrorResponse):
+            return obj_disk
 
-            if obj_disk.has_os_on_disk(disk_name):
-                return StandardErrorResponse(
-                    error_code="os_disk_protected",
-                    error_message=f"پاک‌کردن دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
-                    request_data=request_data,
-                    status=403,
-                    save_to_db=save_to_db
-                )
-
-            device_path = f"/dev/{disk_name}"
-            success = obj_disk.disk_wipe_signatures(device_path)
-            if success:
-                return StandardResponse(
-                    data={"disk": disk_name, "device_path": device_path},
-                    message=f"تمام سیگنچرهای دیسک '{disk_name}' با موفقیت پاک شد.",
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-            else:
-                return StandardErrorResponse(
-                    error_code="wipe_failed",
-                    error_message=f"پاک‌کردن سیگنچرهای دیسک '{disk_name}' شکست خورد.",
-                    request_data=request_data,
-                    status=500,
-                    save_to_db=save_to_db
-                )
-        except Exception as e:
-            logger.error(f"Error in DiskWipeSignaturesView for {disk_name}: {str(e)}")
+        if obj_disk.has_os_on_disk(disk_name):
             return StandardErrorResponse(
-                error_code="wipe_error",
-                error_message=f"خطا در پاک‌کردن سیگنچرهای دیسک '{disk_name}'.",
-                exception=e,
+                error_code="os_disk_protected",
+                error_message=f"پاک‌کردن دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
                 request_data=request_data,
+                status=403,
+                save_to_db=save_to_db
+            )
+
+        device_path = f"/dev/{disk_name}"
+        success = obj_disk.disk_wipe_signatures(device_path)
+        if success:
+            return StandardResponse(
+                data={"disk": disk_name, "device_path": device_path},
+                message=f"تمام سیگنچرهای دیسک '{disk_name}' با موفقیت پاک شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+        else:
+            return StandardErrorResponse(
+                error_code="wipe_failed",
+                error_message=f"پاک‌کردن سیگنچرهای دیسک '{disk_name}' شکست خورد.",
+                request_data=request_data,
+                status=500,
                 save_to_db=save_to_db
             )
 
 
-class DiskClearZFSLabelView(APIView):
+class DiskClearZFSLabelView(DiskValidationMixin, APIView):
     """پاک‌کردن لیبل ZFS از یک دیسک."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, disk_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
-        try:
-            if not disk_name or not isinstance(disk_name, str):
-                return StandardErrorResponse(
-                    error_code="invalid_disk_name",
-                    error_message="نام دیسک معتبر نیست.",
-                    request_data=request_data,
-                    status=400,
-                    save_to_db=save_to_db
-                )
-            validator = DiskValidationMixin()
-            obj_disk = validator.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
-            if isinstance(obj_disk, StandardErrorResponse):
-                return obj_disk
+        obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
+        if isinstance(obj_disk, StandardErrorResponse):
+            return obj_disk
 
-            if obj_disk.has_os_on_disk(disk_name):
-                return StandardErrorResponse(
-                    error_code="os_disk_protected",
-                    error_message=f"پاک‌کردن لیبل دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
-                    request_data=request_data,
-                    status=403,
-                    save_to_db=save_to_db
-                )
-
-            device_path = f"/dev/{disk_name}"
-            success = obj_disk.disk_clear_zfs_label(device_path)
-            if success:
-                return StandardResponse(
-                    data={"disk": disk_name, "device_path": device_path},
-                    message=f"لیبل ZFS دیسک '{disk_name}' با موفقیت پاک شد.",
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-            else:
-                return StandardErrorResponse(
-                    error_code="zfs_clear_failed",
-                    error_message=f"پاک‌کردن لیبل ZFS دیسک '{disk_name}' شکست خورد.",
-                    request_data=request_data,
-                    status=500,
-                    save_to_db=save_to_db
-                )
-        except Exception as e:
-            logger.error(f"Error in DiskClearZFSLabelView for {disk_name}: {str(e)}")
+        if obj_disk.has_os_on_disk(disk_name):
             return StandardErrorResponse(
-                error_code="zfs_clear_error",
-                error_message=f"خطا در پاک‌کردن لیبل ZFS دیسک '{disk_name}'.",
-                exception=e,
+                error_code="os_disk_protected",
+                error_message=f"پاک‌کردن لیبل دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
                 request_data=request_data,
+                status=403,
+                save_to_db=save_to_db
+            )
+
+        device_path = f"/dev/{disk_name}"
+        success = obj_disk.disk_clear_zfs_label(device_path)
+        if success:
+            return StandardResponse(
+                data={"disk": disk_name, "device_path": device_path},
+                message=f"لیبل ZFS دیسک '{disk_name}' با موفقیت پاک شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+        else:
+            return StandardErrorResponse(
+                error_code="zfs_clear_failed",
+                error_message=f"پاک‌کردن لیبل ZFS دیسک '{disk_name}' شکست خورد.",
+                request_data=request_data,
+                status=500,
                 save_to_db=save_to_db
             )
