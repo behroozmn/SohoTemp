@@ -15,6 +15,9 @@ class StandardResponseModel(models.Model):
     def __str__(self):
         return f"Success Response @ {self.created_at.isoformat()}"
 
+    class Meta:
+        db_table = 'StandardResponse'
+
 
 class StandardErrorResponseModel(models.Model):
     ok = models.BooleanField(default=False)
@@ -27,3 +30,6 @@ class StandardErrorResponseModel(models.Model):
 
     def __str__(self):
         return f"Error Response [{self.error_code}] @ {self.created_at.isoformat()}"
+
+    class Meta:
+        db_table = 'StandardResponseError'
