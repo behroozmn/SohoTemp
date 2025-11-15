@@ -62,7 +62,9 @@ class Disks(models.Model):
     free_bytes = models.BigIntegerField(null=True)
     usage_percent = models.FloatField(null=True)
     partitions_data = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    # 🔹 فیلد جدید: زمان آخرین بروزرسانی
+    last_update = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
         db_table = 'disks'

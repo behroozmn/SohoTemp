@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from pylibs import StandardResponse, StandardErrorResponse, get_request_param
 from pylibs.disk import DiskManager
+from django.utils import timezone
 import logging
 
 from soho_core_api.models import Disks
@@ -65,6 +66,7 @@ def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
                 'free_bytes': disk_data.get('free_bytes'),
                 'usage_percent': disk_data.get('usage_percent'),
                 'partitions_data': disk_data.get('partitions', []),
+                'last_update': timezone.now(),
             }
         )
 
@@ -115,6 +117,7 @@ def db_update_disk_single(disk_info: Dict[str, Any]) -> None:
             'free_bytes': disk_info.get('free_bytes'),
             'usage_percent': disk_info.get('usage_percent'),
             'partitions_data': disk_info.get('partitions', []),
+            'last_update': timezone.now(),
         }
     )
 
