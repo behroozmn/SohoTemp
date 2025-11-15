@@ -6,8 +6,117 @@ from pylibs import StandardResponse, StandardErrorResponse, get_request_param
 from pylibs.disk import DiskManager
 import logging
 
+from soho_core_api.models import Disks
+
 logger = logging.getLogger(__name__)
 
+from typing import List, Dict, Any
+from soho_core_api.models import Disks  # فرض: مدل Disk در همان اپلیکیشن تعریف شده
+
+
+def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
+    """
+    ذخیره یا به‌روزرسانی اطلاعات **همه دیسک‌های سیستم** در جدول `disks`.
+
+    این تابع از دیکشنری داده‌های خروجی `DiskManager.get_disks_info_all()` استفاده می‌کند.
+    برای هر دیسک، یک رکورد در جدول `disks` ایجاد یا به‌روزرسانی می‌شود.
+
+    Args:
+        disks_info (List[Dict[str, Any]]): لیستی از دیکشنری‌ها که هر کدام اطلاعات یک دیسک را شامل می‌شود.
+            هر دیکشنری باید حداقل شامل کلید `'disk'` باشد (نام دیسک، مثل `'sda'`).
+
+    Raises:
+        ValueError: اگر هر یک از آیتم‌های لیست، دیکشنری نباشد یا کلید `'disk'` را نداشته باشد.
+        Exception: در صورت بروز خطا در تعامل با دیتابیس (توسط Django ORM).
+
+    Example:
+        >>> manager = DiskManager()
+        >>> all_disks = manager.get_disks_info_all()
+        >>> db_update_disks(all_disks)
+    """
+    if not isinstance(disks_info, list):
+        raise ValueError("ورودی باید یک لیست از دیکشنری‌ها باشد.")
+
+    for disk_data in disks_info:
+        if not isinstance(disk_data, dict):
+            raise ValueError("هر آیتم لیست باید یک دیکشنری باشد.")
+        if 'disk' not in disk_data:
+            raise ValueError("هر دیکشنری باید شامل کلید 'disk' باشد.")
+
+        Disks.objects.update_or_create(
+            disk_name=disk_data['disk'],
+            defaults={
+                'model': disk_data.get('model', ''),
+                'vendor': disk_data.get('vendor', ''),
+                'state': disk_data.get('state', ''),
+                'device_path': disk_data.get('device_path', ''),
+                'physical_block_size': disk_data.get('physical_block_size', ''),
+                'logical_block_size': disk_data.get('logical_block_size', ''),
+                'scheduler': disk_data.get('scheduler', ''),
+                'wwid': disk_data.get('wwid', ''),
+                'total_bytes': disk_data.get('total_bytes'),
+                'temperature_celsius': disk_data.get('temperature_celsius'),
+                'wwn': disk_data.get('wwn', ''),
+                'uuid': disk_data.get('uuid'),
+                'slot_number': disk_data.get('slot_number'),
+                'disk_type': disk_data.get('type', ''),
+                'has_partition': disk_data.get('has_partition', False),
+                'used_bytes': disk_data.get('used_bytes'),
+                'free_bytes': disk_data.get('free_bytes'),
+                'usage_percent': disk_data.get('usage_percent'),
+                'partitions_data': disk_data.get('partitions', []),
+            }
+        )
+
+
+def db_update_disk_single(disk_info: Dict[str, Any]) -> None:
+    """
+    ذخیره یا به‌روزرسانی اطلاعات **یک دیسک خاص** در جدول `disks`.
+
+    این تابع از دیکشنری خروجی `DiskManager.get_disk_info(disk_name)` استفاده می‌کند.
+
+    Args:
+        disk_info (Dict[str, Any]): دیکشنری حاوی اطلاعات یک دیسک.
+            باید شامل کلید `'disk'` (نام دیسک، مثل `'nvme0n1'`) باشد.
+
+    Raises:
+        ValueError: اگر ورودی دیکشنری نباشد یا کلید `'disk'` را نداشته باشد.
+        Exception: در صورت بروز خطا در تعامل با دیتابیس (توسط Django ORM).
+
+    Example:
+        >>> manager = DiskManager()
+        >>> disk_data = manager.get_disk_info('sda')
+        >>> db_update_disk_single(disk_data)
+    """
+    if not isinstance(disk_info, dict):
+        raise ValueError("ورودی باید یک دیکشنری باشد.")
+    if 'disk' not in disk_info:
+        raise ValueError("دیکشنری ورودی باید شامل کلید 'disk' باشد.")
+
+    Disks.objects.update_or_create(
+        disk_name=disk_info['disk'],  # ✅ اصلاح شد: 'disk' نه 'disks'
+        defaults={
+            'model': disk_info.get('model', ''),
+            'vendor': disk_info.get('vendor', ''),
+            'state': disk_info.get('state', ''),
+            'device_path': disk_info.get('device_path', ''),
+            'physical_block_size': disk_info.get('physical_block_size', ''),
+            'logical_block_size': disk_info.get('logical_block_size', ''),
+            'scheduler': disk_info.get('scheduler', ''),
+            'wwid': disk_info.get('wwid', ''),
+            'total_bytes': disk_info.get('total_bytes'),
+            'temperature_celsius': disk_info.get('temperature_celsius'),
+            'wwn': disk_info.get('wwn', ''),
+            'uuid': disk_info.get('uuid'),
+            'slot_number': disk_info.get('slot_number'),
+            'disk_type': disk_info.get('type', ''),
+            'has_partition': disk_info.get('has_partition', False),
+            'used_bytes': disk_info.get('used_bytes'),
+            'free_bytes': disk_info.get('free_bytes'),
+            'usage_percent': disk_info.get('usage_percent'),
+            'partitions_data': disk_info.get('partitions', []),
+        }
+    )
 
 class DiskValidationMixin:
     """Mixin برای اعتبارسنجی دیسک. تمام منطق مرتبط با اعتبارسنجی در اینجا متمرکز شده است."""
@@ -32,10 +141,10 @@ class DiskValidationMixin:
             return None, "خطا در ایجاد منیجر دیسک."
 
     def validate_disk_and_get_manager(
-        self,
-        disk_name: str,
-        save_to_db: bool,
-        request_data: dict,
+            self,
+            disk_name: str,
+            save_to_db: bool,
+            request_data: dict,
     ) -> DiskManager | StandardErrorResponse:
         obj_disk, error_msg = self._get_disk_manager_and_validate(disk_name)
         if obj_disk is None:
@@ -160,6 +269,10 @@ class DiskView(DiskValidationMixin, APIView):
             try:
                 obj_disk = DiskManager()
                 disks_info = obj_disk.get_disks_info_all()
+
+                if save_to_db:
+                    db_update_disks(disks_info)
+
                 return StandardResponse(
                     data=disks_info,
                     message="لیست دیسک‌ها با موفقیت دریافت شد.",
@@ -181,6 +294,10 @@ class DiskView(DiskValidationMixin, APIView):
             return obj_disk
 
         disk_info = obj_disk.get_disk_info(disk_name)
+
+        if save_to_db:
+            db_update_disk_single(disk_info)
+
         return StandardResponse(
             data=disk_info,
             message=f"جزئیات دیسک '{disk_name}' با موفقیت دریافت شد.",
