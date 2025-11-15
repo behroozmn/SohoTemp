@@ -1,5 +1,4 @@
 import os
-import time
 import re
 import glob
 import subprocess
@@ -917,24 +916,3 @@ class DiskManager:
         # مرتب‌سازی هوشمند: sda1 قبل از sda10
         partition_names.sort(key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
         return partition_names
-
-    @staticmethod
-    def blink_disk_led(disk_name: str, duration: float = 10.0, interval: float = 0.5):
-        """
-        با خواندن بلاک اول دیسک به‌طور متناوب، LED فعالیت را چشمک‌زن می‌کند.
-        دقت: نیاز به دسترسی root دارد.
-        """
-        disk_path = f"/dev/{disk_name}"
-        if not os.path.exists(disk_path):
-            raise FileNotFoundError(f"دیسک {disk_path} یافت نشد.")
-
-        end_time = time.time() + duration
-        while time.time() < end_time:
-            try:
-                with open(disk_path, "rb") as f:
-                    f.read(512)
-                time.sleep(interval)
-            except PermissionError as e:
-                raise PermissionError(f"دسترسی به دیسک {disk_name} مجاز نیست (نیاز به root دارد).") from e
-            except OSError as e:
-                raise OSError(f"خطا در دسترسی به دیسک {disk_name}: {str(e)}") from e

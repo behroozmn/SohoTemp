@@ -24,6 +24,4 @@ urlpatterns = [
 
     path('<str:disk_name>/wipe/', view_disk.DiskWipeSignaturesView.as_view(), name='disk-wipe'),
     path('<str:disk_name>/clear-zfs/', view_disk.DiskClearZFSLabelView.as_view(), name='disk-clear-zfs'),
-    path('<str:disk_name>/blink-led/', view_disk.DiskBlinkLEDView.as_view(), name='disk-blink-led'),
-
 ]
