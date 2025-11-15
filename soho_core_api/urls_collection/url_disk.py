@@ -4,14 +4,13 @@ from django.urls import path
 from soho_core_api.views_collection import view_disk
 
 urlpatterns = [
-    # ------------------------ عمومی ------------------------
-    path('', view_disk.DiskListView.as_view(), name='disk-list'),
+    path('', view_disk.DiskView.as_view(), name='disk'),
+    path('<str:disk_name>/', view_disk.DiskView.as_view(), name='disk-detail'),
+
     path('names/', view_disk.DiskNameListView.as_view(), name='disk-names'),
     path('count/', view_disk.DiskCountView.as_view(), name='disk-count'),
     path('os-disk/', view_disk.OSdiskView.as_view(), name='os-disk'),
 
-    # ------------------------ دیسک خاص ------------------------
-    path('<str:disk_name>/', view_disk.DiskDetailView.as_view(), name='disk-detail'),
     path('<str:disk_name>/partition-count/', view_disk.DiskPartitionCountView.as_view(), name='disk-partition-count'),
     path('<str:disk_name>/partition-names/', view_disk.DiskPartitionNamesView.as_view(), name='disk-partition-names'),
     path('<str:disk_name>/type/', view_disk.DiskTypeView.as_view(), name='disk-type'),
@@ -20,11 +19,9 @@ urlpatterns = [
     path('<str:disk_name>/has-partitions/', view_disk.DiskHasPartitionsView.as_view(), name='disk-has-partitions'),
     path('<str:disk_name>/total-size/', view_disk.DiskTotalSizeView.as_view(), name='disk-total-size'),
 
-    # ------------------------ پارتیشن ------------------------
     path('partition/<str:partition_name>/mounted/', view_disk.PartitionIsMountedView.as_view(), name='partition-is-mounted'),
     path('partition/<str:partition_name>/total-size/', view_disk.PartitionTotalSizeView.as_view(), name='partition-total-size'),
 
-    # ------------------------ عملیاتی ------------------------
     path('<str:disk_name>/wipe/', view_disk.DiskWipeSignaturesView.as_view(), name='disk-wipe'),
     path('<str:disk_name>/clear-zfs/', view_disk.DiskClearZFSLabelView.as_view(), name='disk-clear-zfs'),
 ]

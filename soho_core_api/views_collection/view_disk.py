@@ -50,36 +50,6 @@ class DiskValidationMixin:
         return obj_disk
 
 
-# ------------------------ APIهای عمومی (بدون نیاز به disk_name) ------------------------
-
-
-class DiskListView(APIView):
-    """دریافت لیست تمام دیسک‌های سیستم با جزئیات کامل."""
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        request_data = dict(request.query_params)
-        try:
-            obj_disk = DiskManager()
-            disks_info = obj_disk.get_disks_info_all()
-            return StandardResponse(
-                data=disks_info,
-                message="لیست دیسک‌ها با موفقیت دریافت شد.",
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
-        except Exception as e:
-            logger.error(f"Error in DiskListView: {str(e)}")
-            return StandardErrorResponse(
-                error_code="disk_list_error",
-                error_message="خطا در دریافت لیست دیسک‌ها.",
-                exception=e,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
-
-
 class DiskNameListView(APIView):
     """دریافت لیست نام تمام دیسک‌های فیزیکی (مثل ['sda', 'nvme0n1'])."""
     permission_classes = [IsAuthenticated]
@@ -160,19 +130,40 @@ class OSdiskView(APIView):
                 save_to_db=save_to_db
             )
 
-
-# ------------------------ APIهای مربوط به یک دیسک خاص ------------------------
-
-
-class DiskDetailView(DiskValidationMixin, APIView):
+class DiskView(DiskValidationMixin, APIView):
+    """دریافت لیست تمام دیسک‌ها (اگر disk_name داده نشود) یا جزئیات یک دیسک خاص (اگر disk_name داده شود)."""
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, disk_name):
+    def get(self, request, disk_name=None):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
+
+        # اگر disk_name داده نشده باشد → لیست تمام دیسک‌ها
+        if disk_name is None:
+            try:
+                obj_disk = DiskManager()
+                disks_info = obj_disk.get_disks_info_all()
+                return StandardResponse(
+                    data=disks_info,
+                    message="لیست دیسک‌ها با موفقیت دریافت شد.",
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
+            except Exception as e:
+                logger.error(f"Error in DiskView (list): {str(e)}")
+                return StandardErrorResponse(
+                    error_code="disk_list_error",
+                    error_message="خطا در دریافت لیست دیسک‌ها.",
+                    exception=e,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
+
+        # اگر disk_name داده شده باشد → جزئیات یک دیسک خاص
         obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
         if isinstance(obj_disk, StandardErrorResponse):
             return obj_disk
+
         disk_info = obj_disk.get_disk_info(disk_name)
         return StandardResponse(
             data=disk_info,
@@ -180,7 +171,6 @@ class DiskDetailView(DiskValidationMixin, APIView):
             request_data=request_data,
             save_to_db=save_to_db
         )
-
 
 class DiskPartitionCountView(DiskValidationMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -386,9 +376,6 @@ class PartitionTotalSizeView(APIView):
                 request_data=request_data,
                 save_to_db=save_to_db
             )
-
-
-# ------------------------ APIهای عملیاتی (POST) ------------------------
 
 
 class DiskWipeSignaturesView(APIView):
