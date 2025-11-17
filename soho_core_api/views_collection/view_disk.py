@@ -4,6 +4,7 @@ from __future__ import annotations
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from pylibs import StandardResponse, StandardErrorResponse, get_request_param,logger
+from pylibs.mixins import OSDiskProtectionMixin,DiskValidationMixin
 from pylibs.disk import DiskManager
 from soho_core_api.models import Disks
 from typing import List, Dict, Any
@@ -112,61 +113,6 @@ def db_update_disk_single(disk_info: Dict[str, Any]) -> None:
             'partitions_data': disk_info.get('partitions', []),
         }
     )
-
-class DiskValidationMixin:
-    """Mixin برای اعتبارسنجی دیسک. تمام منطق مرتبط با اعتبارسنجی در اینجا متمرکز شده است."""
-
-    def _validate_disk_name(self, disk_name: str) -> tuple[bool, str | None]:
-        if not disk_name or not isinstance(disk_name, str):
-            return False, "نام دیسک معتبر نیست."
-        return True, None
-
-    def _get_disk_manager_and_validate(self, disk_name: str) -> tuple[DiskManager | None, str | None]:
-        is_valid, error_msg = self._validate_disk_name(disk_name)
-        if not is_valid:
-            return None, error_msg
-
-        try:
-            obj_disk = DiskManager()
-            if disk_name not in obj_disk.disks:
-                return None, f"دیسک '{disk_name}' یافت نشد."
-            return obj_disk, None
-        except Exception as e:
-            logger.error(f"Error creating DiskManager: {str(e)}")
-            return None, "خطا در ایجاد منیجر دیسک."
-
-    def validate_disk_and_get_manager(
-            self,
-            disk_name: str,
-            save_to_db: bool,
-            request_data: dict,
-    ) -> DiskManager | StandardErrorResponse:
-        obj_disk, error_msg = self._get_disk_manager_and_validate(disk_name)
-        if obj_disk is None:
-            status_code = 404 if "یافت نشد" in (error_msg or "") else 400
-            return StandardErrorResponse(
-                error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
-                error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
-                request_data=request_data,
-                status=status_code,
-                save_to_db=save_to_db
-            )
-        return obj_disk
-
-
-class OSDiskProtectionMixin:
-    """Mixin برای جلوگیری از عملیات روی دیسک سیستم‌عامل."""
-
-    def check_os_disk_protection(self, obj_disk: DiskManager, disk_name: str, save_to_db: bool, request_data: dict):
-        if obj_disk.has_os_on_disk(disk_name):
-            return StandardErrorResponse(
-                error_code="os_disk_protected",
-                error_message=f"پاک‌کردن دیسک سیستم‌عامل ({disk_name}) مجاز نیست.",
-                request_data=request_data,
-                status=403,
-                save_to_db=save_to_db
-            )
-        return None
 
 
 # ------------------------ APIهای عمومی ------------------------

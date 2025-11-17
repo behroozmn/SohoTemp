@@ -1,17 +1,16 @@
 # soho_core_api/views_collection/view_zpool.py
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param,logger
+from pylibs import (StandardResponse, StandardErrorResponse, get_request_param, logger)
+from pylibs.mixins import DiskValidationMixin, OSDiskProtectionMixin, ZpoolNameValidationMixin, ZpoolExistsMixin
 from pylibs.zpool import ZpoolManager
-from pylibs.mixins import ZpoolNameValidationMixin, ZpoolExistsMixin
-from .view_disk import DiskValidationMixin, OSDiskProtectionMixin
 from pylibs.disk import DiskManager
-import logging
 
 
 # ------------------------ لیست و جزئیات ------------------------
 class ZpoolListView(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
@@ -34,8 +33,10 @@ class ZpoolListView(APIView):
                 save_to_db=save_to_db
             )
 
+
 class ZpoolDetailView(ZpoolExistsMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
@@ -50,9 +51,11 @@ class ZpoolDetailView(ZpoolExistsMixin, APIView):
             save_to_db=save_to_db
         )
 
+
 # ------------------------ دیسک‌های pool ------------------------
 class ZpoolDevicesView(ZpoolExistsMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
@@ -67,16 +70,18 @@ class ZpoolDevicesView(ZpoolExistsMixin, APIView):
             save_to_db=save_to_db
         )
 
+
 # ------------------------ ایجاد / حذف ------------------------
 class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
 
-        pool_name = request_data.get("pool_name")
-        devices = request_data.get("devices", [])
-        vdev_type = request_data.get("vdev_type", "disk")
+        pool_name = get_request_param(request, "pool_name", str, "")
+        devices = get_request_param(request, "devices", list[str], [])
+        vdev_type = get_request_param(request, "vdev_type", str, "disk")
 
         if not pool_name or not isinstance(devices, list) or not devices:
             return StandardErrorResponse(
@@ -128,8 +133,10 @@ class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMix
                 save_to_db=save_to_db
             )
 
+
 class ZpoolDestroyView(ZpoolExistsMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
@@ -153,9 +160,11 @@ class ZpoolDestroyView(ZpoolExistsMixin, APIView):
                 save_to_db=save_to_db
             )
 
+
 # ------------------------ جایگزینی دیسک ------------------------
 class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
@@ -202,9 +211,11 @@ class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtecti
                 save_to_db=save_to_db
             )
 
+
 # ------------------------ افزودن spare یا دیسک ------------------------
 class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
@@ -253,9 +264,11 @@ class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMi
                 save_to_db=save_to_db
             )
 
+
 # ------------------------ تنظیم ویژگی ------------------------
 class ZpoolSetPropertyView(ZpoolExistsMixin, APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request, pool_name):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
