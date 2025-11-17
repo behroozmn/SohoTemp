@@ -72,7 +72,7 @@ class ZpoolDetailView(ZpoolExistsMixin, APIView):
         manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
         if isinstance(manager, StandardErrorResponse):
             return manager
-        detail: ئDict[str, Any] = manager.get_pool_detail(pool_name)
+        detail: Dict[str, Any] = manager.get_pool_detail(pool_name)
         return StandardResponse(data=detail, message=f"جزئیات pool '{pool_name}' دریافت شد.", request_data=request_data, save_to_db=save_to_db)
 
 
