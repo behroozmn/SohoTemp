@@ -2,20 +2,48 @@
 from __future__ import annotations
 
 import re
-from pylibs import StandardErrorResponse,logger
+from typing import Tuple, Union, Optional, Dict, Any
+from pylibs import StandardErrorResponse, logger
 from pylibs.disk import DiskManager
 from pylibs.zpool import ZpoolManager
 
 
 class DiskValidationMixin:
-    """Mixin برای اعتبارسنجی دیسک. تمام منطق مرتبط با اعتبارسنجی در اینجا متمرکز شده است."""
+    """
+    Mixin برای اعتبارسنجی دیسک.
 
-    def _validate_disk_name(self, disk_name: str) -> tuple[bool, str | None]:
+    این کلاس تمام منطق مرتبط با تأیید صحت نام دیسک و وجود آن در سیستم را مدیریت می‌کند.
+    به‌عنوان یک کامپوننت قابل استفاده در APIViewها طراحی شده است.
+    """
+
+    def _validate_disk_name(self, disk_name: str) -> Tuple[bool, Optional[str]]:
+        """
+        اعتبارسنجی ساختاری نام دیسک.
+
+        Args:
+            disk_name (str): نام دیسک برای بررسی (مثال: 'sda', 'nvme0n1').
+
+        Returns:
+            Tuple[bool, Optional[str]]:
+                - اگر معتبر باشد: (True, None)
+                - اگر نامعتبر باشد: (False, پیام خطا)
+        """
         if not disk_name or not isinstance(disk_name, str):
             return False, "نام دیسک معتبر نیست."
         return True, None
 
-    def _get_disk_manager_and_validate(self, disk_name: str) -> tuple[DiskManager | None, str | None]:
+    def _get_disk_manager_and_validate(self, disk_name: str) -> Tuple[Optional[DiskManager], Optional[str]]:
+        """
+        دریافت نمونه DiskManager و اعتبارسنجی وجود دیسک در سیستم.
+
+        Args:
+            disk_name (str): نام دیسک برای بررسی.
+
+        Returns:
+            Tuple[Optional[DiskManager], Optional[str]]:
+                - در موفقیت: (نمونه DiskManager, None)
+                - در خطا: (None, پیام خطا)
+        """
         is_valid, error_msg = self._validate_disk_name(disk_name)
         if not is_valid:
             return None, error_msg
@@ -33,8 +61,21 @@ class DiskValidationMixin:
             self,
             disk_name: str,
             save_to_db: bool,
-            request_data: dict,
-    ) -> DiskManager | StandardErrorResponse:
+            request_data: Dict[str, Any],
+    ) -> Union[DiskManager, StandardErrorResponse]:
+        """
+        اعتبارسنجی کامل دیسک و بازگرداندن نمونه مدیر یا خطای استاندارد.
+
+        Args:
+            disk_name (str): نام دیسک.
+            save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
+            request_data (Dict[str, Any]): داده درخواست اصلی برای لاگ یا ذخیره.
+
+        Returns:
+            Union[DiskManager, StandardErrorResponse]:
+                - در صورت موفقیت: نمونه DiskManager
+                - در صورت خطا: نمونه StandardErrorResponse
+        """
         obj_disk, error_msg = self._get_disk_manager_and_validate(disk_name)
         if obj_disk is None:
             status_code = 404 if "یافت نشد" in (error_msg or "") else 400
@@ -47,10 +88,35 @@ class DiskValidationMixin:
             )
         return obj_disk
 
-class OSDiskProtectionMixin:
-    """Mixin برای جلوگیری از عملیات روی دیسک سیستم‌عامل."""
 
-    def check_os_disk_protection(self, obj_disk: DiskManager, disk_name: str, save_to_db: bool, request_data: dict):
+class OSDiskProtectionMixin:
+    """
+    Mixin برای جلوگیری از انجام عملیات خطرناک روی دیسک سیستم‌عامل.
+
+    این کلاس از اشتباهات رایج کاربران جلوگیری می‌کند که بخواهند دیسک بوت را پاک یا تغییر دهند.
+    """
+
+    def check_os_disk_protection(
+            self,
+            obj_disk: DiskManager,
+            disk_name: str,
+            save_to_db: bool,
+            request_data: Dict[str, Any],
+    ) -> Optional[StandardErrorResponse]:
+        """
+        بررسی اینکه آیا دیسک مورد نظر، دیسک سیستم‌عامل است یا خیر.
+
+        Args:
+            obj_disk (DiskManager): نمونه فعلی مدیر دیسک.
+            disk_name (str): نام دیسک برای بررسی.
+            save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
+            request_data (Dict[str, Any]): داده درخواست اصلی.
+
+        Returns:
+            Optional[StandardErrorResponse]:
+                - اگر دیسک سیستم‌عامل باشد: خطای ممنوعیت (403)
+                - اگر نباشد: None
+        """
         if obj_disk.has_os_on_disk(disk_name):
             return StandardErrorResponse(
                 error_code="os_disk_protected",
@@ -61,11 +127,32 @@ class OSDiskProtectionMixin:
             )
         return None
 
-class ZpoolNameValidationMixin:
-    """اعتبارسنجی نام pool ZFS."""
-    POOL_NAME_PATTERN = r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
 
-    def _validate_zpool_name(self, pool_name: str) -> tuple[bool, str | None]:
+class ZpoolNameValidationMixin:
+    """
+    Mixin برای اعتبارسنجی نام ZFS Pool.
+
+    نام‌های معتبر ZFS باید:
+        - با حرف یا عدد شروع شوند.
+        - فقط شامل حروف، اعداد، نقطه، زیرخط و خط‌تیره باشند.
+        - حداکثر 255 کاراکتر طول داشته باشند.
+    """
+
+    POOL_NAME_PATTERN: str = r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
+    """الگوی منظم برای تأیید نام معتبر ZFS Pool."""
+
+    def _validate_zpool_name(self, pool_name: str) -> Tuple[bool, Optional[str]]:
+        """
+        اعتبارسنجی نام ZFS Pool بر اساس قوانین رسمی ZFS.
+
+        Args:
+            pool_name (str): نام pool پیشنهادی.
+
+        Returns:
+            Tuple[bool, Optional[str]]:
+                - در صورت معتبر بودن: (True, None)
+                - در صورت نامعتبر بودن: (False, پیام خطا)
+        """
         if not isinstance(pool_name, str) or not pool_name.strip():
             return False, "نام pool نمی‌تواند خالی باشد."
         if not re.match(self.POOL_NAME_PATTERN, pool_name):
@@ -74,9 +161,30 @@ class ZpoolNameValidationMixin:
             return False, "نام pool نمی‌تواند بیشتر از 255 کاراکتر باشد."
         return True, None
 
+
 class ZpoolExistsMixin(ZpoolNameValidationMixin):
-    """بررسی وجود pool و اعتبارسنجی آن."""
-    def _get_zpool_manager_and_validate(self, pool_name: str, must_exist: bool = True) -> tuple[ZpoolManager | None, str | None]:
+    """
+    Mixin برای اعتبارسنجی وجود یا عدم وجود یک ZFS Pool.
+
+    این کلاس از ZpoolNameValidationMixin ارث‌بری می‌کند و قابلیت بررسی وجود pool را اضافه می‌کند.
+    برای عملیاتی مانند ایجاد (نیاز به عدم وجود) یا حذف/جایگزینی (نیاز به وجود) کاربرد دارد.
+    """
+
+    def _get_zpool_manager_and_validate(self, pool_name: str, must_exist: bool = True) -> Tuple[Optional[ZpoolManager], Optional[str]]:
+        """
+        دریافت نمونه ZpoolManager و اعتبارسنجی وجود/عدم وجود pool.
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+            must_exist (bool): آیا pool باید وجود داشته باشد؟
+                - True: برای عملیاتی مانند destroy یا replace.
+                - False: برای عملیاتی مانند create.
+
+        Returns:
+            Tuple[Optional[ZpoolManager], Optional[str]]:
+                - در موفقیت: (نمونه ZpoolManager, None)
+                - در خطا: (None, پیام خطا)
+        """
         is_valid, error = self._validate_zpool_name(pool_name)
         if not is_valid:
             return None, error
@@ -93,8 +201,26 @@ class ZpoolExistsMixin(ZpoolNameValidationMixin):
             return None, "خطا در ایجاد منیجر Zpool."
 
     def validate_zpool_for_operation(
-        self, pool_name: str, save_to_db: bool, request_data: dict, must_exist: bool = True
-    ):
+            self,
+            pool_name: str,
+            save_to_db: bool,
+            request_data: Dict[str, Any],
+            must_exist: bool = True
+    ) -> Union[ZpoolManager, StandardErrorResponse]:
+        """
+        اعتبارسنجی کامل pool برای یک عملیات و بازگرداندن مدیر یا خطا.
+
+        Args:
+            pool_name (str): نام pool.
+            save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
+            request_data (Dict[str, Any]): داده درخواست کاربر.
+            must_exist (bool): آیا pool باید از قبل وجود داشته باشد؟
+
+        Returns:
+            Union[ZpoolManager, StandardErrorResponse]:
+                - در صورت موفقیت: نمونه ZpoolManager
+                - در صورت خطا: نمونه StandardErrorResponse
+        """
         manager, error = self._get_zpool_manager_and_validate(pool_name, must_exist)
         if manager is None:
             status = 404 if "وجود ندارد" in (error or "") else 400

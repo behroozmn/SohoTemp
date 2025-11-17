@@ -11,7 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 def _get_wwn_from_device_path(device_path: str) -> str:
-    """دریافت WWN یا شناسه منحصربه‌فرد از مسیر دستگاه (مثل /dev/sda1)."""
+    """
+    دریافت شناسه منحصربه‌فرد (WWN یا NVMe ID) یک دستگاه بلاکی از /dev/disk/by-id.
+
+    این تابع مسیر واقعی دستگاه (مثل /dev/sda1) را دریافت کرده و در دایرکتوری
+    /dev/disk/by-id به دنبال لینکی با پیشوند wwn- یا nvme- جستجو می‌کند.
+
+    Args:
+        device_path (str): مسیر دستگاه در سیستم فایل (مثال: "/dev/sda1").
+
+    Returns:
+        str: نام لینک منحصربه‌فرد (مثل "wwn-0x5002538d40000000") یا رشته خالی در صورت عدم یافتن.
+    """
     by_id_path = "/dev/disk/by-id"
     if not os.path.exists(by_id_path):
         return ""
@@ -33,13 +44,34 @@ def _get_wwn_from_device_path(device_path: str) -> str:
 
 
 class ZpoolManager:
-    """مدیریت جامع ZFS Poolها بدون استفاده از ok/fail."""
+    """
+    مدیریت جامع ZFS Poolها بدون استفاده از توابع ok/fail.
+
+    این کلاس تمام عملیات خواندن (با libzfs) و نوشتن (با subprocess + zpool)
+    را ارائه می‌دهد و خروجی‌های خود را به صورت tuple (bool, str) یا داده خام برمی‌گرداند.
+    """
 
     def __init__(self) -> None:
+        """سازنده کلاس — ایجاد نمونه ZFS از libzfs."""
         self.zfs = libzfs.ZFS()
 
     def list_all_pools(self) -> List[Dict[str, Any]]:
-        """لیست تمام poolها با جزئیات اصلی (برای نمایش سریع)."""
+        """
+        دریافت لیست خلاصه تمام ZFS Poolهای موجود در سیستم.
+
+        Returns:
+            List[Dict[str, Any]]: لیستی از دیکشنری‌ها با فیلدهای زیر:
+                - name (str): نام pool
+                - health (str): وضعیت سلامت (ONLINE, DEGRADED, FAULTED, ...)
+                - size (str): حجم کل
+                - allocated (str): حجم استفاده‌شده
+                - free (str): فضای آزاد
+                - capacity (str): درصد پر شدن
+                - guid (str): شناسه منحصربه‌فرد
+
+        Note:
+            در صورت خطا، لیست خالی برمی‌گردد و خطای آن لاگ می‌شود.
+        """
         pools = []
         try:
             for p in self.zfs.pools:
@@ -58,7 +90,17 @@ class ZpoolManager:
         return pools
 
     def get_pool_detail(self, pool_name: str) -> Optional[Dict[str, Any]]:
-        """دریافت تمام ویژگی‌های یک pool خاص."""
+        """
+        دریافت تمام ویژگی‌های یک ZFS Pool خاص.
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+
+        Returns:
+            Optional[Dict[str, Any]]:
+                - در صورت یافتن: دیکشنری کامل از تمام ویژگی‌های pool (نام → مقدار به صورت str)
+                - در صورت عدم یافتن: None
+        """
         for p in self.zfs.pools:
             if str(p.properties["name"].value) == pool_name:
                 props = p.properties
@@ -66,18 +108,43 @@ class ZpoolManager:
         return None
 
     def pool_exists(self, pool_name: str) -> bool:
-        """بررسی وجود pool با نام داده‌شده."""
+        """
+        بررسی وجود یک ZFS Pool با نام داده‌شده.
+
+        Args:
+            pool_name (str): نام pool برای جستجو.
+
+        Returns:
+            bool: True اگر pool وجود داشته باشد، در غیر این صورت False.
+        """
         return any(str(p.properties["name"].value) == pool_name for p in self.zfs.pools)
 
     def get_pool_devices(self, pool_name: str) -> List[Dict[str, Any]]:
-        """دریافت لیست دیسک‌های فیزیکی یک pool با وضعیت و WWN."""
+        """
+        دریافت لیست تمام دیسک‌های فیزیکی یک ZFS Pool با وضعیت و WWN.
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+
+        Returns:
+            List[Dict[str, Any]]: لیستی از دیکشنری‌ها با فیلدهای زیر:
+                - path (str): مسیر کامل دستگاه (مثل "/dev/sda")
+                - disk (str): نام دیسک (مثل "sda")
+                - status (str): وضعیت دیسک (ONLINE, FAULTED, ...)
+                - type (str): نوع دستگاه ("disk" یا "file")
+                - parent_vdev (str): نوع والد vdev (مثل "mirror", "raidz", "root", ...)
+                - wwn (str): شناسه منحصربه‌فرد یا رشته خالی
+
+        Note:
+            در صورت عدم یافتن pool، لیست خالی برمی‌گردد.
+        """
         for p in self.zfs.pools:
             if str(p.properties["name"].value) == pool_name:
                 devices = []
 
-                def traverse_vdevs(vdev, parent_type="root"):
+                def traverse_vdevs(vdev, parent_type: str = "root"):
                     if vdev.type in ("disk", "file"):
-                        path_clean = re.sub(r'\d+$', '', vdev.path)  # حذف عدد انتهایی برای نام دیسک
+                        path_clean = re.sub(r'\d+$', '', vdev.path)
                         disk_name = path_clean.replace("/dev/", "")
                         wwn = _get_wwn_from_device_path(vdev.path)
                         devices.append({
@@ -97,7 +164,19 @@ class ZpoolManager:
         return []
 
     def create_pool(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> Tuple[bool, str]:
-        """ایجاد pool جدید."""
+        """
+        ایجاد یک ZFS Pool جدید با دیسک‌های مشخص‌شده.
+
+        Args:
+            pool_name (str): نام pool جدید.
+            devices (List[str]): لیست مسیر دستگاه‌ها (مثال: ["/dev/sdb", "/dev/sdc"]).
+            vdev_type (str): نوع vdev (disk, mirror, raidz, raidz2, raidz3, spare). پیش‌فرض: "disk"
+
+        Returns:
+            Tuple[bool, str]:
+                - (True, پیام موفقیت) در صورت موفقیت
+                - (False, پیام خطا) در صورت شکست
+        """
         try:
             if vdev_type == "disk":
                 cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "create", "-f", pool_name] + devices
@@ -111,7 +190,19 @@ class ZpoolManager:
             return False, f"خطای غیرمنتظره: {str(e)}"
 
     def destroy_pool(self, pool_name: str) -> Tuple[bool, str]:
-        """حذف pool."""
+        """
+        حذف یک ZFS Pool موجود.
+
+        ⚠️ این عملیات غیرقابل بازگشت است و تمام داده‌ها پاک می‌شوند.
+
+        Args:
+            pool_name (str): نام pool برای حذف.
+
+        Returns:
+            Tuple[bool, str]:
+                - (True, پیام موفقیت) در صورت موفقیت
+                - (False, پیام خطا) در صورت شکست
+        """
         try:
             subprocess.run(
                 ["/usr/bin/sudo", "/usr/bin/zpool", "destroy", "-f", pool_name],
@@ -124,7 +215,19 @@ class ZpoolManager:
             return False, f"خطای غیرمنتظره: {str(e)}"
 
     def replace_device(self, pool_name: str, old_device: str, new_device: str) -> Tuple[bool, str]:
-        """جایگزینی دیسک خراب با دیسک سالم."""
+        """
+        جایگزینی یک دیسک خراب با یک دیسک سالم در یک pool.
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+            old_device (str): مسیر دستگاه خراب (مثال: "/dev/sdb")
+            new_device (str): مسیر دستگاه سالم جدید (مثال: "/dev/sdc")
+
+        Returns:
+            Tuple[bool, str]:
+                - (True, پیام موفقیت) در صورت موفقیت
+                - (False, پیام خطا) در صورت شکست
+        """
         try:
             subprocess.run(
                 ["/usr/bin/sudo", "/usr/bin/zpool", "replace", "-f", pool_name, old_device, new_device],
@@ -137,7 +240,19 @@ class ZpoolManager:
             return False, f"خطای غیرمنتظره: {str(e)}"
 
     def add_vdev(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> Tuple[bool, str]:
-        """افزودن دیسک یا vdev (مثل spare, mirror) به pool."""
+        """
+        افزودن یک vdev جدید (مثل دیسک، mirror، raidz یا spare) به یک pool موجود.
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+            devices (List[str]): لیست مسیر دستگاه‌ها.
+            vdev_type (str): نوع vdev (disk, mirror, raidz, raidz2, raidz3, spare). پیش‌فرض: "disk"
+
+        Returns:
+            Tuple[bool, str]:
+                - (True, پیام موفقیت) در صورت موفقیت
+                - (False, پیام خطا) در صورت شکست
+        """
         try:
             if vdev_type == "spare":
                 cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name, "spare"] + devices
@@ -153,7 +268,19 @@ class ZpoolManager:
             return False, f"خطای غیرمنتظره: {str(e)}"
 
     def set_property(self, pool_name: str, prop: str, value: str) -> Tuple[bool, str]:
-        """تنظیم یک ویژگی pool (مثل autoreplace=on)."""
+        """
+        تنظیم یک ویژگی ZFS Pool (مثل autoreplace=on یا failmode=continue).
+
+        Args:
+            pool_name (str): نام pool مورد نظر.
+            prop (str): نام ویژگی (مثال: "autoreplace")
+            value (str): مقدار جدید (مثال: "on")
+
+        Returns:
+            Tuple[bool, str]:
+                - (True, پیام موفقیت) در صورت موفقیت
+                - (False, پیام خطا) در صورت شکست
+        """
         try:
             subprocess.run(
                 ["/usr/bin/sudo", "/usr/bin/zpool", "set", f"{prop}={value}", pool_name],
