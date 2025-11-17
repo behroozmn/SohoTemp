@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import os
 from typing import Tuple, Union, Optional, Dict, Any
 from pylibs import StandardErrorResponse, logger
 from pylibs.disk import DiskManager
@@ -32,18 +33,74 @@ class DiskValidationMixin:
             return False, "نام دیسک معتبر نیست."
         return True, None
 
-    def _get_disk_manager_and_validate(self, disk_name: str) -> Tuple[Optional[DiskManager], Optional[str]]:
+    def _resolve_device_path(self, device_path: str) -> Optional[str]:
+        """
+        تبدیل مسیر لینک (مثل /dev/disk/by-id/wwn-...) به مسیر واقعی بلاک دیوایس (مثل /dev/sdb).
+        """
+        if not device_path.startswith("/dev/"):
+            return None
+        try:
+            return os.path.realpath(device_path)
+        except (OSError, ValueError):
+            return None
+
+    def _extract_disk_name_from_real_path(self, real_path: str) -> Optional[str]:
+        """
+        استخراج نام دیسک (مثل 'sdb', 'nvme0n1') از مسیر واقعی (مثل '/dev/sdb', '/dev/nvme0n1').
+        """
+        if not real_path.startswith("/dev/"):
+            return None
+        name = os.path.basename(real_path)
+        # بررسی اینکه آیا پارتیشن است یا نه (اگر پارتیشن بود، دیسک اصلی را برمی‌گرداند)
+        if name.startswith(("sd", "hd", "vd")) and any(c.isdigit() for c in name):
+            return re.sub(r'\d+$', '', name)
+        if name.startswith(("nvme", "mmcblk")) and "p" in name:
+            return re.sub(r'p\d+$', '', name)
+        # اگر خودش دیسک اصلی بود
+        if re.match(r'^(sd[a-z]+|nvme\d+n\d+|vd[a-z]+|hd[a-z]+|mmcblk\d+)$', name):
+            return name
+        return None
+
+    def _normalize_disk_input(self, disk_input: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        تبدیل ورودی (نام کوتاه یا مسیر WWN) به نام دیسک استاندارد.
+
+        Returns:
+            Tuple[Optional[str], Optional[str]]:
+                - (disk_name, None) اگر موفق باشد
+                - (None, error_message) اگر شکست بخورد
+        """
+        if disk_input.startswith("/dev/disk/by-id/"):
+            # ورودی یک مسیر WWN/NVMe است
+            real_path = self._resolve_device_path(disk_input)
+            if not real_path or not real_path.startswith("/dev/"):
+                return None, f"دستگاه معتبری برای مسیر '{disk_input}' یافت نشد."
+
+            disk_name = self._extract_disk_name_from_real_path(real_path)
+            if not disk_name:
+                return None, f"نام دیسک قابل استخراج نیست از مسیر '{real_path}'."
+
+            return disk_name, None
+        else:
+            # ورودی یک نام کوتاه است (مثل 'sda')
+            return disk_input, None
+
+    def _get_disk_manager_and_validate(self, disk_input: str) -> Tuple[Optional[DiskManager], Optional[str]]:
         """
         دریافت نمونه DiskManager و اعتبارسنجی وجود دیسک در سیستم.
 
         Args:
-            disk_name (str): نام دیسک برای بررسی.
+            disk_input (str): نام کوتاه یا مسیر کامل دیسک.
 
         Returns:
             Tuple[Optional[DiskManager], Optional[str]]:
                 - در موفقیت: (نمونه DiskManager, None)
                 - در خطا: (None, پیام خطا)
         """
+        disk_name, error = self._normalize_disk_input(disk_input)
+        if error:
+            return None, error
+
         is_valid, error_msg = self._validate_disk_name(disk_name)
         if not is_valid:
             return None, error_msg
@@ -57,12 +114,12 @@ class DiskValidationMixin:
             logger.error(f"Error creating DiskManager: {str(e)}")
             return None, "خطا در ایجاد منیجر دیسک."
 
-    def validate_disk_and_get_manager(self, disk_name: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Union[DiskManager, StandardErrorResponse]:
+    def validate_disk_and_get_manager(self, disk_input: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Union[DiskManager, StandardErrorResponse]:
         """
-        اعتبارسنجی کامل دیسک و بازگرداندن نمونه مدیر یا خطای استاندارد.
+        اعتبارسنجی کامل دیسک (با پشتیبانی از WWN/NVMe) و بازگرداندن نمونه مدیر یا خطای استاندارد.
 
         Args:
-            disk_name (str): نام دیسک.
+            disk_input (str): نام کوتاه یا مسیر کامل WWN دیسک.
             save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
             request_data (Dict[str, Any]): داده درخواست اصلی برای لاگ یا ذخیره.
 
@@ -71,11 +128,11 @@ class DiskValidationMixin:
                 - در صورت موفقیت: نمونه DiskManager
                 - در صورت خطا: نمونه StandardErrorResponse
         """
-        obj_disk, error_msg = self._get_disk_manager_and_validate(disk_name)
+        obj_disk, error_msg = self._get_disk_manager_and_validate(disk_input)
         if obj_disk is None:
             status_code = 404 if "یافت نشد" in (error_msg or "") else 400
             return StandardErrorResponse(
-                error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_name",
+                error_code="disk_not_found" if "یافت نشد" in (error_msg or "") else "invalid_disk_input",
                 error_message=error_msg or "خطا در اعتبارسنجی دیسک.",
                 request_data=request_data,
                 status=status_code,
@@ -98,6 +155,7 @@ class DiskValidationMixin:
                 - اگر دیسک سیستم‌عامل باشد: خطای ممنوعیت (403)
                 - اگر نباشد: None
         """
+
         if obj_disk.has_os_on_disk(disk_name):
             return StandardErrorResponse(
                 error_code="os_disk_protected",
