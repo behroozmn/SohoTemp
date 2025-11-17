@@ -307,3 +307,6 @@ class ZpoolValidationMixin:
                 error_message=error,
                 request_data=request_data, status=400, save_to_db=save_to_db)
         return vdev_type
+
+    def _is_valid_wwn_path(self, path: str) -> bool:
+        return bool(re.match(r'^/dev/disk/by-id/(wwn-|nvme-)', path))
