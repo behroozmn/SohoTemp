@@ -1,5 +1,4 @@
 # soho_core_api/views_collection/view_disk.py
-from __future__ import annotations
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated

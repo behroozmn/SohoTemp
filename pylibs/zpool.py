@@ -169,7 +169,7 @@ class ZpoolManager:
 
         Args:
             pool_name (str): نام pool جدید.
-            devices (List[str]): لیست مسیر دستگاه‌ها (مثال: ["/dev/sdb", "/dev/sdc"]).
+            devices (List[str]): لیست مسیر دستگاه‌ها (مثال: ["/dev/sdb", "/dev/sdc"] یا ["/dev/disk/by-id/wwn-0x5000c500e8272848", "/dev/disk/by-id/wwn-0x5000c500e873591d"]).
             vdev_type (str): نوع vdev (disk, mirror, raidz, raidz2, raidz3, spare). پیش‌فرض: "disk"
 
         Returns:

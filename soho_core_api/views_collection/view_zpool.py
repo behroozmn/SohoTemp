@@ -12,16 +12,16 @@ from typing import Dict, Any, List, Union
 
 class ZpoolListView(APIView):
     """
-    دریافت لیست خلاصه تمام ZFS Poolهای سیستم.
+    دریافت لیست خلاصه تمام «پول»های  «زد اف اس» سیستم.
 
-    این ویو تمام poolهای موجود در سیستم را بدون جزئیات کامل برمی‌گرداند.
+    این ویو تمام «پول»های موجود در سیستم را بدون جزئیات کامل برمی‌گرداند.
     برای دریافت جزئیات کامل یک pool خاص، از `ZpoolDetailView` استفاده کنید.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request) -> Union[StandardResponse, StandardErrorResponse]:
         """
-        دریافت لیست poolها.
+        دریافت لیست «پول»ها.
 
         Args:
             request: درخواست HTTP GET.
@@ -31,7 +31,7 @@ class ZpoolListView(APIView):
 
         Returns:
             Union[StandardResponse, StandardErrorResponse]:
-                - موفقیت: لیست poolها با فیلدهای خلاصه
+                - موفقیت: لیست «پول»ها با فیلدهای خلاصه
                 - خطا: StandardErrorResponse در صورت بروز مشکل
         """
         save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
@@ -39,28 +39,15 @@ class ZpoolListView(APIView):
         try:
             manager = ZpoolManager()
             pools: List[Dict[str, Any]] = manager.list_all_pools()
-            return StandardResponse(
-                data=pools,
-                message="لیست poolها با موفقیت دریافت شد.",
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data=pools, message="لیست «پول»ها با موفقیت دریافت شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             logger.error(f"Error in ZpoolListView: {e}")
-            return StandardErrorResponse(
-                error_code="zpool_list_error",
-                error_message="خطا در دریافت لیست poolها.",
-                exception=e,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_list_error", error_message="خطا در دریافت لیست «پول»ها.", exception=e, request_data=request_data, save_to_db=save_to_db)
 
 
 class ZpoolDetailView(ZpoolExistsMixin, APIView):
     """
-    دریافت جزئیات کامل یک ZFS Pool خاص.
-
-    این ویو تمام ویژگی‌های pool (مانند health, size, autoreplace, bootfs و ...) را برمی‌گرداند.
+    دریافت جزئیات کامل یک ZFS Pool خاص. این ویو تمام ویژگی‌های pool (مانند health, size, autoreplace, bootfs و ...) را برمی‌گرداند.
     """
     permission_classes = [IsAuthenticated]
 
@@ -86,12 +73,7 @@ class ZpoolDetailView(ZpoolExistsMixin, APIView):
         if isinstance(manager, StandardErrorResponse):
             return manager
         detail: ئDict[str, Any] = manager.get_pool_detail(pool_name)
-        return StandardResponse(
-            data=detail,
-            message=f"جزئیات pool '{pool_name}' دریافت شد.",
-            request_data=request_data,
-            save_to_db=save_to_db
-        )
+        return StandardResponse(data=detail, message=f"جزئیات pool '{pool_name}' دریافت شد.", request_data=request_data, save_to_db=save_to_db)
 
 
 # ------------------------ دیسک‌های pool ------------------------
@@ -112,9 +94,6 @@ class ZpoolDevicesView(ZpoolExistsMixin, APIView):
             request: درخواست HTTP GET.
             pool_name (str): نام pool مورد نظر.
 
-        Query Parameters:
-            save_to_db (bool): آیا نتیجه باید در دیتابیس ذخیره شود؟ پیش‌فرض: False
-
         Returns:
             Union[StandardResponse, StandardErrorResponse]:
                 - موفقیت: لیست دیسک‌ها با وضعیت و جزئیات
@@ -126,12 +105,7 @@ class ZpoolDevicesView(ZpoolExistsMixin, APIView):
         if isinstance(manager, StandardErrorResponse):
             return manager
         devices: List[Dict[str, Any]] = manager.get_pool_devices(pool_name)
-        return StandardResponse(
-            data={"pool_name": pool_name, "devices": devices},
-            message=f"لیست دیسک‌های pool '{pool_name}' دریافت شد.",
-            request_data=request_data,
-            save_to_db=save_to_db
-        )
+        return StandardResponse(data={"pool_name": pool_name, "devices": devices}, message=f"لیست دیسک‌های pool '{pool_name}' دریافت شد.", request_data=request_data, save_to_db=save_to_db)
 
 
 # ------------------------ ایجاد / حذف ------------------------
@@ -170,13 +144,7 @@ class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMix
         vdev_type: str = get_request_param(request, "vdev_type", str, "disk")
 
         if not pool_name or not isinstance(devices, list) or not devices:
-            return StandardErrorResponse(
-                error_code="invalid_input",
-                error_message="پارامترهای ضروری (pool_name, devices) الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="invalid_input", error_message="پارامترهای ضروری (pool_name, devices) الزامی هستند.", request_data=request_data, status=400, save_to_db=save_to_db)
 
         # اعتبارسنجی نام pool
         manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=False)
@@ -186,13 +154,7 @@ class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMix
         # اعتبارسنجی دیسک‌ها
         for dev in devices:
             if not dev.startswith("/dev/"):
-                return StandardErrorResponse(
-                    error_code="invalid_device_path",
-                    error_message=f"مسیر دستگاه باید با /dev/ شروع شود: {dev}",
-                    request_data=request_data,
-                    status=400,
-                    save_to_db=save_to_db
-                )
+                return StandardErrorResponse(error_code="invalid_device_path", error_message=f"مسیر دستگاه باید با /dev/ شروع شود: {dev}", request_data=request_data, status=400, save_to_db=save_to_db)
             disk_name: str = dev.replace("/dev/", "")
             disk_obj = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
             if isinstance(disk_obj, StandardErrorResponse):
@@ -203,20 +165,9 @@ class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMix
 
         success, msg = manager.create_pool(pool_name, devices, vdev_type)
         if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
-            return StandardErrorResponse(
-                error_code="zpool_create_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_create_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)
 
 
 class ZpoolDestroyView(ZpoolExistsMixin, APIView):
@@ -250,20 +201,9 @@ class ZpoolDestroyView(ZpoolExistsMixin, APIView):
             return manager
         success, msg = manager.destroy_pool(pool_name)
         if success:
-            return StandardResponse(
-                data={"pool_name": pool_name},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data={"pool_name": pool_name}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
-            return StandardErrorResponse(
-                error_code="zpool_destroy_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_destroy_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)
 
 
 # ------------------------ جایگزینی دیسک ------------------------
@@ -299,13 +239,7 @@ class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtecti
         new_device: str = request_data.get("new_device")
 
         if not old_device or not new_device:
-            return StandardErrorResponse(
-                error_code="missing_params",
-                error_message="پارامترهای old_device و new_device الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="missing_params", error_message="پارامترهای old_device و new_device الزامی هستند.", request_data=request_data, status=400, save_to_db=save_to_db)
 
         manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
         if isinstance(manager, StandardErrorResponse):
@@ -322,20 +256,9 @@ class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtecti
 
         success, msg = manager.replace_device(pool_name, old_device, new_device)
         if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "old": old_device, "new": new_device},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data={"pool_name": pool_name, "old": old_device, "new": new_device}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
-            return StandardErrorResponse(
-                error_code="zpool_replace_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_replace_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)
 
 
 # ------------------------ افزودن spare یا دیسک ------------------------
@@ -371,13 +294,7 @@ class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMi
         vdev_type: str = request_data.get("vdev_type", "disk")
 
         if not isinstance(devices, list) or not devices:
-            return StandardErrorResponse(
-                error_code="invalid_devices",
-                error_message="پارامتر devices باید لیستی از مسیرهای دستگاه باشد.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="invalid_devices", error_message="پارامتر devices باید لیستی از مسیرهای دستگاه باشد.", request_data=request_data, status=400, save_to_db=save_to_db)
 
         manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
         if isinstance(manager, StandardErrorResponse):
@@ -394,20 +311,9 @@ class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMi
 
         success, msg = manager.add_vdev(pool_name, devices, vdev_type)
         if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
-            return StandardErrorResponse(
-                error_code="zpool_add_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_add_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)
 
 
 # ------------------------ تنظیم ویژگی ------------------------
@@ -443,13 +349,7 @@ class ZpoolSetPropertyView(ZpoolExistsMixin, APIView):
         value: str = request_data.get("value")
 
         if not prop or not value:
-            return StandardErrorResponse(
-                error_code="missing_property",
-                error_message="پارامترهای property و value الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="missing_property", error_message="پارامترهای property و value الزامی هستند.", request_data=request_data, status=400, save_to_db=save_to_db)
 
         manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
         if isinstance(manager, StandardErrorResponse):
@@ -457,17 +357,6 @@ class ZpoolSetPropertyView(ZpoolExistsMixin, APIView):
 
         success, msg = manager.set_property(pool_name, prop, value)
         if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "property": prop, "value": value},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(data={"pool_name": pool_name, "property": prop, "value": value}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
-            return StandardErrorResponse(
-                error_code="zpool_set_property_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(error_code="zpool_set_property_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)

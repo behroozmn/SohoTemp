@@ -200,13 +200,7 @@ class ZpoolExistsMixin(ZpoolNameValidationMixin):
             logger.error(f"Error initializing ZpoolManager: {e}")
             return None, "خطا در ایجاد منیجر Zpool."
 
-    def validate_zpool_for_operation(
-            self,
-            pool_name: str,
-            save_to_db: bool,
-            request_data: Dict[str, Any],
-            must_exist: bool = True
-    ) -> Union[ZpoolManager, StandardErrorResponse]:
+    def validate_zpool_for_operation(self, pool_name: str, save_to_db: bool, request_data: Dict[str, Any], must_exist: bool = True) -> Union[ZpoolManager, StandardErrorResponse]:
         """
         اعتبارسنجی کامل pool برای یک عملیات و بازگرداندن مدیر یا خطا.
 
