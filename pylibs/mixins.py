@@ -57,12 +57,7 @@ class DiskValidationMixin:
             logger.error(f"Error creating DiskManager: {str(e)}")
             return None, "خطا در ایجاد منیجر دیسک."
 
-    def validate_disk_and_get_manager(
-            self,
-            disk_name: str,
-            save_to_db: bool,
-            request_data: Dict[str, Any],
-    ) -> Union[DiskManager, StandardErrorResponse]:
+    def validate_disk_and_get_manager(self, disk_name: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Union[DiskManager, StandardErrorResponse]:
         """
         اعتبارسنجی کامل دیسک و بازگرداندن نمونه مدیر یا خطای استاندارد.
 

@@ -4,7 +4,6 @@ from rest_framework.permissions import IsAuthenticated
 from pylibs import (StandardResponse, StandardErrorResponse, get_request_param, logger)
 from pylibs.mixins import DiskValidationMixin, OSDiskProtectionMixin, ZpoolExistsMixin
 from pylibs.zpool import ZpoolManager
-from pylibs.disk import DiskManager
 from typing import Dict, Any, List, Union
 
 
@@ -156,9 +155,11 @@ class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMix
             if not dev.startswith("/dev/"):
                 return StandardErrorResponse(error_code="invalid_device_path", error_message=f"مسیر دستگاه باید با /dev/ شروع شود: {dev}", request_data=request_data, status=400, save_to_db=save_to_db)
             disk_name: str = dev.replace("/dev/", "")
+
             disk_obj = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
             if isinstance(disk_obj, StandardErrorResponse):
                 return disk_obj
+
             os_error = self.check_os_disk_protection(disk_obj, disk_name, save_to_db, request_data)
             if os_error:
                 return os_error
@@ -360,3 +361,6 @@ class ZpoolSetPropertyView(ZpoolExistsMixin, APIView):
             return StandardResponse(data={"pool_name": pool_name, "property": prop, "value": value}, message=msg, request_data=request_data, save_to_db=save_to_db)
         else:
             return StandardErrorResponse(error_code="zpool_set_property_failed", error_message=msg, request_data=request_data, status=500, save_to_db=save_to_db)
+
+# تست: آیا این کلاس واقعاً لود می‌شود؟
+print("✅ ZpoolCreateView loaded:", ZpoolCreateView)
