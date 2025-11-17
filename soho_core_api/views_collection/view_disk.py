@@ -1,18 +1,12 @@
 # soho_core_api/views_collection/view_disk.py
+from __future__ import annotations
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param
+from pylibs import StandardResponse, StandardErrorResponse, get_request_param,logger
 from pylibs.disk import DiskManager
-from django.utils import timezone
-import logging
-
 from soho_core_api.models import Disks
-
-logger = logging.getLogger(__name__)
-
 from typing import List, Dict, Any
-from soho_core_api.models import Disks  # فرض: مدل Disk در همان اپلیکیشن تعریف شده
 
 
 def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
