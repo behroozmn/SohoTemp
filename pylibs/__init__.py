@@ -1,3 +1,4 @@
+# soho_core_api/pylibs/__init__.py
 """
 Standardized API response wrappers for consistent JSON structure.
 
