@@ -7,6 +7,7 @@ from typing import Tuple, Union, Optional, Dict, Any
 from pylibs import StandardErrorResponse, logger
 from pylibs.disk import DiskManager
 from pylibs.zpool import ZpoolManager
+from typing import Tuple, Optional, Union, Dict, Any, List
 
 
 class DiskValidationMixin:
@@ -167,31 +168,27 @@ class DiskValidationMixin:
         return None
 
 
-class ZpoolNameValidationMixin:
+class ZpoolValidationMixin:
     """
-    Mixin برای اعتبارسنجی نام ZFS Pool.
+    میکسین جامع برای اعتبارسنجی ZFS Pool و دیسک‌های مرتبط با آن.
 
-    نام‌های معتبر ZFS باید:
-        - با حرف یا عدد شروع شوند.
-        - فقط شامل حروف، اعداد، نقطه، زیرخط و خط‌تیره باشند.
-        - حداکثر 255 کاراکتر طول داشته باشند.
+    این کلاس تمام منطق مورد نیاز برای ایمن‌سازی عملیات Zpool را فراهم می‌کند:
+        - اعتبارسنجی نام pool (طول، کاراکتر، ساختار)
+        - بررسی وجود یا عدم وجود pool
+        - اعتبارسنجی مسیرهای دیسک (فقط /dev/ و زیرشاخه‌های معتبر)
+        - پشتیبانی کامل از مسیرهای WWN و NVMe در /dev/disk/by-id/
+        - استخراج نام کوتاه دیسک برای استفاده در DiskManager
+        - اعتبارسنجی vdev_type معتبر
     """
 
     POOL_NAME_PATTERN: str = r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
-    """الگوی منظم برای تأیید نام معتبر ZFS Pool."""
+    """الگوی منظم برای نام‌های معتبر ZFS Pool."""
+
+    VALID_VDEV_TYPES: set = {"disk", "mirror", "raidz", "raidz2", "raidz3", "spare"}
+    """لیست انواع معتبر vdev در ZFS."""
 
     def _validate_zpool_name(self, pool_name: str) -> Tuple[bool, Optional[str]]:
-        """
-        اعتبارسنجی نام ZFS Pool بر اساس قوانین رسمی ZFS.
-
-        Args:
-            pool_name (str): نام pool پیشنهادی.
-
-        Returns:
-            Tuple[bool, Optional[str]]:
-                - در صورت معتبر بودن: (True, None)
-                - در صورت نامعتبر بودن: (False, پیام خطا)
-        """
+        """اعتبارسنجی ساختاری و طول نام pool."""
         if not isinstance(pool_name, str) or not pool_name.strip():
             return False, "نام pool نمی‌تواند خالی باشد."
         if not re.match(self.POOL_NAME_PATTERN, pool_name):
@@ -200,30 +197,56 @@ class ZpoolNameValidationMixin:
             return False, "نام pool نمی‌تواند بیشتر از 255 کاراکتر باشد."
         return True, None
 
+    def _validate_vdev_type(self, vdev_type: str) -> Tuple[bool, Optional[str]]:
+        """اعتبارسنجی نوع vdev بر اساس لیست مجاز."""
+        if vdev_type not in self.VALID_VDEV_TYPES:
+            return False, f"نوع vdev '{vdev_type}' معتبر نیست. انواع مجاز: {', '.join(self.VALID_VDEV_TYPES)}"
+        return True, None
 
-class ZpoolExistsMixin(ZpoolNameValidationMixin):
-    """
-    Mixin برای اعتبارسنجی وجود یا عدم وجود یک ZFS Pool.
+    def _resolve_device_path(self, device_path: str) -> Optional[str]:
+        """حل لینک نمادین به مسیر واقعی (مثل /dev/disk/by-id/wwn-... → /dev/sdb)."""
+        if not device_path.startswith("/dev/"):
+            return None
+        try:
+            return os.path.realpath(device_path)
+        except (OSError, ValueError):
+            return None
 
-    این کلاس از ZpoolNameValidationMixin ارث‌بری می‌کند و قابلیت بررسی وجود pool را اضافه می‌کند.
-    برای عملیاتی مانند ایجاد (نیاز به عدم وجود) یا حذف/جایگزینی (نیاز به وجود) کاربرد دارد.
-    """
+    def _extract_disk_name_from_real_path(self, real_path: str) -> Optional[str]:
+        """استخراج نام دیسک اصلی (sda, nvme0n1) از مسیر واقعی."""
+        if not real_path.startswith("/dev/"):
+            return None
+        name = os.path.basename(real_path)
+        if name.startswith(("sd", "hd", "vd")) and any(c.isdigit() for c in name):
+            return re.sub(r'\d+$', '', name)
+        if name.startswith(("nvme", "mmcblk")) and "p" in name:
+            return re.sub(r'p\d+$', '', name)
+        if re.match(r'^(sd[a-z]+|nvme\d+n\d+|vd[a-z]+|hd[a-z]+|mmcblk\d+)$', name):
+            return name
+        return None
 
-    def _get_zpool_manager_and_validate(self, pool_name: str, must_exist: bool = True) -> Tuple[Optional[ZpoolManager], Optional[str]]:
+    def _validate_and_extract_disk_info(self, device_path: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        دریافت نمونه ZpoolManager و اعتبارسنجی وجود/عدم وجود pool.
-
-        Args:
-            pool_name (str): نام pool مورد نظر.
-            must_exist (bool): آیا pool باید وجود داشته باشد؟
-                - True: برای عملیاتی مانند destroy یا replace.
-                - False: برای عملیاتی مانند create.
+        اعتبارسنجی یک مسیر دیسک و استخراج نام کوتاه آن.
 
         Returns:
-            Tuple[Optional[ZpoolManager], Optional[str]]:
-                - در موفقیت: (نمونه ZpoolManager, None)
-                - در خطا: (None, پیام خطا)
+            (disk_short_name, error_message)
         """
+        if not isinstance(device_path, str) or not device_path.startswith("/dev/"):
+            return None, f"مسیر دستگاه باید با '/dev/' شروع شود: {device_path}"
+
+        real_path = self._resolve_device_path(device_path)
+        if not real_path or not real_path.startswith("/dev/"):
+            return None, f"دستگاه معتبری برای مسیر '{device_path}' یافت نشد."
+
+        disk_name = self._extract_disk_name_from_real_path(real_path)
+        if not disk_name:
+            return None, f"نام دیسک قابل استخراج نیست از مسیر '{real_path}'."
+
+        return disk_name, None
+
+    def _get_zpool_manager_and_validate(self, pool_name: str, must_exist: bool = True) -> Tuple[Optional[ZpoolManager], Optional[str]]:
+        """اعتبارسنجی نام pool و بررسی وجود آن در سیستم."""
         is_valid, error = self._validate_zpool_name(pool_name)
         if not is_valid:
             return None, error
@@ -240,28 +263,47 @@ class ZpoolExistsMixin(ZpoolNameValidationMixin):
             return None, "خطا در ایجاد منیجر Zpool."
 
     def validate_zpool_for_operation(self, pool_name: str, save_to_db: bool, request_data: Dict[str, Any], must_exist: bool = True) -> Union[ZpoolManager, StandardErrorResponse]:
-        """
-        اعتبارسنجی کامل pool برای یک عملیات و بازگرداندن مدیر یا خطا.
-
-        Args:
-            pool_name (str): نام pool.
-            save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
-            request_data (Dict[str, Any]): داده درخواست کاربر.
-            must_exist (bool): آیا pool باید از قبل وجود داشته باشد؟
-
-        Returns:
-            Union[ZpoolManager, StandardErrorResponse]:
-                - در صورت موفقیت: نمونه ZpoolManager
-                - در صورت خطا: نمونه StandardErrorResponse
-        """
+        """اعتبارسنجی کامل pool برای یک عملیات."""
         manager, error = self._get_zpool_manager_and_validate(pool_name, must_exist)
         if manager is None:
             status = 404 if "وجود ندارد" in (error or "") else 400
             return StandardErrorResponse(
                 error_code="pool_not_found" if must_exist else "pool_already_exists",
                 error_message=error or "خطا در اعتبارسنجی pool.",
-                request_data=request_data,
-                status=status,
-                save_to_db=save_to_db
-            )
+                request_data=request_data, status=status, save_to_db=save_to_db)
         return manager
+
+    def validate_zpool_devices(self, devices: List[str], save_to_db: bool, request_data: Dict[str, Any]) -> Union[List[Tuple[str, str]], StandardErrorResponse]:
+        """
+        اعتبارسنجی لیست دستگاه‌های ورودی و بازگرداندن لیست (device_path, disk_short_name).
+
+        Returns:
+            - در موفقیت: لیستی از تاپل‌ها: [(full_path, short_name), ...]
+            - در خطا: StandardErrorResponse
+        """
+        if not isinstance(devices, list) or not devices:
+            return StandardErrorResponse(
+                error_code="invalid_devices",
+                error_message="پارامتر devices باید لیستی غیرخالی از مسیرهای دستگاه باشد.",
+                request_data=request_data, status=400, save_to_db=save_to_db)
+
+        validated = []
+        for dev in devices:
+            disk_name, error = self._validate_and_extract_disk_info(dev)
+            if error:
+                return StandardErrorResponse(
+                    error_code="invalid_device_path",
+                    error_message=error,
+                    request_data=request_data, status=400, save_to_db=save_to_db)
+            validated.append((dev, disk_name))
+        return validated
+
+    def validate_vdev_type(self, vdev_type: str, save_to_db: bool, request_data: Dict[str, Any]) -> Union[str, StandardErrorResponse]:
+        """اعتبارسنجی نوع vdev."""
+        is_valid, error = self._validate_vdev_type(vdev_type)
+        if not is_valid:
+            return StandardErrorResponse(
+                error_code="invalid_vdev_type",
+                error_message=error,
+                request_data=request_data, status=400, save_to_db=save_to_db)
+        return vdev_type
