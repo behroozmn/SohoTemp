@@ -83,21 +83,7 @@ class DiskValidationMixin:
             )
         return obj_disk
 
-
-class OSDiskProtectionMixin:
-    """
-    Mixin برای جلوگیری از انجام عملیات خطرناک روی دیسک سیستم‌عامل.
-
-    این کلاس از اشتباهات رایج کاربران جلوگیری می‌کند که بخواهند دیسک بوت را پاک یا تغییر دهند.
-    """
-
-    def check_os_disk_protection(
-            self,
-            obj_disk: DiskManager,
-            disk_name: str,
-            save_to_db: bool,
-            request_data: Dict[str, Any],
-    ) -> Optional[StandardErrorResponse]:
+    def check_os_disk_protection(self, obj_disk: DiskManager, disk_name: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Optional[StandardErrorResponse]:
         """
         بررسی اینکه آیا دیسک مورد نظر، دیسک سیستم‌عامل است یا خیر.
 

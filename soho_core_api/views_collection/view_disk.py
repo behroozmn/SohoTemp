@@ -3,7 +3,7 @@
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from pylibs import StandardResponse, StandardErrorResponse, get_request_param,logger
-from pylibs.mixins import OSDiskProtectionMixin,DiskValidationMixin
+from pylibs.mixins import DiskValidationMixin
 from pylibs.disk import DiskManager
 from soho_core_api.models import Disks
 from typing import List, Dict, Any
@@ -456,7 +456,7 @@ class PartitionTotalSizeView(APIView):
 # ------------------------ APIهای عملیاتی (POST) ------------------------
 
 
-class DiskWipeSignaturesView(DiskValidationMixin, OSDiskProtectionMixin, APIView):
+class DiskWipeSignaturesView(DiskValidationMixin, APIView):
     """پاک‌کردن سیگنچرهای دیسک."""
     permission_classes = [IsAuthenticated]
 
@@ -491,7 +491,7 @@ class DiskWipeSignaturesView(DiskValidationMixin, OSDiskProtectionMixin, APIView
             )
 
 
-class DiskClearZFSLabelView(DiskValidationMixin, OSDiskProtectionMixin, APIView):
+class DiskClearZFSLabelView(DiskValidationMixin, APIView):
     """پاک‌کردن لیبل ZFS دیسک."""
     permission_classes = [IsAuthenticated]
 

@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from pylibs import (StandardResponse, StandardErrorResponse, get_request_param, logger)
-from pylibs.mixins import DiskValidationMixin, OSDiskProtectionMixin, ZpoolExistsMixin
+from pylibs.mixins import DiskValidationMixin, ZpoolExistsMixin
 from pylibs.zpool import ZpoolManager
 from typing import Dict, Any, List, Union
 
@@ -109,7 +109,7 @@ class ZpoolDevicesView(ZpoolExistsMixin, APIView):
 
 # ------------------------ ایجاد / حذف ------------------------
 
-class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
+class ZpoolCreateView(ZpoolExistsMixin, DiskValidationMixin, APIView):
     """
     ایجاد یک ZFS Pool جدید با دیسک‌های مشخص‌شده.
 
@@ -209,7 +209,7 @@ class ZpoolDestroyView(ZpoolExistsMixin, APIView):
 
 # ------------------------ جایگزینی دیسک ------------------------
 
-class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
+class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, APIView):
     """
     جایگزینی یک دیسک خراب در یک pool با یک دیسک سالم جدید.
     """
@@ -264,7 +264,7 @@ class ZpoolReplaceDiskView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtecti
 
 # ------------------------ افزودن spare یا دیسک ------------------------
 
-class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, OSDiskProtectionMixin, APIView):
+class ZpoolAddVdevView(ZpoolExistsMixin, DiskValidationMixin, APIView):
     """
     افزودن یک vdev جدید (مثل دیسک، mirror، raidz یا spare) به یک pool موجود.
     """
