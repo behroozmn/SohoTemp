@@ -112,7 +112,7 @@ def get_request_param(request: Union[Request, dict], param_name: str, return_typ
             raise ValueError("Cannot convert to int")
 
         elif return_type == float:
-            if isinstance(raw_value, float): raw_value
+            if isinstance(raw_value, float): return raw_value
             if isinstance(raw_value, (int, str)): return float(raw_value)
             raise ValueError("Cannot convert to float")
 
