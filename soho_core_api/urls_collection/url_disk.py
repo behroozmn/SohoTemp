@@ -5,12 +5,11 @@ from soho_core_api.views_collection import view_disk
 
 urlpatterns = [
     path('', view_disk.DiskView.as_view(), name='disk'),
-    path('<str:disk_name>/', view_disk.DiskView.as_view(), name='disk-detail'),
 
     path('names/', view_disk.DiskNameListView.as_view(), name='disk-names'),
     path('count/', view_disk.DiskCountView.as_view(), name='disk-count'),
     path('os-disk/', view_disk.OSdiskView.as_view(), name='os-disk'),
-
+    path('<str:disk_name>/', view_disk.DiskView.as_view(), name='disk-detail'),
     path('<str:disk_name>/partition-count/', view_disk.DiskPartitionCountView.as_view(), name='disk-partition-count'),
     path('<str:disk_name>/partition-names/', view_disk.DiskPartitionNamesView.as_view(), name='disk-partition-names'),
     path('<str:disk_name>/type/', view_disk.DiskTypeView.as_view(), name='disk-type'),
