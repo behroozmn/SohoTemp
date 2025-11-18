@@ -1,371 +1,367 @@
 # soho_core_api/views_collection/view_zpool.py
-import os
-import re
+
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param, logger
-from pylibs.mixins import ZpoolValidationMixin, DiskValidationMixin
+from rest_framework.response import Response
+from rest_framework import status
+from typing import Dict, Any, List, Optional
+
 from pylibs.zpool import ZpoolManager
-from typing import Dict, Any, List, Union, Optional
+from pylibs.disk import DiskManager
+from pylibs.mixins import ZpoolValidationMixin, DiskValidationMixin
+from pylibs import StandardErrorResponse, logger
 
 
-# ------------------------ View اصلی Zpool (لیست + جزئیات) ------------------------
+def _get_save_to_db_flag(request) -> bool:
+    """استخراج save_to_db فقط در POST، در غیر این صورت False."""
+    return request.data.get("save_to_db", False) is True if request.method in ("POST", "PUT", "PATCH") else False
 
-class ZpoolView(ZpoolValidationMixin, APIView):
-    """
-    دریافت لیست تمام ZFS Poolها (اگر pool_name داده نشود) یا جزئیات یک pool خاص.
-    """
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request, pool_name: Optional[str] = None) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = dict(request.query_params)
+class ZpoolInfoView(ZpoolValidationMixin, APIView):
+    """مدیریت تمام درخواست‌های خواندنی (GET)."""
 
-        if pool_name is None:
-            # لیست تمام poolها
-            try:
-                manager = ZpoolManager()
-                pools = manager.list_all_pools()
-                return StandardResponse(
-                    data=pools,
-                    message="لیست ZFS Poolها با موفقیت دریافت شد.",
+    def get(self, request, pool_name: Optional[str] = None, action: Optional[str] = None):
+        save_to_db = False  # GET هرگز save_to_db=True نیست
+        request_data = getattr(request, "data", {})
+
+        try:
+            zpool_manager = ZpoolManager()
+        except Exception as e:
+            logger.error(f"Failed to initialize ZpoolManager: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_init_failed",
+                    error_message="خطا در راه‌اندازی مدیر ZFS.",
                     request_data=request_data,
+                    status=500,
                     save_to_db=save_to_db
-                )
-            except Exception as e:
-                logger.error(f"Error in ZpoolView (list): {e}")
-                return StandardErrorResponse(
-                    error_code="zpool_list_error",
-                    error_message="خطا در دریافت لیست ZFS Poolها.",
-                    exception=e,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-        else:
-            # جزئیات یک pool خاص
-            manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-            if isinstance(manager, StandardErrorResponse):
-                return manager
-            detail = manager.get_pool_detail(pool_name)
-            if detail is None:
-                return StandardErrorResponse(
-                    error_code="pool_detail_not_found",
-                    error_message=f"جزئیات pool '{pool_name}' یافت نشد.",
+                ).to_dict(),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # GET / → لیست تمام poolها
+        if pool_name is None and action is None:
+            pools = zpool_manager.list_all_pools()
+            return Response(pools, status=status.HTTP_200_OK)
+
+        # بررسی وجود pool
+        if not zpool_manager.pool_exists(pool_name):
+            return Response(
+                StandardErrorResponse(
+                    error_code="pool_not_found",
+                    error_message=f"Pool '{pool_name}' وجود ندارد.",
                     request_data=request_data,
                     status=404,
                     save_to_db=save_to_db
-                )
-            return StandardResponse(
-                data=detail,
-                message=f"جزئیات ZFS Pool '{pool_name}' دریافت شد.",
-                request_data=request_data,
-                save_to_db=save_to_db
+                ).to_dict(),
+                status=status.HTTP_404_NOT_FOUND
             )
 
+        # GET /<name>/ → جزئیات
+        if action is None:
+            detail = zpool_manager.get_pool_detail(pool_name)
+            return Response(detail or {}, status=status.HTTP_200_OK)
 
-# ------------------------ دیسک‌های pool ------------------------
+        # GET /<name>/devices/ → دستگاه‌ها
+        if action == "devices":
+            devices = zpool_manager.get_pool_devices(pool_name)
+            return Response(devices, status=status.HTTP_200_OK)
 
-class ZpoolDevicesView(ZpoolValidationMixin, APIView):
-    """دریافت لیست تمام دیسک‌های فیزیکی یک ZFS Pool با وضعیت و WWN."""
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pool_name: str) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = dict(request.query_params)
-
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
-
-        devices = manager.get_pool_devices(pool_name)
-        return StandardResponse(
-            data={"pool_name": pool_name, "devices": devices},
-            message=f"لیست دیسک‌های ZFS Pool '{pool_name}' دریافت شد.",
-            request_data=request_data,
-            save_to_db=save_to_db
+        return Response(
+            StandardErrorResponse(
+                error_code="invalid_action",
+                error_message="اکشن درخواستی معتبر نیست.",
+                request_data=request_data,
+                status=400,
+                save_to_db=save_to_db
+            ).to_dict(),
+            status=status.HTTP_400_BAD_REQUEST
         )
 
 
-# ------------------------ ایجاد / حذف ------------------------
+class ZpoolActionView(ZpoolValidationMixin, DiskValidationMixin, APIView):
+    """مدیریت تمام عملیات تغییر‌دهنده (POST)."""
 
-class ZpoolCreateView(ZpoolValidationMixin, DiskValidationMixin, APIView):
-    """ایجاد یک ZFS Pool جدید با پشتیبانی کامل از مسیرهای WWN/NVMe."""
-    permission_classes = [IsAuthenticated]
+    def post(self, request, pool_name: Optional[str] = None, action: Optional[str] = None):
+        save_to_db = _get_save_to_db_flag(request)
+        request_data = request.data
 
-    def post(self, request) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = request.data
+        # --- ایجاد pool (action=None و pool_name=None، URL: /create/) ---
+        if action is None and pool_name is None:
+            return self._handle_create_pool(request, save_to_db, request_data)
 
-        pool_name: str = request_data.get("pool_name")
-        devices: List[str] = request_data.get("devices", [])
-        vdev_type: str = request_data.get("vdev_type", "disk")
-
-        if not pool_name or not isinstance(devices, list) or not devices:
-            return StandardErrorResponse(
-                error_code="invalid_input",
-                error_message="پارامترهای ضروری (pool_name, devices) الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
+        # --- بقیه اکشن‌ها نیاز به pool_name دارند ---
+        if pool_name is None:
+            return Response(
+                StandardErrorResponse(
+                    error_code="missing_pool_name",
+                    error_message="نام pool الزامی است.",
+                    request_data=request_data,
+                    status=400,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=status.HTTP_400_BAD_REQUEST
             )
+
+        # اعتبارسنجی pool (باید وجود داشته باشد)
+        zpool_manager_or_error = self.validate_zpool_for_operation(
+            pool_name=pool_name,
+            save_to_db=save_to_db,
+            request_data=request_data,
+            must_exist=True
+        )
+        if isinstance(zpool_manager_or_error, StandardErrorResponse):
+            return Response(zpool_manager_or_error.to_dict(), status=zpool_manager_or_error.status)
+
+        zpool_manager = zpool_manager_or_error
+
+        # --- اکشن‌های مختلف ---
+        if action == "destroy":
+            return self._handle_destroy_pool(zpool_manager, pool_name, save_to_db, request_data)
+        elif action == "replace":
+            return self._handle_replace_disk(zpool_manager, pool_name, request, save_to_db, request_data)
+        elif action == "add":
+            return self._handle_add_vdev(zpool_manager, pool_name, request, save_to_db, request_data)
+        elif action == "set-property":
+            return self._handle_set_property(zpool_manager, pool_name, request, save_to_db, request_data)
+        else:
+            return Response(
+                StandardErrorResponse(
+                    error_code="invalid_action",
+                    error_message="اکشن درخواستی معتبر نیست.",
+                    request_data=request_data,
+                    status=400,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # --- Handlers ---
+    def _handle_create_pool(self, request, save_to_db: bool, request_data: Dict[str, Any]):
+        pool_name = request_data.get("pool_name")
+        devices = request_data.get("devices", [])
+        vdev_type = request_data.get("vdev_type", "disk")
 
         # اعتبارسنجی pool (نباید وجود داشته باشد)
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=False)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
+        zpool_manager_or_error = self.validate_zpool_for_operation(
+            pool_name=pool_name,
+            save_to_db=save_to_db,
+            request_data=request_data,
+            must_exist=False
+        )
+        if isinstance(zpool_manager_or_error, StandardErrorResponse):
+            return Response(zpool_manager_or_error.to_dict(), status=zpool_manager_or_error.status)
+
+        # اعتبارسنجی دستگاه‌ها
+        validated_devices = self.validate_zpool_devices(devices, save_to_db, request_data)
+        if isinstance(validated_devices, StandardErrorResponse):
+            return Response(validated_devices.to_dict(), status=validated_devices.status)
 
         # اعتبارسنجی vdev_type
-        vdev_type = self.validate_vdev_type(vdev_type, save_to_db, request_data)
-        if isinstance(vdev_type, StandardErrorResponse):
-            return vdev_type
+        vdev_valid = self.validate_vdev_type(vdev_type, save_to_db, request_data)
+        if isinstance(vdev_valid, StandardErrorResponse):
+            return Response(vdev_valid.to_dict(), status=vdev_valid.status)
 
-        # اعتبارسنجی هر دیسک
-        for dev in devices:
-            if not dev.startswith("/dev/"):
-                return StandardErrorResponse(
-                    error_code="invalid_device_path",
-                    error_message=f"مسیر دستگاه باید با '/dev/' شروع شود: {dev}",
-                    request_data=request_data,
-                    status=400,
-                    save_to_db=save_to_db
+        full_paths = [path for path, _ in validated_devices]
+
+        # بررسی OS disk
+        for _, disk_name in validated_devices:
+            try:
+                disk_manager = DiskManager()
+                os_error = self.check_os_disk_protection(disk_manager, disk_name, save_to_db, request_data)
+                if os_error:
+                    return Response(os_error.to_dict(), status=os_error.status)
+            except Exception as e:
+                logger.error(f"DiskManager error for {disk_name}: {e}")
+                return Response(
+                    StandardErrorResponse(
+                        error_code="disk_check_failed",
+                        error_message=f"خطا در بررسی دیسک {disk_name}.",
+                        request_data=request_data,
+                        status=500,
+                        save_to_db=save_to_db
+                    ).to_dict(),
+                    status=500
                 )
-
-            disk_obj = self.validate_disk_and_get_manager(dev, save_to_db, request_data)
-            if isinstance(disk_obj, StandardErrorResponse):
-                return disk_obj
-
-            # استخراج نام کوتاه برای محافظت از دیسک سیستم‌عامل
-            disk_short_name = self._extract_disk_name_from_real_path(os.path.realpath(dev))
-            if not disk_short_name:
-                disk_short_name = os.path.basename(dev).split("/")[0]
-
-            os_error = self.check_os_disk_protection(disk_obj, disk_short_name, save_to_db, request_data)
-            if os_error:
-                return os_error
 
         # ایجاد pool
-        success, msg = manager.create_pool(pool_name, devices, vdev_type)
-        if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
-        else:
-            return StandardErrorResponse(
-                error_code="zpool_create_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
+        try:
+            zpool_manager_or_error.create_pool(pool_name, full_paths, vdev_valid)
+        except Exception as e:
+            logger.error(f"Create pool failed: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_create_failed",
+                    error_message=str(e),
+                    request_data=request_data,
+                    status=500,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=500
             )
 
+        return Response({"message": f"Pool '{pool_name}' با موفقیت ایجاد شد."}, status=201)
 
-class ZpoolDestroyView(ZpoolValidationMixin, APIView):
-    """حذف یک ZFS Pool موجود — عملیات غیرقابل بازگشت."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pool_name: str) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = request.data
-
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
-
-        success, msg = manager.destroy_pool(pool_name)
-        if success:
-            return StandardResponse(
-                data={"pool_name": pool_name},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
+    def _handle_destroy_pool(self, zpool_manager, pool_name: str, save_to_db: bool, request_data: Dict[str, Any]):
+        try:
+            zpool_manager.destroy_pool(pool_name)
+        except Exception as e:
+            logger.error(f"Destroy pool failed: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_destroy_failed",
+                    error_message=str(e),
+                    request_data=request_data,
+                    status=500,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=500
             )
-        else:
-            return StandardErrorResponse(
-                error_code="zpool_destroy_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+        return Response({"message": f"Pool '{pool_name}' حذف شد."}, status=200)
 
-
-# ------------------------ جایگزینی دیسک ------------------------
-
-class ZpoolReplaceDiskView(ZpoolValidationMixin, DiskValidationMixin, APIView):
-    """جایگزینی دیسک خراب با دیسک سالم."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pool_name: str) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = request.data
-
-        old_device: str = request_data.get("old_device")
-        new_device: str = request_data.get("new_device")
+    def _handle_replace_disk(self, zpool_manager, pool_name: str, request, save_to_db: bool, request_data: Dict[str, Any]):
+        old_device = request_data.get("old_device")
+        new_device = request_data.get("new_device")
 
         if not old_device or not new_device:
-            return StandardErrorResponse(
-                error_code="missing_params",
-                error_message="پارامترهای old_device و new_device الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
-
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
-
-        if not new_device.startswith("/dev/"):
-            return StandardErrorResponse(
-                error_code="invalid_device_path",
-                error_message=f"مسیر دستگاه جدید باید با '/dev/' شروع شود: {new_device}",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
-
-        disk_obj = self.validate_disk_and_get_manager(new_device, save_to_db, request_data)
-        if isinstance(disk_obj, StandardErrorResponse):
-            return disk_obj
-
-        disk_short_name = self._extract_disk_name_from_real_path(os.path.realpath(new_device))
-        if not disk_short_name:
-            disk_short_name = os.path.basename(new_device)
-
-        os_error = self.check_os_disk_protection(disk_obj, disk_short_name, save_to_db, request_data)
-        if os_error:
-            return os_error
-
-        success, msg = manager.replace_device(pool_name, old_device, new_device)
-        if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "old": old_device, "new": new_device},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
-        else:
-            return StandardErrorResponse(
-                error_code="zpool_replace_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
-
-
-# ------------------------ افزودن spare یا vdev ------------------------
-
-class ZpoolAddVdevView(ZpoolValidationMixin, DiskValidationMixin, APIView):
-    """افزودن یک vdev جدید (مثل spare, mirror, raidz) به pool موجود."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pool_name: str) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = request.data
-
-        devices: List[str] = request_data.get("devices", [])
-        vdev_type: str = request_data.get("vdev_type", "disk")
-
-        if not isinstance(devices, list) or not devices:
-            return StandardErrorResponse(
-                error_code="invalid_devices",
-                error_message="پارامتر devices باید لیستی غیرخالی از مسیرهای دستگاه باشد.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
-            )
-
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
-
-        vdev_type = self.validate_vdev_type(vdev_type, save_to_db, request_data)
-        if isinstance(vdev_type, StandardErrorResponse):
-            return vdev_type
-
-        for dev in devices:
-            if not dev.startswith("/dev/"):
-                return StandardErrorResponse(
-                    error_code="invalid_device_path",
-                    error_message=f"مسیر دستگاه باید با '/dev/' شروع شود: {dev}",
+            return Response(
+                StandardErrorResponse(
+                    error_code="missing_params",
+                    error_message="پارامترهای old_device و new_device الزامی هستند.",
                     request_data=request_data,
                     status=400,
                     save_to_db=save_to_db
+                ).to_dict(),
+                status=400
+            )
+
+        # اعتبارسنجی دستگاه‌ها
+        for dev, label in [(old_device, "old_device"), (new_device, "new_device")]:
+            disk_name, error = self._validate_and_extract_disk_info(dev)
+            if error:
+                return Response(
+                    StandardErrorResponse(
+                        error_code="invalid_device_path",
+                        error_message=f"دستگاه {label}: {error}",
+                        request_data=request_data,
+                        status=400,
+                        save_to_db=save_to_db
+                    ).to_dict(),
+                    status=400
+                )
+            # بررسی OS برای دیسک جدید (قدیمی ممکن است خراب باشد)
+            if label == "new_device":
+                try:
+                    disk_manager = DiskManager()
+                    os_error = self.check_os_disk_protection(disk_manager, disk_name, save_to_db, request_data)
+                    if os_error:
+                        return Response(os_error.to_dict(), status=os_error.status)
+                except Exception as e:
+                    logger.error(f"Disk check failed for {disk_name}: {e}")
+                    return Response(
+                        StandardErrorResponse(
+                            error_code="disk_check_failed",
+                            error_message=f"خطا در بررسی دیسک جدید ({disk_name}).",
+                            request_data=request_data,
+                            status=500,
+                            save_to_db=save_to_db
+                        ).to_dict(),
+                        status=500
+                    )
+
+        try:
+            zpool_manager.replace_device(pool_name, old_device, new_device)
+        except Exception as e:
+            logger.error(f"Replace device failed: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_replace_failed",
+                    error_message=str(e),
+                    request_data=request_data,
+                    status=500,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=500
+            )
+        return Response({"message": "دیسک با موفقیت جایگزین شد."}, status=200)
+
+    def _handle_add_vdev(self, zpool_manager, pool_name: str, request, save_to_db: bool, request_data: Dict[str, Any]):
+        devices = request_data.get("devices", [])
+        vdev_type = request_data.get("vdev_type", "disk")
+
+        validated_devices = self.validate_zpool_devices(devices, save_to_db, request_data)
+        if isinstance(validated_devices, StandardErrorResponse):
+            return Response(validated_devices.to_dict(), status=validated_devices.status)
+
+        vdev_valid = self.validate_vdev_type(vdev_type, save_to_db, request_data)
+        if isinstance(vdev_valid, StandardErrorResponse):
+            return Response(vdev_valid.to_dict(), status=vdev_valid.status)
+
+        full_paths = [path for path, _ in validated_devices]
+
+        # بررسی OS برای دیسک‌های جدید
+        for _, disk_name in validated_devices:
+            try:
+                disk_manager = DiskManager()
+                os_error = self.check_os_disk_protection(disk_manager, disk_name, save_to_db, request_data)
+                if os_error:
+                    return Response(os_error.to_dict(), status=os_error.status)
+            except Exception as e:
+                logger.error(f"Disk check failed for {disk_name}: {e}")
+                return Response(
+                    StandardErrorResponse(
+                        error_code="disk_check_failed",
+                        error_message=f"خطا در بررسی دیسک {disk_name}.",
+                        request_data=request_data,
+                        status=500,
+                        save_to_db=save_to_db
+                    ).to_dict(),
+                    status=500
                 )
 
-            disk_obj = self.validate_disk_and_get_manager(dev, save_to_db, request_data)
-            if isinstance(disk_obj, StandardErrorResponse):
-                return disk_obj
-
-            disk_short_name = self._extract_disk_name_from_real_path(os.path.realpath(dev))
-            if not disk_short_name:
-                disk_short_name = os.path.basename(dev)
-
-            os_error = self.check_os_disk_protection(disk_obj, disk_short_name, save_to_db, request_data)
-            if os_error:
-                return os_error
-
-        success, msg = manager.add_vdev(pool_name, devices, vdev_type)
-        if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "devices": devices, "vdev_type": vdev_type},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
+        try:
+            zpool_manager.add_vdev(pool_name, full_paths, vdev_valid)
+        except Exception as e:
+            logger.error(f"Add vdev failed: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_add_vdev_failed",
+                    error_message=str(e),
+                    request_data=request_data,
+                    status=500,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=500
             )
-        else:
-            return StandardErrorResponse(
-                error_code="zpool_add_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+        return Response({"message": "vdev با موفقیت اضافه شد."}, status=200)
 
-
-# ------------------------ تنظیم ویژگی ------------------------
-
-class ZpoolSetPropertyView(ZpoolValidationMixin, APIView):
-    """تنظیم یک ویژگی ZFS Pool (مثل autoreplace=on یا failmode=continue)."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pool_name: str) -> Union[StandardResponse, StandardErrorResponse]:
-        save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
-        request_data: Dict[str, Any] = request.data
-
-        prop: str = request_data.get("property")
-        value: str = request_data.get("value")
+    def _handle_set_property(self, zpool_manager, pool_name: str, request, save_to_db: bool, request_data: Dict[str, Any]):
+        prop = request_data.get("property")
+        value = request_data.get("value")
 
         if not prop or not value:
-            return StandardErrorResponse(
-                error_code="missing_property",
-                error_message="پارامترهای property و value الزامی هستند.",
-                request_data=request_data,
-                status=400,
-                save_to_db=save_to_db
+            return Response(
+                StandardErrorResponse(
+                    error_code="missing_params",
+                    error_message="پارامترهای property و value الزامی هستند.",
+                    request_data=request_data,
+                    status=400,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=400
             )
 
-        manager = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=True)
-        if isinstance(manager, StandardErrorResponse):
-            return manager
-
-        success, msg = manager.set_property(pool_name, prop, value)
-        if success:
-            return StandardResponse(
-                data={"pool_name": pool_name, "property": prop, "value": value},
-                message=msg,
-                request_data=request_data,
-                save_to_db=save_to_db
+        try:
+            zpool_manager.set_property(pool_name, prop, value)
+        except Exception as e:
+            logger.error(f"Set property failed: {e}")
+            return Response(
+                StandardErrorResponse(
+                    error_code="zpool_set_property_failed",
+                    error_message=str(e),
+                    request_data=request_data,
+                    status=500,
+                    save_to_db=save_to_db
+                ).to_dict(),
+                status=500
             )
-        else:
-            return StandardErrorResponse(
-                error_code="zpool_set_property_failed",
-                error_message=msg,
-                request_data=request_data,
-                status=500,
-                save_to_db=save_to_db
-            )
+        return Response({"message": f"ویژگی '{prop}' با مقدار '{value}' تنظیم شد."}, status=200)

@@ -43,8 +43,6 @@ def _get_wwn_from_device_path(device_path: str) -> str:
 
 class ZpoolManager:
     """
-    مدیریت جامع ZFS Poolها بدون استفاده از tupleهای (bool, str).
-
     تمام متدهای تغییر‌دهنده (مثل create, destroy) در صورت شکست، Exception پرتاب می‌کنند.
     متدهای خواندنی (مثل list_all_pools) داده خام یا None برمی‌گردانند.
     تمام مسیرهای دستگاه باید از نوع `/dev/disk/by-id/...` باشند.
