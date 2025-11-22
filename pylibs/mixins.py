@@ -86,12 +86,13 @@ class DiskValidationMixin:
             # ورودی یک نام کوتاه است (مثل 'sda')
             return disk_input, None
 
-    def _get_disk_manager_and_validate(self, disk_input: str) -> Tuple[Optional[DiskManager], Optional[str]]:
+    def _get_disk_manager_and_validate(self, disk_input: str, contain_os_disk: bool = False,) -> Tuple[Optional[DiskManager], Optional[str]]:
         """
         دریافت نمونه DiskManager و اعتبارسنجی وجود دیسک در سیستم.
 
         Args:
             disk_input (str): نام کوتاه یا مسیر کامل دیسک.
+            contain_os_disk: bool = True,
 
         Returns:
             Tuple[Optional[DiskManager], Optional[str]]:
@@ -107,7 +108,7 @@ class DiskValidationMixin:
             return None, error_msg
 
         try:
-            obj_disk = DiskManager()
+            obj_disk = DiskManager(contain_os_disk=contain_os_disk)
             if disk_name not in obj_disk.disks:
                 return None, f"دیسک '{disk_name}' یافت نشد."
             return obj_disk, None
@@ -115,7 +116,7 @@ class DiskValidationMixin:
             logger.error(f"Error creating DiskManager: {str(e)}")
             return None, "خطا در ایجاد منیجر دیسک."
 
-    def validate_disk_and_get_manager(self, disk_input: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Union[DiskManager, StandardErrorResponse]:
+    def validate_disk_and_get_manager(self, disk_input: str, save_to_db: bool, request_data: Dict[str, Any],contain_os_disk: bool = False,) -> Union[DiskManager, StandardErrorResponse]:
         """
         اعتبارسنجی کامل دیسک (با پشتیبانی از WWN/NVMe) و بازگرداندن نمونه مدیر یا خطای استاندارد.
 
@@ -123,13 +124,14 @@ class DiskValidationMixin:
             disk_input (str): نام کوتاه یا مسیر کامل WWN دیسک.
             save_to_db (bool): آیا پاسخ باید در دیتابیس ذخیره شود؟
             request_data (Dict[str, Any]): داده درخواست اصلی برای لاگ یا ذخیره.
+            contain_os_disk: bool=True
 
         Returns:
             Union[DiskManager, StandardErrorResponse]:
                 - در صورت موفقیت: نمونه DiskManager
                 - در صورت خطا: نمونه StandardErrorResponse
         """
-        obj_disk, error_msg = self._get_disk_manager_and_validate(disk_input)
+        obj_disk, error_msg = self._get_disk_manager_and_validate(disk_input,contain_os_disk=contain_os_disk)
         if obj_disk is None:
             status_code = 404 if "یافت نشد" in (error_msg or "") else 400
             return StandardErrorResponse(

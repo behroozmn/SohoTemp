@@ -26,10 +26,10 @@ class DiskManager:
     # پیشوندهای دستگاه‌های مجازی برای فیلتر کردن
     EXCLUDED_PREFIXES: Tuple[str, ...] = ('loop', 'ram', 'sr', 'fd', 'md', 'dm-', 'zram')
 
-    def __init__(self) -> None:
+    def __init__(self,contain_os_disk: bool = False) -> None:
         """سازنده کلاس — محاسبه دیسک سیستم‌عامل و لیست تمام دیسک‌ها."""
         self.os_disk: Optional[str] = self.get_os_disk()
-        self.disks: List[str] = self._get_all_disk_names()
+        self.disks: List[str] = self._get_all_disk_names(contain_os_disk=contain_os_disk)
 
     def _is_valid_device_name(self, device_name: str) -> bool:
         """بررسی اعتبار نام دستگاه بلاکی.

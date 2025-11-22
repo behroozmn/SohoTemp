@@ -203,11 +203,12 @@ class DiskView(DiskValidationMixin, APIView):
 
     def get(self, request, disk_name=None):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
+        contain_os_disk = get_request_param(request, "contain_os_disk", bool, False)
         request_data = dict(request.query_params)
 
         if disk_name is None:
             try:
-                obj_disk = DiskManager()
+                obj_disk = DiskManager(contain_os_disk=contain_os_disk)
                 disks_info = obj_disk.get_disks_info_all()
 
                 if save_to_db:
@@ -229,7 +230,7 @@ class DiskView(DiskValidationMixin, APIView):
                     save_to_db=save_to_db
                 )
 
-        obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data)
+        obj_disk = self.validate_disk_and_get_manager(disk_name, save_to_db, request_data,contain_os_disk=contain_os_disk)
         if isinstance(obj_disk, StandardErrorResponse):
             return obj_disk
 
