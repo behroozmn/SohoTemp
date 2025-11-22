@@ -8,37 +8,9 @@ import re
 from typing import Dict, Any, List, Optional
 import libzfs
 
+from pylibs.disk import DiskManager
+
 logger = logging.getLogger(__name__)
-
-
-def _get_wwn_from_device_path(device_path: str) -> str:
-    """
-    دریافت شناسه منحصربه‌فرد (WWN یا NVMe ID) یک دستگاه بلاکی از `/dev/disk/by-id`.
-
-    Args:
-        device_path (str): مسیر دستگاه در سیستم فایل (مثال: "/dev/sda1").
-
-    Returns:
-        str: نام لینک منحصربه‌فرد (مثل "wwn-0x5002538d40000000") یا رشته خالی در صورت عدم یافتن.
-    """
-    by_id_path = "/dev/disk/by-id"
-    if not os.path.exists(by_id_path):
-        return ""
-    try:
-        target_real_path = os.path.realpath(device_path)
-        all_links = glob.glob(os.path.join(by_id_path, "*"))
-        for link in all_links:
-            try:
-                link_real = os.path.realpath(link)
-                if link_real == target_real_path:
-                    basename = os.path.basename(link)
-                    if basename.startswith(("wwn-", "nvme-")):
-                        return basename
-            except (OSError, IOError):
-                continue
-    except Exception as e:
-        logger.warning(f"Error in _get_wwn_from_device_path for {device_path}: {e}")
-    return ""
 
 
 class ZpoolManager:
@@ -47,6 +19,8 @@ class ZpoolManager:
     متدهای خواندنی (مثل list_all_pools) داده خام یا None برمی‌گردانند.
     تمام مسیرهای دستگاه باید از نوع `/dev/disk/by-id/...` باشند.
     """
+
+    obj_disk = DiskManager()
 
     def __init__(self) -> None:
         """سازنده کلاس — ایجاد نمونه ZFS از libzfs."""
@@ -78,6 +52,7 @@ class ZpoolManager:
                     "free": str(props["free"].value),
                     "capacity": str(props["capacity"].value),
                     "guid": str(props["guid"].value),
+                    # "disks":
                 })
         except Exception as e:
             logger.warning(f"Error reading ZFS pools in list_all_pools: {e}")
@@ -128,15 +103,18 @@ class ZpoolManager:
                 def traverse_vdevs(vdev, parent_type: str = "root"):
                     if vdev.type in ("disk", "file"):
                         path_clean = re.sub(r'\d+$', '', vdev.path)
-                        disk_name = path_clean.replace("/dev/", "")
-                        wwn = _get_wwn_from_device_path(vdev.path)
+                        wwn=self.obj_disk.get_wwn_by_entry(vdev.path.replace("/dev/", ""))
+                        path_name=self.obj_disk.get_disk_name_by_wwn(wwn)
+                        disk_name=self.obj_disk.get_disk_name_from_partition(path_name)
                         devices.append({
-                            "path": vdev.path,
-                            "disk": disk_name,
+                            "full_path_wwn": vdev.path,
+                            "full_disk_wwn": vdev.path.replace("-part1", ""),
+                            "wwn": wwn,
+                            "full_path_name": f"/dev/{path_name}",
+                            "full_disk_name": f"/dev/{disk_name}",
+                            "disk_name": disk_name,
                             "status": getattr(vdev, 'status', 'UNKNOWN'),
                             "type": vdev.type,
-                            "parent_vdev": parent_type,
-                            "wwn": wwn,
                         })
                     elif hasattr(vdev, 'children') and vdev.children:
                         for child in vdev.children:

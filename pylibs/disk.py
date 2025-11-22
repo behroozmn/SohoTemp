@@ -461,6 +461,59 @@ class DiskManager:
         except (OSError, IOError):
             return ""
 
+    def get_disk_name_by_wwn(self, wwn: str) -> str:
+        """دریافت نام دیسک یا پارتیشن بر اساس WWN یا شناسه منحصر به فرد.
+
+        Args:
+            wwn (str): شناسه منحصربه‌فرد از نوع by-id (مثل 'wwn-0x...', یا 'nvme-nvme....').
+
+        Returns:
+            str: نام دیسک یا پارتیشن (مثل 'sda', 'sda1', 'nvme0n1') یا رشته خالی در صورت عدم یافت.
+        """
+        by_id_path = "/dev/disk/by-id"
+        if not os.path.exists(by_id_path):
+            return ""
+
+        wwn_path = os.path.join(by_id_path, wwn)
+        if not os.path.exists(wwn_path):
+            return ""
+
+        try:
+            real_path = os.path.realpath(wwn_path)
+            if real_path.startswith("/dev/"):
+                return os.path.basename(real_path)
+            return ""
+        except (OSError, IOError):
+            return ""
+
+    def get_disk_name_from_partition(self,partition_name: str) -> str:
+        """
+        استخراج نام دیسک اصلی از نام یک پارتیشن یا دیسک.
+
+        Args:
+            partition_name (str): نام پارتیشن یا دیسک (مثل 'sda', 'sda1', 'nvme0n1', 'nvme0n1p2').
+
+        Returns:
+            str: نام دیسک والد (مثل 'sda' یا 'nvme0n1').
+        """
+        # برای دیسک‌های NVMe: جدا کردن تا آخرین 'p' که مربوط به پارتیشن است
+        nvme_match = re.match(r'^([a-zA-Z0-9]+n[0-9]+)p[0-9]+$', partition_name)
+        if nvme_match:
+            return nvme_match.group(1)
+
+        # برای دیسک‌های قدیمی مثل sda, hdb, etc.
+        # جدا کردن بخش عددی انتهایی (پارتیشن) از حروف
+        legacy_match = re.match(r'^([a-zA-Z]+)(?:[0-9]+)?$', partition_name)
+        if legacy_match:
+            base = legacy_match.group(1)
+            # اگر اسم ورودی فقط حروف باشد (مثل 'sda')، خودش دیسک است
+            # اگر عدد داشت (مثل 'sda1')، باز هم base همان 'sda' است
+            return base
+
+        # در صورت عدم تطبیق با هیچ‌کدام، فرض می‌کنیم ورودی خودش دیسک است
+        return partition_name
+
+
     def get_os_disk(self) -> Optional[str]:
         """شناسایی دیسکی که سیستم‌عامل روی آن نصب شده (با mountpoint = /).
 
