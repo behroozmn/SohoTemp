@@ -52,7 +52,7 @@ class ZpoolManager:
                     "free": str(props["free"].value),
                     "capacity": str(props["capacity"].value),
                     "guid": str(props["guid"].value),
-                    # "disks":
+                    "disks": self.get_pool_devices(props["name"].value)
                 })
         except Exception as e:
             logger.warning(f"Error reading ZFS pools in list_all_pools: {e}")
