@@ -4,6 +4,8 @@ import re
 import glob
 import subprocess
 from typing import Dict, Any, Optional, List, Tuple
+
+from pylibs import run_cli_command
 from pylibs.file import FileManager
 
 
@@ -840,16 +842,11 @@ class DiskManager:
         if not self._is_block_device(device_name):
             return False
 
-        try:
-            result = subprocess.run(
-                ["/usr/bin/sudo", "/usr/sbin/wipefs", "-a", device_path],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+
+
+        cmd = ["/usr/sbin/wipefs", "-a", device_path]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return True
 
     def disk_clear_zfs_label(self, device_path: str) -> bool:
         """پاک‌کردن لیبل «زِد اف اس» از اولین پارتیشن یک دیسک با zpool labelclear.
@@ -904,20 +901,9 @@ class DiskManager:
             first_partition = partitions[0]
             target_path = f"/dev/{first_partition}"
 
-        # اجرای دستور روی مسیر هدف (اولین پارتیشن یا خود دیسک)
-        try:
-            result = subprocess.run(
-                ["/usr/bin/sudo", "/usr/bin/zpool", "labelclear", "-f", target_path],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            return result.returncode in (0, 1)
-        except FileNotFoundError:
-            # اگر zpool نصب نیست، فرض می‌کنیم ZFS وجود ندارد → موفقیت
-            return True
-        except Exception:
-            return False
+        cmd = [ "/usr/bin/zpool", "labelclear", "-f", target_path]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return True
 
     def get_partition_count(self, disk: str) -> int:
         """دریافت تعداد پارتیشن‌های یک دیسک.

@@ -394,15 +394,16 @@ class DiskWipeSignaturesView(DiskValidationMixin, APIView):
             return os_error
 
         device_path = f"/dev/{disk_name}"
-        success = obj_disk.disk_wipe_signatures(device_path)
-        if success:
-            return StandardResponse(request_data=request_data, save_to_db=save_to_db,
-                                    data={"disk": disk_name, "device_path": device_path},
-                                    message=f"تمام سیگنچرهای دیسک '{disk_name}' با موفقیت پاک شد.", )
-        else:
-            return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=500,
-                                         error_code="wipe_failed",
-                                         error_message=f"پاک‌کردن سیگنچرهای دیسک '{disk_name}' شکست خورد.")
+        try:
+            success = obj_disk.disk_wipe_signatures(device_path)
+            if success:
+                return StandardResponse(request_data=request_data, save_to_db=save_to_db,
+                                        data={"disk": disk_name, "device_path": device_path},
+                                        message=f"تمام سیگنچرهای دیسک '{disk_name}' با موفقیت پاک شد.", )
+        except Exception as e:
+            return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                 error_code="wipe_failed",
+                                                 error_message=f"پاک‌کردن سیگنچرهای دیسک '{disk_name}' شکست خورد.")
 
 
 class DiskClearZFSLabelView(DiskValidationMixin, APIView):
@@ -422,12 +423,13 @@ class DiskClearZFSLabelView(DiskValidationMixin, APIView):
             return os_error
 
         device_path = f"/dev/{disk_name}"
-        success = obj_disk.disk_clear_zfs_label(device_path)
-        if success:
-            return StandardResponse(request_data=request_data, save_to_db=save_to_db,
-                                    data={"disk": disk_name, "device_path": device_path},
-                                    message=f"لیبل ZFS دیسک '{disk_name}' با موفقیت پاک شد.")
-        else:
-            return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=500,
-                                         error_code="zfs_clear_failed",
-                                         error_message=f"پاک‌کردن لیبل ZFS دیسک '{disk_name}' شکست خورد.", )
+        try:
+            success = obj_disk.disk_clear_zfs_label(device_path)
+            if success:
+                return StandardResponse(request_data=request_data, save_to_db=save_to_db,
+                                        data={"disk": disk_name, "device_path": device_path},
+                                        message=f"لیبل ZFS دیسک '{disk_name}' با موفقیت پاک شد.")
+        except Exception as e:
+            return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                 error_code="zfs_clear_failed",
+                                                 error_message=f"پاک‌کردن لیبل ZFS دیسک '{disk_name}' شکست خورد.", )
