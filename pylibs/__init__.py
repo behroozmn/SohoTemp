@@ -1,18 +1,7 @@
 # soho_core_api/pylibs/__init__.py
 
-"""
-Standardized API response wrappers for consistent JSON structure.
-
-This module provides two main response classes:
-- `StandardResponse`: for successful API responses
-- `StandardErrorResponse`: for error responses (manual or handled)
-
-Both classes ensure a uniform envelope structure across all endpoints,
-making frontend integration predictable and debugging easier.
-"""
-
 from __future__ import annotations
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List
 from http import HTTPStatus
 from rest_framework.response import Response
 from django.utils import timezone
@@ -21,14 +10,37 @@ from typing import Any, Type, Union
 from rest_framework.request import Request
 import subprocess
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 from typing import List, Optional, Tuple
 
 # Models
-from soho_core_api.models import StandardResponseModel
-from soho_core_api.models import StandardErrorResponseModel
+from soho_core_api.models import StandardResponseModel, StandardErrorResponseModel
+
+
+class CLICommandError(Exception):
+    """استثنا اختصاصی برای خطا در اجرای دستورات خط فرمان .این کلاس تمام اطلاعات مفید خطا را نگه می‌دارد."""
+
+    def __init__(self, command: List[str], returncode: int, stderr: str, stdout: str = "", timeout: bool = False, original_exception: Optional[Exception] = None):
+        self.command = command
+        self.returncode = returncode
+        self.stderr = stderr
+        self.stdout = stdout
+        self.timeout = timeout
+        self.original_exception = original_exception
+
+        # ساخت پیام خطا به فارسی
+        cmd_str = " ".join(command[:4]) + (" ..." if len(command) > 4 else "")
+        if timeout:
+            message = f"دستور با timeout شکست خورد: {cmd_str}"
+        elif returncode != 0:
+            message = f"دستور با کد خروجی {returncode} شکست خورد: {stderr.strip() or 'خطای نامشخص'}"
+        else:
+            message = f"خطای غیرمنتظره در اجرای دستور: {str(original_exception)}"
+
+        super().__init__(message)
 
 
 class StandardResponse(Response):
@@ -41,7 +53,7 @@ class StandardResponse(Response):
             "response_status_text": _get_status_text(status),
         }
 
-        sanitized_request_data: Dict[str, Any] = (request_data or {} if settings.DEBUG or request_data is not None else {})
+        sanitized_request_data = request_data or {} if settings.DEBUG or request_data is not None else {}
 
         response_data: Dict[str, Any] = {
             "ok": True,
@@ -66,42 +78,67 @@ class StandardResponse(Response):
 
 
 class StandardErrorResponse(Response):
-    """Standard error response with structured error details."""
 
-    def __init__(self, error_code: str, error_message: str, exception: Optional[Exception] = None, exception_details: Optional[Union[str, Exception]] = None, status: int = 500, request_data: Optional[Dict[str, Any]] = None, save_to_db: bool = False, **kwargs: Any, ) -> None:
-        meta: Dict[str, Union[str, int]] = {
+    def __init__(self, error_code: str, error_message: str, exception: Optional[Exception] = None, exception_details: Optional[Any] = None, status: int = 500, request_data: Optional[Dict[str, Any]] = None, save_to_db: bool = False, **kwargs: Any, ) -> None:
+        meta = {
             "timestamp": timezone.now().isoformat().replace("+00:00", "Z"),
             "response_status_code": status,
             "response_status_text": _get_status_text(status),
         }
 
-        # Build error object
-        error_obj: Dict[str, Any] = {
+        error_obj = {
             "code": error_code,
             "message": error_message,
             "extra": {},
         }
 
-        # Add exception class name if available
+        # اگر exception داده شده باشد
         if exception is not None:
-            error_obj["extra"]["exception"] = exception.__class__.__name__
+            error_obj["extra"]["exception_class"] = exception.__class__.__name__
 
-        # Handle exception details with security in mind
-        if exception_details is not None:
-            if isinstance(exception_details, dict):
-                details_str = str(exception_details)  # یا json.dumps برای خوانایی بیشتر
+            # هوشمند: اگر exception از نوع CLICommandError باشد
+
+            if isinstance(exception, CLICommandError):
+                # استخراج جزئیات CLI به صورت خودکار
+                cli_details = {
+                    "command": exception.command,
+                    "returncode": exception.returncode,
+                    "stderr": exception.stderr,
+                    "stdout": exception.stdout,
+                    "timeout": exception.timeout,
+                }
+                final_details = cli_details
             else:
-                details_str = str(exception_details)
+                # برای سایر خطاها: فقط پیام و نوع
+                final_details = {
+                    "message": str(exception),
+                }
+        else:
+            # اگر exception داده نشده باشد، از exception_details استفاده کن (اگر وجود داشت)
+            final_details = exception_details if exception_details is not None else {}
 
-            if settings.DEBUG:
-                error_obj["extra"]["exception_details"] = exception_details  # دیکشنری کامل
-            else:
-                logger.error("...", details_str)  # فقط برای لاگ
-                error_obj["extra"]["exception_details"] = "Internal error details hidden."
+        # مدیریت نمایش در debug vs production
+        if settings.DEBUG:
+            error_obj["extra"]["exception_details"] = final_details
+        else:
+            # فقط در لاگ ذخیره کن
+            try:
+                log_str = json.dumps(final_details, ensure_ascii=False, default=str)
+            except Exception:
+                log_str = str(final_details)
 
-        sanitized_request_data: Dict[str, Any] = (request_data or {} if settings.DEBUG or request_data is not None else {})
+            logger.error(
+                "StandardErrorResponse: [%s] %s | Exception: %s | Details: %s",
+                error_code,
+                error_message,
+                exception.__class__.__name__ if exception else "None",
+                log_str,
+            )
+            error_obj["extra"]["exception_details"] = "Internal error details hidden."
 
-        response_data: Dict[str, Any] = {
+        sanitized_request_data = request_data or {} if settings.DEBUG or request_data is not None else {}
+
+        response_data = {
             "ok": False,
             "error": error_obj,
             "data": None,
@@ -120,29 +157,6 @@ class StandardErrorResponse(Response):
                 meta=meta,
                 request_data=sanitized_request_data,
             )
-
-
-class CLICommandError(Exception):
-    """استثنا اختصاصی برای خطا در اجرای دستورات خط فرمان .این کلاس تمام اطلاعات مفید خطا را نگه می‌دارد."""
-
-    def __init__(self, command: List[str], returncode: int, stderr: str, stdout: str = "", timeout: bool = False, original_exception: Optional[Exception] = None):
-        self.command = command
-        self.returncode = returncode
-        self.stderr = stderr
-        self.stdout = stdout
-        self.timeout = timeout
-        self.original_exception = original_exception
-
-        # ساخت پیام خطا به فارسی
-        cmd_str = " ".join(command[:4]) + (" ..." if len(command) > 4 else "")
-        if timeout:
-            message = f"دستور با timeout شکست خورد: {cmd_str}"
-        elif returncode != 0:
-            message = f"دستور با کد خروجی {returncode} شکست خورد: {stderr.strip() or 'خطای نامشخص'}"
-        else:
-            message = f"خطای غیرمنتظره در اجرای دستور: {str(original_exception)}"
-
-        super().__init__(message)
 
 
 def _get_status_text(status_code: int) -> str:
@@ -200,9 +214,7 @@ def get_request_param(request: Union[Request, dict], param_name: str, return_typ
             if method == "GET":
                 raw_value = request.query_params.get(param_name, None)
             else:
-                # اول از body (POST/PUT/PATCH/DELETE)
                 raw_value = request.data.get(param_name, None)
-                # اگر در body نبود، از query_params بگیر (پشتیبانی از ?param=... در POST)
                 if raw_value is None:
                     raw_value = request.query_params.get(param_name, None)
         elif isinstance(request, dict):
@@ -213,11 +225,9 @@ def get_request_param(request: Union[Request, dict], param_name: str, return_typ
         logger.warning(f"Error accessing param '{param_name}' from request: {e}")
         return default
 
-    # اگر مقداری وجود نداشت
     if raw_value is None or raw_value == "":
         return default
 
-    # مرحله ۲: تبدیل به نوع مورد نظر
     try:
         if return_type == bool:
             if isinstance(raw_value, bool): return raw_value
@@ -239,7 +249,6 @@ def get_request_param(request: Union[Request, dict], param_name: str, return_typ
             return str(raw_value)
 
         else:
-            # اگر نوع پشتیبانی‌نشده باشد، همان مقدار خام را برگردان
             return raw_value
 
     except (ValueError, TypeError) as e:
@@ -266,7 +275,7 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
         CLICommandError: در صورت هرگونه خطا در اجرا
     """
     if use_sudo:
-        full_cmd = ["/usr/bin/sudo"] + command
+        full_cmd = ["/usr/bin/sudo", "/usr/bin/env"] + command
     else:
         full_cmd = command
 
