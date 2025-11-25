@@ -1,10 +1,8 @@
 # soho_core_api/pylibs/zpool.py
 
-import subprocess
+
 import logging
 import os
-import glob
-import re
 from typing import Dict, Any, List, Optional, Tuple
 import libzfs
 

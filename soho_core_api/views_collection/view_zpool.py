@@ -1,11 +1,10 @@
 # soho_core_api/views_collection/view_zpool.py
 
 from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+
 from typing import Dict, Any, List, Optional
 
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param, logger, CLICommandError, build_standard_error_response
+from pylibs import StandardResponse, StandardErrorResponse, get_request_param, build_standard_error_response
 from pylibs.zpool import ZpoolManager
 from pylibs.disk import DiskManager
 from pylibs.mixins import ZpoolValidationMixin, DiskValidationMixin

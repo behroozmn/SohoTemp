@@ -2,7 +2,7 @@
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param, logger, build_standard_error_response
+from pylibs import StandardResponse, StandardErrorResponse, get_request_param, build_standard_error_response
 from pylibs.mixins import DiskValidationMixin
 from pylibs.disk import DiskManager
 from soho_core_api.models import Disks
