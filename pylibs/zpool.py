@@ -5,9 +5,10 @@ import logging
 import os
 import glob
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import libzfs
 
+from pylibs import run_cli_command
 from pylibs.disk import DiskManager
 
 logger = logging.getLogger(__name__)
@@ -103,9 +104,9 @@ class ZpoolManager:
                 def traverse_vdevs(vdev, parent_type: str = "root"):
                     if vdev.type in ("disk", "file"):
                         path_clean = re.sub(r'\d+$', '', vdev.path)
-                        wwn=self.obj_disk.get_wwn_by_entry(vdev.path.replace("/dev/", ""))
-                        path_name=self.obj_disk.get_disk_name_by_wwn(wwn)
-                        disk_name=self.obj_disk.get_disk_name_from_partition(path_name)
+                        wwn = self.obj_disk.get_wwn_by_entry(vdev.path.replace("/dev/", ""))
+                        path_name = self.obj_disk.get_disk_name_by_wwn(wwn)
+                        disk_name = self.obj_disk.get_disk_name_from_partition(path_name)
                         devices.append({
                             "full_path_wwn": vdev.path,
                             "full_disk_wwn": vdev.path.replace("-part1", ""),
@@ -124,7 +125,7 @@ class ZpoolManager:
                 return devices
         return []
 
-    def create_pool(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> None:
+    def create_pool(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> Tuple[str, str]:
         """
         ایجاد یک ZFS Pool جدید با استفاده از مسیرهای WWN/NVMe.
 
@@ -134,30 +135,20 @@ class ZpoolManager:
             vdev_type (str): نوع vdev (disk, mirror, raidz, ...)
 
         Raises:
-            subprocess.CalledProcessError: در صورت شکست دستور zpool
-            ValueError: در صورت ورودی‌های نامعتبر
-            Exception: در صورت خطای غیرمنتظره
+            CLICommandError
         """
         if not pool_name or not devices or not isinstance(devices, list):
             raise ValueError("پارامترهای pool_name و devices الزامی و معتبر هستند.")
 
         if vdev_type == "disk":
-            cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "create", "-f", pool_name] + devices
+            cmd = ["/usr/bin/zpool", "create", "-f", pool_name] + devices
         else:
-            cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "create", "-f", pool_name, vdev_type] + devices
+            cmd = ["/usr/bin/zpool", "create", "-f", pool_name, vdev_type] + devices
 
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
-        except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(
-                e.returncode,
-                e.cmd,
-                f"خطا در ایجاد pool: {e.stderr.strip()}"
-            )
-        except Exception as e:
-            raise Exception(f"خطای غیرمنتظره در ایجاد pool: {str(e)}")
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error
 
-    def destroy_pool(self, pool_name: str) -> None:
+    def destroy_pool(self, pool_name: str) -> Tuple[str, str]:
         """
         حذف یک ZFS Pool موجود.
 
@@ -167,21 +158,13 @@ class ZpoolManager:
             pool_name (str): نام pool برای حذف.
 
         Raises:
-            subprocess.CalledProcessError: در صورت شکست دستور zpool
+            CLICommandError
         """
-        cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "destroy", "-f", pool_name]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
-        except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(
-                e.returncode,
-                e.cmd,
-                f"خطا در حذف pool: {e.stderr.strip()}"
-            )
-        except Exception as e:
-            raise Exception(f"خطای غیرمنتظره در حذف pool: {str(e)}")
+        cmd = ["/usr/bin/zpool", "destroy", "-f", pool_name]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error
 
-    def replace_device(self, pool_name: str, old_device: str, new_device: str) -> None:
+    def replace_device(self, pool_name: str, old_device: str, new_device: str) -> Tuple[str, str]:
         """
         جایگزینی یک دیسک خراب با یک دیسک سالم.
 
@@ -191,24 +174,13 @@ class ZpoolManager:
             new_device (str): مسیر کامل دستگاه جدید
 
         Raises:
-            subprocess.CalledProcessError: در صورت شکست دستور zpool
+            CLICommandError
         """
-        cmd = [
-            "/usr/bin/sudo", "/usr/bin/zpool", "replace", "-f",
-            pool_name, old_device, new_device
-        ]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
-        except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(
-                e.returncode,
-                e.cmd,
-                f"خطا در جایگزینی دیسک: {e.stderr.strip()}"
-            )
-        except Exception as e:
-            raise Exception(f"خطای غیرمنتظره در جایگزینی دیسک: {str(e)}")
+        cmd = ["/usr/bin/zpool", "replace", "-f", pool_name, old_device, new_device]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error
 
-    def add_vdev(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> None:
+    def add_vdev(self, pool_name: str, devices: List[str], vdev_type: str = "disk") -> Tuple[str, str]:
         """
         افزودن یک vdev جدید به یک pool موجود.
 
@@ -218,7 +190,7 @@ class ZpoolManager:
             vdev_type (str): نوع vdev (disk, mirror, raidz, spare, ...)
 
         Raises:
-            subprocess.CalledProcessError: در صورت شکست دستور zpool
+            CLICommandError
         """
         if vdev_type == "spare":
             cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name, "spare"] + devices
@@ -227,18 +199,10 @@ class ZpoolManager:
         else:
             cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name, vdev_type] + devices
 
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
-        except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(
-                e.returncode,
-                e.cmd,
-                f"خطا در افزودن vdev: {e.stderr.strip()}"
-            )
-        except Exception as e:
-            raise Exception(f"خطای غیرمنتظره در افزودن vdev: {str(e)}")
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error
 
-    def set_property(self, pool_name: str, prop: str, value: str) -> None:
+    def set_property(self, pool_name: str, prop: str, value: str) -> Tuple[str, str]:
         """
         تنظیم یک ویژگی ZFS Pool.
 
@@ -248,16 +212,8 @@ class ZpoolManager:
             value (str): مقدار جدید (مثل "on")
 
         Raises:
-            subprocess.CalledProcessError: در صورت شکست دستور zpool
+            CLICommandError
         """
         cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "set", f"{prop}={value}", pool_name]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=10)
-        except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(
-                e.returncode,
-                e.cmd,
-                f"خطا در تنظیم ویژگی: {e.stderr.strip()}"
-            )
-        except Exception as e:
-            raise Exception(f"خطای غیرمنتظره در تنظیم ویژگی: {str(e)}")
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error

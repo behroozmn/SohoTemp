@@ -71,14 +71,12 @@ class ZpoolCreateView(ZpoolValidationMixin, DiskValidationMixin, APIView):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = request.data
 
-        pool_name = get_request_param(request, param_name="pool_name", return_type= str, default="pool_name_not_found")
-        devices = get_request_param(request, param_name="devices", return_type= list[str], default=[])
+        pool_name = get_request_param(request, param_name="pool_name", return_type=str, default="pool_name_not_found")
+        devices = get_request_param(request, param_name="devices", return_type=list[str], default=[])
 
         vdev_type = get_request_param(request, param_name="vdev_type", return_type=str, default="disk")
 
-        zpool_manager_or_error = self.validate_zpool_for_operation(
-            pool_name, save_to_db, request_data, must_exist=False
-        )
+        zpool_manager_or_error = self.validate_zpool_for_operation(pool_name, save_to_db, request_data, must_exist=False)
         if isinstance(zpool_manager_or_error, StandardErrorResponse):
             return zpool_manager_or_error
 
@@ -99,7 +97,7 @@ class ZpoolCreateView(ZpoolValidationMixin, DiskValidationMixin, APIView):
                 return os_error
 
         try:
-            zpool_manager_or_error.create_pool(pool_name, full_paths, vdev_valid)
+            std_out, std_error = zpool_manager_or_error.create_pool(pool_name, full_paths, vdev_valid)
             return StandardResponse(
                 message=f"Pool '{pool_name}' با موفقیت ایجاد شد.",
                 status=201,
@@ -142,7 +140,7 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
 
         if et == "destroy":
             try:
-                zpool_manager.destroy_pool(pool_name)
+                std_out, std_error =zpool_manager.destroy_pool(pool_name)
                 return StandardResponse(message=f"Pool '{pool_name}' با موفقیت حذف شد.", save_to_db=save_to_db)
             except Exception as e:
                 return StandardErrorResponse(
@@ -184,7 +182,7 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
                 return os_error
 
             try:
-                zpool_manager.replace_device(pool_name, old_device, new_device)
+                std_out, std_error = zpool_manager.replace_device(pool_name, old_device, new_device)
                 return StandardResponse(message="دیسک با موفقیت جایگزین شد.", save_to_db=save_to_db)
             except Exception as e:
                 return StandardErrorResponse(
@@ -216,7 +214,7 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
                     return os_err
 
             try:
-                zpool_manager.add_vdev(pool_name, full_paths, vdev_ok)
+                std_out, std_error =zpool_manager.add_vdev(pool_name, full_paths, vdev_ok)
                 return StandardResponse(message="vdev با موفقیت اضافه شد.", save_to_db=save_to_db)
             except Exception as e:
                 return StandardErrorResponse(
@@ -243,7 +241,7 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
                 )
 
             try:
-                zpool_manager.set_property(pool_name, prop, value)
+                std_out, std_error =zpool_manager.set_property(pool_name, prop, value)
                 return StandardResponse(
                     message=f"ویژگی '{prop}' با مقدار '{value}' تنظیم شد.",
                     save_to_db=save_to_db
