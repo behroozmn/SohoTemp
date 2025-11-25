@@ -275,7 +275,7 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
         CLICommandError: در صورت هرگونه خطا در اجرا
     """
     if use_sudo:
-        full_cmd = ["/usr/bin/sudo", "/usr/bin/env"] + command
+        full_cmd = ["/usr/bin/sudo"] + command
     else:
         full_cmd = command
 

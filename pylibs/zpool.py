@@ -193,11 +193,11 @@ class ZpoolManager:
             CLICommandError
         """
         if vdev_type == "spare":
-            cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name, "spare"] + devices
+            cmd = ["/usr/bin/zpool", "add", "-f", pool_name, "spare"] + devices
         elif vdev_type == "disk":
-            cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name] + devices
+            cmd = ["/usr/bin/zpool", "add", "-f", pool_name] + devices
         else:
-            cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "add", "-f", pool_name, vdev_type] + devices
+            cmd = ["/usr/bin/zpool", "add", "-f", pool_name, vdev_type] + devices
 
         std_out, std_error = run_cli_command(cmd, use_sudo=True)
         return std_out, std_error
@@ -214,6 +214,6 @@ class ZpoolManager:
         Raises:
             CLICommandError
         """
-        cmd = ["/usr/bin/sudo", "/usr/bin/zpool", "set", f"{prop}={value}", pool_name]
+        cmd = ["/usr/bin/zpool", "set", f"{prop}={value}", pool_name]
         std_out, std_error = run_cli_command(cmd, use_sudo=True)
         return std_out, std_error
