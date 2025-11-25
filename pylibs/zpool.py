@@ -89,37 +89,54 @@ class ZpoolManager:
 
     def get_pool_devices(self, pool_name: str) -> List[Dict[str, Any]]:
         """
-        دریافت لیست تمام دیسک‌های فیزیکی یک ZFS Pool با وضعیت و WWN.
-
-        Args:
-            pool_name (str): نام pool مورد نظر.
-
-        Returns:
-            List[Dict[str, Any]]: لیست دیسک‌ها با جزئیات.
+        دریافت لیست تمام دیسک‌های فیزیکی یک ZFS Pool با وضعیت، WWN و نوع vdev والد.
         """
         for p in self.zfs.pools:
             if str(p.properties["name"].value) == pool_name:
                 devices = []
 
-                def traverse_vdevs(vdev, parent_type: str = "root"):
+                def traverse_vdevs(vdev, top_vdev_type: str = "root"):
+                    """
+                    پیمایش بازگشتی vdevها.
+                    - top_vdev_type: نوع والد سطح بالا (برای دیسک‌ها ثابت می‌ماند)
+                    """
+                    # اگر این vdev یک دیسک یا فایل باشد
                     if vdev.type in ("disk", "file"):
-                        path_clean = re.sub(r'\d+$', '', vdev.path)
-                        wwn = self.obj_disk.get_wwn_by_entry(vdev.path.replace("/dev/", ""))
-                        path_name = self.obj_disk.get_disk_name_by_wwn(wwn)
-                        disk_name = self.obj_disk.get_disk_name_from_partition(path_name)
-                        devices.append({
-                            "full_path_wwn": vdev.path,
-                            "full_disk_wwn": vdev.path.replace("-part1", ""),
-                            "wwn": wwn,
-                            "full_path_name": f"/dev/{path_name}",
-                            "full_disk_name": f"/dev/{disk_name}",
-                            "disk_name": disk_name,
-                            "status": getattr(vdev, 'status', 'UNKNOWN'),
-                            "type": vdev.type,
-                        })
+                        try:
+                            wwn = self.obj_disk.get_wwn_by_entry(vdev.path.replace("/dev/", ""))
+                            path_name = self.obj_disk.get_disk_name_by_wwn(wwn)
+                            disk_name = self.obj_disk.get_disk_name_from_partition(path_name)
+
+                            devices.append({
+                                "full_path_wwn": vdev.path,
+                                "full_disk_wwn": vdev.path.replace("-part1", ""),
+                                "wwn": wwn,
+                                "full_path_name": f"/dev/{path_name}",
+                                "full_disk_name": f"/dev/{disk_name}",
+                                "disk_name": disk_name,
+                                "status": getattr(vdev, 'status', 'UNKNOWN'),
+                                "vdev_type": top_vdev_type,  # ✅ نوع vdev والد (مثلاً "raidz1")
+                            })
+                        except Exception as e:
+                            # اگر خطا در استخراج WWN یا نام دیسک بود، حداقل دیسک را ثبت کن
+                            devices.append({
+                                "full_path_wwn": vdev.path,
+                                "full_disk_wwn": vdev.path.replace("-part1", ""),
+                                "wwn": "",
+                                "full_path_name": vdev.path,
+                                "full_disk_name": vdev.path.replace("-part1", ""),
+                                "disk_name": os.path.basename(vdev.path).replace("-part1", ""),
+                                "status": getattr(vdev, 'status', 'UNKNOWN'),
+                                "vdev_type": top_vdev_type,
+                            })
+
+                    # اگر این vdev یک گروه باشد (mirror, raidz, و غیره)
                     elif hasattr(vdev, 'children') and vdev.children:
+                        # نوع فعلی را به عنوان top_vdev_type به فرزندان منتقل کن
+                        # اما اگر والد "root" است، نوع خود این vdev را استفاده کن
+                        next_top_type = vdev.type if top_vdev_type == "root" else top_vdev_type
                         for child in vdev.children:
-                            traverse_vdevs(child, parent_type=vdev.type)
+                            traverse_vdevs(child, top_vdev_type=next_top_type)
 
                 traverse_vdevs(p.root_vdev)
                 return devices
