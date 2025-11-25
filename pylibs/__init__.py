@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import Any, Dict, Optional, Union, List
+
 from http import HTTPStatus
 from rest_framework.response import Response
 from django.utils import timezone
@@ -320,3 +321,68 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
         if log_on_error:
             logger.error(f"خطای غیرمنتظره در اجرای دستور: {cmd_str} | خطا: {e}")
         raise error
+
+
+def build_standard_error_response(exc: Exception, error_code: str, error_message: str, request_data: Dict[str, Any], save_to_db: bool = False, default_status: int = 500) -> Response:
+    """ساخت هوشمند StandardErrorResponse بر اساس نوع استثنا.تمام جزئیات مربوط به هر نوع خطا استخراج و در exception_details قرار می‌گیرد."""
+    status = default_status
+    exception_details = {}
+
+    # --- 1. CLICommandError (خطاهای دستور خط فرمان ZFS) ---
+    if isinstance(exc, CLICommandError):
+        status = 400 if exc.returncode == 1 else 500
+        exception_details = {
+            "command": exc.command,
+            "returncode": exc.returncode,
+            "stderr": exc.stderr,
+            "stdout": exc.stdout,
+            "timeout": exc.timeout,
+        }
+
+    # --- 2. ValueError, TypeError (خطاهای اعتبارسنجی و منطقی) ---
+    elif isinstance(exc, (ValueError, TypeError)):
+        status = 400
+        exception_details = {"message": str(exc), }
+
+    # --- 3. FileNotFoundError, OSError, IOError (خطاهای سیستم فایل و دسترسی) ---
+    elif isinstance(exc, (FileNotFoundError, OSError)):
+        status = 400 if isinstance(exc, FileNotFoundError) else 500
+        details = {"message": str(exc)}
+        if hasattr(exc, 'filename') and exc.filename:
+            details["filename"] = exc.filename
+        if hasattr(exc, 'errno') and exc.errno:
+            details["errno"] = exc.errno
+        exception_details = details
+
+    # --- 4. ImportError (خطاهای ماژول/واردات) ---
+    elif isinstance(exc, ImportError):
+        status = 500
+        exception_details = {
+            "message": str(exc),
+            "name": getattr(exc, 'name', None),
+            "path": getattr(exc, 'path', None),
+        }
+
+    # --- 5. RuntimeError (خطاهای زمان اجرا) ---
+    elif isinstance(exc, RuntimeError):
+        status = 400 if "invalid" in str(exc).lower() or "not found" in str(exc).lower() else 500
+        exception_details = {"message": str(exc), }
+
+    # --- 6. سایر استثناها (خطاهای غیرمنتظره) ---
+    else:
+        status = 500
+        exception_details = {
+            "message": str(exc),
+            "class": exc.__class__.__name__,
+        }
+
+    # ارسال به StandardErrorResponse
+    return StandardErrorResponse(
+        error_code=error_code,
+        error_message=error_message,
+        exception=exc,
+        exception_details=exception_details,
+        status=status,
+        request_data=request_data,
+        save_to_db=save_to_db
+    )

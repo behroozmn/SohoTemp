@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from typing import Dict, Any, List, Optional
 
-from pylibs import StandardResponse, StandardErrorResponse, get_request_param, logger,CLICommandError
+from pylibs import StandardResponse, StandardErrorResponse, get_request_param, logger, CLICommandError, build_standard_error_response
 from pylibs.zpool import ZpoolManager
 from pylibs.disk import DiskManager
 from pylibs.mixins import ZpoolValidationMixin, DiskValidationMixin
@@ -20,18 +20,11 @@ class ZpoolListView(APIView):
         print(save_to_db)
         try:
             pools = ZpoolManager().list_all_pools()
-            return StandardResponse(data=pools, message="لیست poolها با موفقیت بازیابی شد.",request_data=request_data,save_to_db=save_to_db)
+            return StandardResponse(data=pools, message="لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
-            logger.error(f"Error in ZpoolListView: {e}")
-            return StandardErrorResponse(
-                error_code="zpool_list_failed",
-                error_message="خطا در دریافت لیست poolها.",
-                exception=e,
-                status=500,
-                # request_data=getattr(request, "data", {}),
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                 error_code="zpool_list_failed",
+                                                 error_message="خطا در دریافت لیست poolها.")
 
 
 class ZpoolDetailView(ZpoolValidationMixin, APIView):
@@ -48,7 +41,7 @@ class ZpoolDetailView(ZpoolValidationMixin, APIView):
             return zpool_manager_or_error
 
         detail = zpool_manager_or_error.get_pool_detail(pool_name)
-        return StandardResponse(data=detail or {}, message=f"جزئیات pool '{pool_name}'.""لیست poolها با موفقیت بازیابی شد.",request_data=request_data,save_to_db=save_to_db)
+        return StandardResponse(data=detail or {}, message=f"جزئیات pool '{pool_name}'.""لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
 
 
 class ZpoolDevicesView(ZpoolValidationMixin, APIView):
@@ -65,7 +58,8 @@ class ZpoolDevicesView(ZpoolValidationMixin, APIView):
             return zpool_manager_or_error
 
         devices = zpool_manager_or_error.get_pool_devices(pool_name)
-        return StandardResponse(data=devices, message=f"لیست دستگاه‌های pool '{pool_name}'.",request_data=request_data,save_to_db=save_to_db)
+        return StandardResponse(data=devices, message=f"لیست دستگاه‌های pool '{pool_name}'.", request_data=request_data, save_to_db=save_to_db)
+
 
 class ZpoolCreateView(ZpoolValidationMixin, DiskValidationMixin, APIView):
     """POST /create/ → ایجاد pool جدید"""
@@ -101,33 +95,15 @@ class ZpoolCreateView(ZpoolValidationMixin, DiskValidationMixin, APIView):
 
         try:
             std_out, std_error = zpool_manager_or_error.create_pool(pool_name, full_paths, vdev_valid)
-            return StandardResponse(message=f"Pool '{pool_name}' با موفقیت ایجاد شد.",status=201,request_data=request_data,save_to_db=save_to_db)
-        except CLICommandError as e:
-            logger.error(f"Zpool create failed: {e}")
-            return StandardErrorResponse(
-                error_code="zpool_create_failed",
-                error_message="خطا در ایجاد pool.",
-                exception=e,  # ← فقط همین!
-                status=400 if e.returncode == 1 else 500,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardResponse(message=f"Pool '{pool_name}' با موفقیت ایجاد شد.", status=201, request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
-            return StandardErrorResponse(
-                error_code="zpool_create_failed",
-                error_message="خطا در ایجاد pool.",
-                exception=e,
-                status=500,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                 error_code="zpool_create_failed",
+                                                 error_message="خطا در ایجاد pool.")
 
 
 class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
-    """
-    کلاس یکپارچه برای عملیات POST روی pool موجود.
-    پارامتر endpoint_type از طریق as_view(endpoint_type=...) تنظیم می‌شود.
-    """
+    """کلاس یکپارچه برای عملیات POST روی pool موجود. پارامتر endpoint_type از طریق as_view(endpoint_type=...) تنظیم می‌شود."""
 
     endpoint_type: Optional[str] = None
 
@@ -148,49 +124,27 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
 
         if et == "destroy":
             try:
-                std_out, std_error =zpool_manager.destroy_pool(pool_name)
-                return StandardResponse(message=f"Pool '{pool_name}' با موفقیت حذف شد.",request_data=request_data,save_to_db=save_to_db)
-            except CLICommandError as e:
-                return StandardErrorResponse(
-                    error_code="zpool_destroy_failed",
-                    error_message="خطا در حذف pool.",
-                    exception=e,  # ← فقط همین!
-                    status=400 if e.returncode == 1 else 500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                std_out, std_error = zpool_manager.destroy_pool(pool_name)
+                return StandardResponse(message=f"Pool '{pool_name}' با موفقیت حذف شد.", request_data=request_data, save_to_db=save_to_db)
             except Exception as e:
-                return StandardErrorResponse(
-                    error_code="zpool_destroy_failed",
-                    error_message="خطا در حذف pool.",
-                    exception=e,
-                    status=500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                     error_code="zpool_destroy_failed",
+                                                     error_message="خطا در حذف pool.")
 
         elif et == "replace":
             old_device = get_request_param(request, param_name="old_device", return_type=str, default="old_device")
             new_device = get_request_param(request, param_name="new_device", return_type=str, default="new_device")
             if not old_device or not new_device:
-                return StandardErrorResponse(
-                    error_code="missing_params",
-                    error_message="پارامترهای old_device و new_device الزامی هستند.",
-                    status=400,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=400,
+                                             error_code="missing_params",
+                                             error_message="پارامترهای old_device و new_device الزامی هستند.")
 
             for dev in [old_device, new_device]:
                 _, err = self._validate_and_extract_disk_info(dev)
                 if err:
-                    return StandardErrorResponse(
-                        error_code="invalid_device_path",
-                        error_message=err,
-                        status=400,
-                        request_data=request_data,
-                        save_to_db=save_to_db
-                    )
+                    return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=400,
+                                                 error_code="invalid_device_path",
+                                                 error_message=err)
 
             _, disk_name = self._validate_and_extract_disk_info(new_device)
             disk_manager = DiskManager()
@@ -200,26 +154,11 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
 
             try:
                 std_out, std_error = zpool_manager.replace_device(pool_name, old_device, new_device)
-                return StandardResponse(message="دیسک با موفقیت جایگزین شد.",request_data=request_data,save_to_db=save_to_db)
-            except CLICommandError as e:
-                return StandardErrorResponse(
-                    error_code="zpool_replace_failed",
-                    error_message="خطا در جایگزینی دیسک.",
-                    exception=e,  # ← فقط همین!
-                    status=400 if e.returncode == 1 else 500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                return StandardResponse(message="دیسک با موفقیت جایگزین شد.", request_data=request_data, save_to_db=save_to_db)
             except Exception as e:
-                return StandardErrorResponse(
-                    error_code="zpool_replace_failed",
-                    error_message="خطا در جایگزینی دیسک.",
-                    exception=e,
-                    status=500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-
+                return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                     error_code="zpool_replace_failed",
+                                                     error_message="خطا در جایگزینی دیسک.")
         elif et == "add":
             devices = get_request_param(request, param_name="devices", return_type=list[str], default=[])
             vdev_type = get_request_param(request, param_name="vdev_type", return_type=str, default="disk")
@@ -240,72 +179,30 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
                     return os_err
 
             try:
-                std_out, std_error =zpool_manager.add_vdev(pool_name, full_paths, vdev_ok)
-                return StandardResponse(message="vdev با موفقیت اضافه شد.",request_data=request_data,save_to_db=save_to_db)
-            except CLICommandError as e:
-                return StandardErrorResponse(
-                    error_code="zpool_add_vdev_failed",
-                    error_message="خطا در افزودن vdev.",
-                    exception=e,  # ← فقط همین!
-                    status=400 if e.returncode == 1 else 500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                std_out, std_error = zpool_manager.add_vdev(pool_name, full_paths, vdev_ok)
+                return StandardResponse(message="vdev با موفقیت اضافه شد.", request_data=request_data, save_to_db=save_to_db)
             except Exception as e:
-                return StandardErrorResponse(
-                    error_code="zpool_add_vdev_failed",
-                    error_message="خطا در افزودن vdev.",
-                    exception=e,
-                    status=500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-
-
-
-
-
+                return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                     error_code="zpool_add_vdev_failed",
+                                                     error_message="خطا در افزودن vdev.")
 
         elif et == "set-property":
             prop = get_request_param(request, param_name="prop", return_type=str, default="prop_not_found")
             value = get_request_param(request, param_name="value", return_type=str, default="value_not_found")
             if not prop or not value:
-                return StandardErrorResponse(
-                    error_code="missing_params",
-                    error_message="پارامترهای property و value الزامی هستند.",
-                    status=400,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db,
+                                             error_code="missing_params",
+                                             error_message="پارامترهای property و value الزامی هستند.")
 
             try:
-                std_out, std_error =zpool_manager.set_property(pool_name, prop, value)
-                return StandardResponse(
-                    message=f"ویژگی '{prop}' با مقدار '{value}' تنظیم شد.",request_data=request_data,save_to_db=save_to_db)
-            except CLICommandError as e:
-                return StandardErrorResponse(
-                    error_code="zpool_set_property_failed",
-                    error_message="خطا در تنظیم ویژگی pool.",
-                    exception=e,  # ← فقط همین!
-                    status=400 if e.returncode == 1 else 500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
-            except Exception as e:
-                return StandardErrorResponse(
-                    error_code="zpool_set_property_failed",
-                    error_message="خطا در تنظیم ویژگی pool.",
-                    exception=e,
-                    status=500,
-                    request_data=request_data,
-                    save_to_db=save_to_db
-                )
+                std_out, std_error = zpool_manager.set_property(pool_name, prop, value)
+                return StandardResponse(message=f"ویژگی '{prop}' با مقدار '{value}' تنظیم شد.", request_data=request_data, save_to_db=save_to_db)
 
+            except Exception as e:
+                return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
+                                                     error_code="zpool_set_property_failed",
+                                                     error_message="خطا در تنظیم ویژگی pool.")
         else:
-            return StandardErrorResponse(
-                error_code="invalid_endpoint_type",
-                error_message=f"نوع endpoint نامعتبر: {et}",
-                status=400,
-                request_data=request_data,
-                save_to_db=save_to_db
-            )
+            return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=400,
+                                         error_code="invalid_endpoint_type",
+                                         error_message=f"نوع endpoint نامعتبر: {et}")
