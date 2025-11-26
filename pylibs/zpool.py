@@ -42,8 +42,10 @@ class ZpoolManager:
             if str(p.properties["name"].value) == pool_name:
                 props = p.properties
                 data = {k: str(v.value) for k, v in props.items()}
-                data["disks"] = self.get_pool_devices(pool_name)
-                data_sorted={k: data[k] for k in sorted(data.keys())}
+                _disks = self.get_pool_devices(pool_name)
+                data["disks"] = _disks
+                data['vdev_type'] = _disks[0].get("vdev_type", "unknown")
+                data_sorted = {k: data[k] for k in sorted(data.keys())}
                 return data_sorted
         return None
 
