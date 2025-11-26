@@ -10,8 +10,7 @@ from typing import List, Dict, Any
 
 
 def db_update_disks(disks_info: List[Dict[str, Any]]) -> None:
-    """
-    ذخیره یا به‌روزرسانی اطلاعات **همه دیسک‌های سیستم** در جدول `disks`.
+    """ذخیره یا به‌روزرسانی اطلاعات **همه دیسک‌های سیستم** در جدول `disks`.
 
     این تابع از دیکشنری داده‌های خروجی `DiskManager.get_disks_info_all()` استفاده می‌کند.
     برای هر دیسک، یک رکورد در جدول `disks` ایجاد یا به‌روزرسانی می‌شود.

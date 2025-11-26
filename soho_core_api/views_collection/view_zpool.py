@@ -205,3 +205,111 @@ class ZpoolManageView(ZpoolValidationMixin, DiskValidationMixin, APIView):
             return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=400,
                                          error_code="invalid_endpoint_type",
                                          error_message=f"نوع endpoint نامعتبر: {et}")
+
+
+class ZpoolImportView(APIView, ZpoolValidationMixin):
+    """
+    API برای import یک ZFS Pool که قبلاً export شده است.
+    POST /api/zpool/import/
+    body: {"pool_name": "mypool", "save_to_db": false}
+    """
+
+    def post(self, request, *args: Any, **kwargs: Any):
+        request_data: Dict[str, Any] = getattr(request, 'data', {})
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+
+        pool_name = request_data.get("pool_name")
+        if not pool_name:
+            return StandardErrorResponse(
+                error_code="missing_pool_name",
+                error_message="پارامتر 'pool_name' الزامی است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+
+        # اعتبارسنجی نام pool و اینکه **وجود نداشته باشد** (چون می‌خواهیم import کنیم)
+        manager = self.validate_zpool_for_operation(
+            pool_name=pool_name,
+            save_to_db=save_to_db,
+            request_data=request_data,
+            must_exist=False  # برای import، pool نباید الان وجود داشته باشد
+        )
+        if isinstance(manager, StandardErrorResponse):
+            return manager
+
+        try:
+            # بررسی: آیا pool قابل import است؟ (وجود دارد ولی export شده)
+            # libzfs ممکن است poolهای export شده را نشان ندهد، پس مستقیماً دستور را اجرا می‌کنیم
+            stdout, stderr = manager.import_pool(pool_name)
+
+            return StandardResponse(
+                message=f"Pool '{pool_name}' با موفقیت import شد.",
+                data={"pool_name": pool_name, "stdout": stdout},
+                request_data=request_data,
+                save_to_db=save_to_db,
+                status=200
+            )
+
+        except Exception as exc:
+            return build_standard_error_response(
+                exc=exc,
+                error_code="import_pool_failed",
+                error_message=f"خطا در import pool '{pool_name}'.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+                default_status=400
+            )
+
+
+class ZpoolExportView(APIView, ZpoolValidationMixin):
+    """
+    API برای export یک ZFS Pool فعال (بدون حذف داده‌ها).
+    POST /api/zpool/export/
+    body: {"pool_name": "mypool", "save_to_db": false}
+    """
+
+    def post(self, request, *args: Any, **kwargs: Any):
+        request_data: Dict[str, Any] = getattr(request, 'data', {})
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+
+        pool_name = request_data.get("pool_name")
+        if not pool_name:
+            return StandardErrorResponse(
+                error_code="missing_pool_name",
+                error_message="پارامتر 'pool_name' الزامی است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+
+        # اعتبارسنجی: pool باید **وجود داشته باشد**
+        manager = self.validate_zpool_for_operation(
+            pool_name=pool_name,
+            save_to_db=save_to_db,
+            request_data=request_data,
+            must_exist=True
+        )
+        if isinstance(manager, StandardErrorResponse):
+            return manager
+
+        try:
+            stdout, stderr = manager.export_pool(pool_name)
+
+            return StandardResponse(
+                message=f"Pool '{pool_name}' با موفقیت export شد.",
+                data={"pool_name": pool_name, "stdout": stdout},
+                request_data=request_data,
+                save_to_db=save_to_db,
+                status=200
+            )
+
+        except Exception as exc:
+            return build_standard_error_response(
+                exc=exc,
+                error_code="export_pool_failed",
+                error_message=f"خطا در export pool '{pool_name}'.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+                default_status=400
+            )

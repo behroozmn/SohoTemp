@@ -232,3 +232,31 @@ class ZpoolManager:
         cmd = ["/usr/bin/zpool", "set", f"{prop}={value}", pool_name]
         std_out, std_error = run_cli_command(cmd, use_sudo=True)
         return std_out, std_error
+
+    def import_pool(self, pool_name: str) -> Tuple[str, str]:
+        """
+        ایمپورت یک ZFS Pool که قبلاً export شده است.
+
+        Args:
+            pool_name (str): نام pool برای import.
+
+        Raises:
+            CLICommandError
+        """
+        cmd = ["/usr/bin/zpool", "import", "-f", pool_name]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error
+
+    def export_pool(self, pool_name: str) -> Tuple[str, str]:
+        """
+        اکسپورت یک ZFS Pool فعال (بدون حذف داده‌ها).
+
+        Args:
+            pool_name (str): نام pool برای export.
+
+        Raises:
+            CLICommandError
+        """
+        cmd = ["/usr/bin/zpool", "export", pool_name]
+        std_out, std_error = run_cli_command(cmd, use_sudo=True)
+        return std_out, std_error

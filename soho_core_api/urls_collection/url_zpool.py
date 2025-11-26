@@ -6,6 +6,8 @@ from soho_core_api.views_collection import view_zpool
 urlpatterns = [
     path('create/', view_zpool.ZpoolCreateView.as_view(), name='zpool-create'),
     path('', view_zpool.ZpoolListView.as_view(), name='zpool'),
+    path('import/', view_zpool.ZpoolImportView.as_view(), name='zpool-import'),
+    path('export/', view_zpool.ZpoolExportView.as_view(), name='zpool-export'),
     path('<str:pool_name>/', view_zpool.ZpoolDetailView.as_view(), name='zpool-detail'),
     path('<str:pool_name>/devices/', view_zpool.ZpoolDevicesView.as_view(), name='zpool-devices'),
     path('<str:pool_name>/destroy/', view_zpool.ZpoolManageView.as_view(endpoint_type='destroy'), name='zpool-destroy'),
