@@ -41,19 +41,54 @@ def db_update_pool_single(pool_data: Dict[str, Any]) -> None:
 
     Pools.objects.update_or_create(name=name, defaults=defaults)
 
-def db_update_pools(pools_info: list) -> None:
+
+def db_sync_pools(pools_info: List[Dict[str, Any]]) -> None:
     """
-    ذخیره یا به‌روزرسانی لیستی از ZFS Pools در جدول `pools`.
+    همگام‌سازی کامل جدول `pools` با لیست فعلی poolهای سیستم.
+
+    - poolهای جدید یا به‌روزشده ذخیره می‌شوند.
+    - poolهایی که دیگر در سیستم نیستند، از دیتابیس حذف می‌شوند.
 
     Args:
-        pools_info (list): لیست دیکشنری‌های خروجی از ZpoolManager.list_all_pools().
+        pools_info (List[Dict]): خروجی ZpoolManager.list_all_pools()
     """
     if not isinstance(pools_info, list):
-        raise ValueError("ورودی باید یک لیست باشد.")
+        raise ValueError("ورودی باید لیستی از دیکشنری‌ها باشد.")
 
+    # 1. استخراج نام تمام poolهای فعلی سیستم
+    current_pool_names = {pool['name'] for pool in pools_info if isinstance(pool, dict) and 'name' in pool}
+
+    # 2. حذف poolهایی که دیگر در سیستم وجود ندارند
+    Pools.objects.exclude(name__in=current_pool_names).delete()
+
+    # 3. ذخیره/به‌روزرسانی poolهای جدید
     for pool_data in pools_info:
-        db_update_pool_single(pool_data)
+        if not isinstance(pool_data, dict) or 'name' not in pool_data:
+            continue  # نادیده گرفتن داده‌های نامعتبر
 
+        name = pool_data['name']
+        disks_data = pool_data.get('disks', [])
+
+        defaults = {
+            'health': pool_data.get('health', ''),
+            'size': pool_data.get('size', ''),
+            'allocated': pool_data.get('allocated', ''),
+            'free': pool_data.get('free', ''),
+            'capacity': pool_data.get('capacity', ''),
+            'guid': pool_data.get('guid', ''),
+            'vdev_type': pool_data.get('vdev_type', ''),
+            'autoreplace': pool_data.get('autoreplace', ''),
+            'autoexpand': pool_data.get('autoexpand', ''),
+            'autotrim': pool_data.get('autotrim', ''),
+            'dedupratio': pool_data.get('dedupratio', ''),
+            'fragmentation': pool_data.get('fragmentation', ''),
+            'readonly': pool_data.get('readonly', ''),
+            'failmode': pool_data.get('failmode', ''),
+            'version': pool_data.get('version', ''),
+            'disks': disks_data,
+        }
+
+        Pools.objects.update_or_create(name=name, defaults=defaults)
 
 class ZpoolListView(APIView):
     """GET / → لیست تمام poolها"""
@@ -65,7 +100,7 @@ class ZpoolListView(APIView):
         try:
             pools_info = ZpoolManager().list_all_pools()
             if save_to_db:
-                db_update_pools(pools_info)
+                db_sync_pools(pools_info)
             return StandardResponse(data=pools_info, message="لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
