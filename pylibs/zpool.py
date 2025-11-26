@@ -25,53 +25,43 @@ class ZpoolManager:
         """سازنده کلاس — ایجاد نمونه ZFS از libzfs."""
         self.zfs = libzfs.ZFS()
 
-    def list_all_pools(self) -> List[Dict[str, Any]]:
-        """
-        دریافت لیست خلاصه تمام ZFS Poolهای موجود در سیستم.
-
-        Returns:
-            List[Dict[str, Any]]: لیستی از دیکشنری‌ها با فیلدهای زیر:
-                - name (str): نام pool
-                - health (str): وضعیت سلامت
-                - size (str): حجم کل
-                - allocated (str): حجم استفاده‌شده
-                - free (str): فضای آزاد
-                - capacity (str): درصد پر شدن
-                - guid (str): شناسه منحصربه‌فرد
-        """
-        pools = []
-        try:
-            for p in self.zfs.pools:
-                props = p.properties
-                pools.append({
-                    "name": str(props["name"].value),
-                    "health": str(props["health"].value),
-                    "size": str(props["size"].value),
-                    "allocated": str(props["allocated"].value),
-                    "free": str(props["free"].value),
-                    "capacity": str(props["capacity"].value),
-                    "guid": str(props["guid"].value),
-                    "disks": self.get_pool_devices(props["name"].value)
-                })
-        except Exception as e:
-            logger.warning(f"Error reading ZFS pools in list_all_pools: {e}")
-        return pools
-
     def get_pool_detail(self, pool_name: str) -> Optional[Dict[str, Any]]:
         """
-        دریافت تمام ویژگی‌های یک ZFS Pool خاص.
+        دریافت تمام ویژگی‌های یک ZFS Pool خاص، همراه با لیست دیسک‌های آن.
 
         Args:
             pool_name (str): نام pool مورد نظر.
 
         Returns:
-            Optional[Dict[str, Any]]: دیکشنری کامل ویژگی‌ها یا None اگر pool یافت نشود.
+            Optional[Dict[str, Any]]: دیکشنری کامل شامل:
+                - تمام پراپرتی‌های pool (name, health, size, ...)
+                - فیلد "disks": لیست دیسک‌ها با جزئیات
+                یا None اگر pool یافت نشود.
         """
         for p in self.zfs.pools:
             if str(p.properties["name"].value) == pool_name:
                 props = p.properties
-                return {k: str(v.value) for k, v in props.items()}
+                data = {k: str(v.value) for k, v in props.items()}
+                data["disks"] = self.get_pool_devices(pool_name)
+                data_sorted={k: data[k] for k in sorted(data.keys())}
+                return data_sorted
         return None
+
+    def list_all_pools(self) -> List[Dict[str, Any]]:
+        """
+        دریافت لیست تمام ZFS Poolهای موجود، هر کدام با ساختار یکسان با get_pool_detail.
+        این متد با فراخوانی get_pool_detail برای هر pool، لیست کامل را می‌سازد.
+        """
+        pools = []
+        try:
+            for p in self.zfs.pools:
+                pool_name = str(p.properties["name"].value)
+                detail = self.get_pool_detail(pool_name)
+                if detail is not None:
+                    pools.append(detail)
+        except Exception as e:
+            logger.warning(f"Error reading ZFS pools in list_all_pools: {e}")
+        return pools
 
     def pool_exists(self, pool_name: str) -> bool:
         """
