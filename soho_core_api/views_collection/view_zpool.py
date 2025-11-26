@@ -3,11 +3,56 @@
 from rest_framework.views import APIView
 
 from typing import Dict, Any, List, Optional
-
 from pylibs import StandardResponse, StandardErrorResponse, get_request_param, build_standard_error_response
 from pylibs.zpool import ZpoolManager
 from pylibs.disk import DiskManager
 from pylibs.mixins import ZpoolValidationMixin, DiskValidationMixin
+
+from typing import Dict, Any
+from soho_core_api.models import Pools
+
+
+def db_update_pool_single(pool_data: Dict[str, Any]) -> None:
+    """ذخیره یا به‌روزرسانی یک pool."""
+    if not isinstance(pool_data, dict) or 'name' not in pool_data:
+        return  # یا raise کنید بسته به سیاست خطا
+
+    name = pool_data['name']
+    disks_data = pool_data.get('disks', [])
+
+    defaults = {
+        'health': pool_data.get('health', ''),
+        'size': pool_data.get('size', ''),
+        'allocated': pool_data.get('allocated', ''),
+        'free': pool_data.get('free', ''),
+        'capacity': pool_data.get('capacity', ''),
+        'guid': pool_data.get('guid', ''),
+        'vdev_type': pool_data.get('vdev_type', ''),
+        'autoreplace': pool_data.get('autoreplace', ''),
+        'autoexpand': pool_data.get('autoexpand', ''),
+        'autotrim': pool_data.get('autotrim', ''),
+        'dedupratio': pool_data.get('dedupratio', ''),
+        'fragmentation': pool_data.get('fragmentation', ''),
+        'readonly': pool_data.get('readonly', ''),
+        'failmode': pool_data.get('failmode', ''),
+        'version': pool_data.get('version', ''),
+        'disks': disks_data,
+    }
+
+    Pools.objects.update_or_create(name=name, defaults=defaults)
+
+def db_update_pools(pools_info: list) -> None:
+    """
+    ذخیره یا به‌روزرسانی لیستی از ZFS Pools در جدول `pools`.
+
+    Args:
+        pools_info (list): لیست دیکشنری‌های خروجی از ZpoolManager.list_all_pools().
+    """
+    if not isinstance(pools_info, list):
+        raise ValueError("ورودی باید یک لیست باشد.")
+
+    for pool_data in pools_info:
+        db_update_pool_single(pool_data)
 
 
 class ZpoolListView(APIView):
@@ -18,8 +63,10 @@ class ZpoolListView(APIView):
         request_data = dict(request.query_params)
         print(save_to_db)
         try:
-            pools = ZpoolManager().list_all_pools()
-            return StandardResponse(data=pools, message="لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
+            pools_info = ZpoolManager().list_all_pools()
+            if save_to_db:
+                db_update_pools(pools_info)
+            return StandardResponse(data=pools_info, message="لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(exc=e, request_data=request.data, save_to_db=save_to_db,
                                                  error_code="zpool_list_failed",

@@ -73,3 +73,40 @@ class Disks(models.Model):
 
     def __str__(self):
         return f"Disks({self.disk_name})"
+
+
+
+class Pools(models.Model):
+    # فیلدهای اصلی pool (همان‌هایی که در خروجی get_pool_detail هستند)
+    name = models.CharField(max_length=255, unique=True, db_index=True)
+    health = models.CharField(max_length=50, blank=True)
+    size = models.CharField(max_length=50, blank=True)
+    allocated = models.CharField(max_length=50, blank=True)
+    free = models.CharField(max_length=50, blank=True)
+    capacity = models.CharField(max_length=50, blank=True)  # مثلاً "20%"
+    guid = models.CharField(max_length=100, blank=True)
+    vdev_type = models.CharField(max_length=50, blank=True)  # mirror, raidz1, disk, ...
+
+    # دیگر فیلدهای متداول (اختیاری ولی پیشنهادی برای پوشش کامل)
+    autoreplace = models.CharField(max_length=10, blank=True)  # "on"/"off"
+    autoexpand = models.CharField(max_length=10, blank=True)
+    autotrim = models.CharField(max_length=10, blank=True)
+    dedupratio = models.CharField(max_length=20, blank=True)
+    fragmentation = models.CharField(max_length=20, blank=True)
+    readonly = models.CharField(max_length=10, blank=True)
+    failmode = models.CharField(max_length=20, blank=True)
+    version = models.CharField(max_length=20, blank=True)
+
+    # 🔸 فیلد disks به صورت JSON ساختاریافته
+    disks = models.JSONField(default=list, blank=True)
+
+    # زمان آخرین بروزرسانی
+    last_update = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        db_table = 'pools'
+        verbose_name = 'pool'
+        verbose_name_plural = 'pools'
+
+    def __str__(self):
+        return f"Pools({self.name})"
