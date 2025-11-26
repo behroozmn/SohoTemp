@@ -26,23 +26,12 @@ class ZpoolManager:
         self.zfs = libzfs.ZFS()
 
     def get_pool_detail(self, pool_name: str) -> Optional[Dict[str, Any]]:
-        """
-        دریافت تمام ویژگی‌های یک ZFS Pool خاص، همراه با لیست دیسک‌های آن.
-
-        Args:
-            pool_name (str): نام pool مورد نظر.
-
-        Returns:
-            Optional[Dict[str, Any]]: دیکشنری کامل شامل:
-                - تمام پراپرتی‌های pool (name, health, size, ...)
-                - فیلد "disks": لیست دیسک‌ها با جزئیات
-                یا None اگر pool یافت نشود.
-        """
+        """ دریافت تمام ویژگی‌های یک ZFS Pool خاص، همراه با لیست دیسک‌های آن."""
         for p in self.zfs.pools:
             if str(p.properties["name"].value) == pool_name:
                 props = p.properties
-                data = {k: str(v.value) for k, v in props.items()}
-                _disks = self.get_pool_devices(pool_name)
+                data: Dict[str, Any] = {k: str(v.value) for k, v in props.items()}
+                _disks: List[Dict[str, Any]] = self.get_pool_devices(pool_name)
                 data["disks"] = _disks
                 data['vdev_type'] = _disks[0].get("vdev_type", "unknown")
                 data_sorted = {k: data[k] for k in sorted(data.keys())}
