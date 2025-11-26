@@ -122,6 +122,9 @@ class ZpoolDetailView(ZpoolValidationMixin, APIView):
             return zpool_manager_or_error
 
         detail = zpool_manager_or_error.get_pool_detail(pool_name)
+        if save_to_db:
+            db_update_pool_single(detail)
+
         return StandardResponse(data=detail or {}, message=f"جزئیات pool '{pool_name}'.""لیست poolها با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db)
 
 
