@@ -315,61 +315,92 @@ class FilesystemValidationMixin:
 
     SMB_CONF_PATH = "/etc/samba/smb.conf"
 
-    def _validate_filesystem_name_availability(self, pool_name: str, fs_name: str, save_to_db: bool, request_data: Dict[str, Any], must_not_exist: bool = True, ) -> Optional[StandardErrorResponse]:
+    def _validate_filesystem_name_availability(
+        self, pool_name: str, fs_name: str, save_to_db: bool, request_data: Dict[str, Any], must_not_exist: bool = True
+    ) -> Optional[StandardErrorResponse]:
         """اعتبارسنجی اینکه فایل‌سیستم وجود نداشته باشد (در هنگام ساخت) یا وجود داشته باشد (در هنگام حذف)."""
         try:
             fs_manager = FilesystemManager()
-            all_fs = fs_manager.list_filesystems_names()
+            all_fs = fs_manager.list_filesystems_names(contain_poolname=False)
             full_name = f"{pool_name}/{fs_name}"
             exists = full_name in all_fs
 
             if must_not_exist and exists:
-                return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=400,
-                                             error_code="filesystem_already_exists",
-                                             error_message=f"فایل‌سیستم '{full_name}' از قبل وجود دارد.")
+                return StandardErrorResponse(
+                    save_to_db=save_to_db,
+                    request_data=request_data,
+                    status=400,
+                    error_code="filesystem_already_exists",
+                    error_message=f"فایل‌سیستم '{full_name}' از قبل وجود دارد."
+                )
             elif not must_not_exist and not exists:
-                return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=404,
-                                             error_code="filesystem_not_found",
-                                             error_message=f"فایل‌سیستم '{full_name}' یافت نشد.")
+                return StandardErrorResponse(
+                    save_to_db=save_to_db,
+                    request_data=request_data,
+                    status=404,
+                    error_code="filesystem_not_found",
+                    error_message=f"فایل‌سیستم '{full_name}' یافت نشد."
+                )
         except Exception as e:
-            logger.error(f"خطا در بررسی وجود فایل‌سیستم: {e}")
-            return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=500,
-                                         error_code="filesystem_validation_failed",
-                                         error_message="خطا در اعتبارسنجی نام فایل‌سیستم.")
+            logger.error(f"خطا در بررسی وجود فایل‌سیستم: {e}", exc_info=True)
+            return StandardErrorResponse(
+                save_to_db=save_to_db,
+                request_data=request_data,
+                status=500,
+                error_code="filesystem_validation_failed",
+                error_message="خطا در اعتبارسنجی نام فایل‌سیستم."
+            )
         return None
 
-    def _validate_quota_against_pool_capacity(self, pool_name: str, quota: Optional[str], save_to_db: bool, request_data: Dict[str, Any], ) -> Optional[StandardErrorResponse]:
-        """
-        اعتبارسنجی اینکه quota درخواستی بیشتر از فضای آزاد pool نباشد.
-        """
+    def _validate_quota_against_pool_capacity(
+        self,
+        pool_manager: "ZpoolManager",
+        pool_name: str,
+        quota: Optional[str],
+        save_to_db: bool,
+        request_data: Dict[str, Any],
+    ) -> Optional[StandardErrorResponse]:
+        """اعتبارسنجی اینکه quota درخواستی بیشتر از فضای آزاد pool نباشد."""
         if not quota:
             return None
         try:
-            # تبدیل به بایت
             quota_bytes = self._parse_size_to_bytes(quota)
-            zpool_manager = ZpoolManager()
-            pool_detail = zpool_manager.get_pool_detail(pool_name)
+            pool_detail = pool_manager.get_pool_detail(pool_name)
             if not pool_detail:
-                return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=404,
-                                             error_code="pool_not_found",
-                                             error_message=f"Pool '{pool_name}' یافت نشد.")
+                return StandardErrorResponse(
+                    save_to_db=save_to_db,
+                    request_data=request_data,
+                    status=404,
+                    error_code="pool_not_found",
+                    error_message=f"Pool '{pool_name}' یافت نشد."
+                )
             available_str = pool_detail.get("available", "0")
             available_bytes = self._parse_size_to_bytes(available_str)
 
             if quota_bytes > available_bytes:
-                return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=400,
-                                             error_code="quota_exceeds_pool_capacity",
-                                             error_message=f"کووتای درخواستی ({quota}) بیشتر از فضای آزاد pool ({available_str}) است.")
+                return StandardErrorResponse(
+                    save_to_db=save_to_db,
+                    request_data=request_data,
+                    status=400,
+                    error_code="quota_exceeds_pool_capacity",
+                    error_message=f"کووتای درخواستی ({quota}) بیشتر از فضای آزاد pool ({available_str}) است."
+                )
         except Exception as e:
-            logger.error(f"خطا در اعتبارسنجی quota: {e}")
-            return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=500,
-                                         error_code="quota_validation_failed",
-                                         error_message="خطا در اعتبارسنجی حجم فایل‌سیستم.")
+            logger.error("خطا در اعتبارسنجی quota", exc_info=True)
+            return StandardErrorResponse(
+                save_to_db=save_to_db,
+                request_data=request_data,
+                status=500,
+                error_code="quota_validation_failed",
+                error_message="خطا در اعتبارسنجی حجم فایل‌سیستم."
+            )
         return None
 
     def _parse_size_to_bytes(self, size_str: str) -> int:
         """تبدیل '10G', '512M' و ... به بایت."""
         size_str = size_str.strip().upper()
+        if not size_str:
+            return 0
         multipliers = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3, "T": 1024 ** 4}
         if size_str[-1] in multipliers:
             num = float(size_str[:-1])
@@ -377,23 +408,30 @@ class FilesystemValidationMixin:
         else:
             return int(size_str)
 
-    def _is_filesystem_used_in_samba(self, mountpoint: str, save_to_db: bool, request_data: Dict[str, Any], ) -> Optional[StandardErrorResponse]:
-        """
-        بررسی اینکه آیا مسیر مونت‌شده فایل‌سیستم در smb.conf وجود دارد.
-        """
+    def _is_filesystem_used_in_samba(
+        self, mountpoint: str, save_to_db: bool, request_data: Dict[str, Any]
+    ) -> Optional[StandardErrorResponse]:
+        """بررسی اینکه آیا مسیر مونت‌شده فایل‌سیستم در smb.conf وجود دارد."""
         if not os.path.exists(self.SMB_CONF_PATH):
             return None
         try:
             with open(self.SMB_CONF_PATH, "r", encoding="utf-8") as f:
                 content = f.read()
             if mountpoint in content:
-                return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=403,
-                                             error_code="filesystem_in_use_by_samba",
-                                             error_message=f"فایل‌سیستم با مسیر مونت '{mountpoint}' در Samba استفاده شده و قابل حذف نیست.")
+                return StandardErrorResponse(
+                    save_to_db=save_to_db,
+                    request_data=request_data,
+                    status=403,
+                    error_code="filesystem_in_use_by_samba",
+                    error_message=f"فایل‌سیستم با مسیر مونت '{mountpoint}' در Samba استفاده شده و قابل حذف نیست."
+                )
         except Exception as e:
-            logger.error(f"خطا در خواندن smb.conf: {e}")
-            # اگر خطا داد، اجازه حذف ندهیم (خطای محافظه‌کارانه)
-            return StandardErrorResponse(save_to_db=save_to_db, request_data=request_data, status=500,
-                                         error_code="samba_check_failed",
-                                         error_message="خطا در بررسی وضعیت Samba. امکان حذف فایل‌سیستم وجود ندارد.")
+            logger.error(f"خطا در خواندن smb.conf: {e}", exc_info=True)
+            return StandardErrorResponse(
+                save_to_db=save_to_db,
+                request_data=request_data,
+                status=500,
+                error_code="samba_check_failed",
+                error_message="خطا در بررسی وضعیت Samba. امکان حذف فایل‌سیستم وجود ندارد."
+            )
         return None

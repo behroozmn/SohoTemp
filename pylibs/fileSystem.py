@@ -26,14 +26,29 @@ class FilesystemManager:
             logger.debug(f"فایل‌سیستم یافت نشد: {fs_name} - {e}")
             return None
 
-    def list_filesystems_names(self) -> List[str]:
-        """لیست تمام نام‌های فایل‌سیستم‌های ZFS (مثل 'tank/data')."""
-        return [str(ds.name) for ds in self.zfs.datasets]
+    def list_filesystems_names(self, contain_poolname: bool) -> List[str]:
+        """
+        لیستی از نام‌های دیتاست‌های ZFS را برمی‌گرداند.
 
-    def get_filesystems_all_detail(self) -> List[Dict[str, Any]]:
+        اگر ``contain_poolname`` برابر True باشد، همهٔ دیتاست‌ها (شامل روت پول‌ها) برگردانده می‌شوند.
+        اگر False باشد، تنها فایل‌سیستم‌های فرزند (دیتاست‌هایی که در نامشان '/' وجود دارد) برگردانده می‌شوند.
+
+        پارامترها:
+            contain_poolname (bool): تعیین می‌کند که آیا دیتاست‌های سطح پول (بدون '/') نیز در لیست گنجانده شوند یا خیر.
+
+        بازگشت:
+            List[str]: لیستی از نام دیتاست‌ها به صورت رشته.
+        """
+        # datasets = self.zfs.datasets
+        # if contain_poolname: return [str(ds.name) for ds in datasets]
+        # else: return [str(ds.name) for ds in datasets if "/" in str(ds.name)]
+
+        return [str(ds.name) for ds in self.zfs.datasets if contain_poolname or "/" in str(ds.name)]
+
+    def get_filesystems_all_detail(self, contain_poolname: bool = False) -> List[Dict[str, Any]]:
         """دریافت جزئیات تمام فایل‌سیستم‌ها."""
         all_details = []
-        for name in self.list_filesystems_names():
+        for name in self.list_filesystems_names(contain_poolname=contain_poolname):
             detail = self.get_filesystem_detail(name)
             if detail is not None:
                 all_details.append(detail)
@@ -48,7 +63,7 @@ class FilesystemManager:
         if quota:
             cmd.extend(["-o", f"quota={quota}"])
         if reservation:
-            cmd.extend(["-o", f"quota={reservation}"])
+            cmd.extend(["-o", f"reservation={reservation}"])
         if mountpoint:
             cmd.extend(["-o", f"mountpoint={mountpoint}"])
         cmd.append(full_name)

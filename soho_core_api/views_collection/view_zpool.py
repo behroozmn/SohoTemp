@@ -113,7 +113,7 @@ class ZpoolDetailView(ZpoolValidationMixin, APIView):
 
     def get(self, request, pool_name: str):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        request_data = getattr(request, "data", {})
+        request_data = dict(request.query_params)
 
         zpool_manager_or_error = self.validate_zpool_for_operation(
             pool_name, save_to_db, request_data, must_exist=True
@@ -133,7 +133,7 @@ class ZpoolDevicesView(ZpoolValidationMixin, APIView):
 
     def get(self, request, pool_name: str):
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        request_data = getattr(request, "data", {})
+        request_data = dict(request.query_params)
 
         zpool_manager_or_error = self.validate_zpool_for_operation(
             pool_name, save_to_db, request_data, must_exist=True

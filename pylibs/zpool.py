@@ -147,16 +147,14 @@ class ZpoolManager:
 
     def destroy_pool(self, pool_name: str) -> Tuple[str, str]:
         """حذف یک ZFS Pool موجود."""
-        if self.has_filesystems(pool_name):
+        if self.has_filesystems(pool_name, contain_poolname=False):
             raise CLICommandError(command=["zpool", "destroy", pool_name],
                                   returncode=1,
                                   stderr=f"Pool '{pool_name}' دارای فایل‌سیستم فعال است و قابل حذف نیست.",
-                                  stdout="",
-                                  )
+                                  stdout="")
         cmd = ["/usr/bin/zpool", "destroy", "-f", pool_name]
         std_out, std_error = run_cli_command(cmd, use_sudo=True)
         return std_out, std_error
-
 
     def replace_device(self, pool_name: str, old_device: str, new_device: str) -> Tuple[str, str]:
         """
@@ -240,9 +238,9 @@ class ZpoolManager:
         std_out, std_error = run_cli_command(cmd, use_sudo=True)
         return std_out, std_error
 
-    def has_filesystems(self, pool_name: str) -> bool:
+    def has_filesystems(self, pool_name: str, contain_poolname: bool = False) -> bool:
         """بررسی اینکه آیا pool دارای فایل‌سیستم فعال است یا خیر."""
 
         fs_manager = FilesystemManager()
-        all_names = fs_manager.list_filesystems_names()
+        all_names = fs_manager.list_filesystems_names(contain_poolname)
         return any(name.startswith(f"{pool_name}/") for name in all_names)
