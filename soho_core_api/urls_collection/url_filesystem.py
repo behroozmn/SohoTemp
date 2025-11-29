@@ -1,12 +1,7 @@
-# url_pool.py
-
 from django.urls import path
-from soho_core_api.views_collection import view_filesystem
+from soho_core_api.views_collection.view_filesystem import FilesystemListView, FilesystemDetailView
 
 urlpatterns = [
-    path("", view_filesystem.FilesystemDetailView.as_view(), name="filesystem-detail"),
-
-    path("create/", view_filesystem.FilesystemCreateView.as_view(), name="filesystem-create"),
-
-    path("delete/", view_filesystem.FilesystemDeleteView.as_view(), name="filesystem-delete")
-    ]
+    path("filesystems/", FilesystemListView.as_view(), name="filesystem-list"),
+    path("filesystems/<str:pool_name>/<str:fs_name>/", FilesystemDetailView.as_view(), name="filesystem-detail"),
+]
