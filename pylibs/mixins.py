@@ -374,7 +374,7 @@ class FilesystemValidationMixin:
                     error_code="pool_not_found",
                     error_message=f"Pool '{pool_name}' یافت نشد."
                 )
-            available_str = pool_detail.get("free", "0") # //TODO: یک مشخصه نیزا است تا بر اساس آن کووتا قرار دهیم مشخصه فری با کوتا
+            available_str = pool_detail.get("free", "0") # //TODO: در حال حاضصر از مشخصه free استفلاده میکند ولی این مشخصه کامل نیست و باید یک مشخصه جایگزین پیدا شود
             available_bytes = self._parse_size_to_bytes(available_str)
             print(f"quota_bytes:{quota_bytes}")
             print(f"available_bytes:{available_bytes}-----available_str:{available_str}")
