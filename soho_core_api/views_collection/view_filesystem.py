@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, List, Union
 from rest_framework.views import APIView
-from rest_framework.request import Request
-from rest_framework.response import Response
 
-from pylibs import get_request_param, build_standard_error_response, logger
+
+from pylibs import get_request_param, build_standard_error_response
 from pylibs.fileSystem import FilesystemManager
-from pylibs.zpool import ZpoolManager
 from pylibs.mixins import ZpoolValidationMixin, FilesystemValidationMixin
 from pylibs import StandardResponse, StandardErrorResponse
 from soho_core_api.models import Filesystems
+
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework.request import Request
+from rest_framework.response import Response
 
 
 def db_update_filesystem_single(fs_data: Dict[str, Any]) -> None:
@@ -131,18 +133,12 @@ def db_sync_filesystems(filesystems_list: List[Dict[str, Any]]) -> None:
 class FilesystemListView(APIView, ZpoolValidationMixin, FilesystemValidationMixin):
     """View برای عملیات دسته‌جمعی روی فایل‌سیستم‌ها."""
 
+    @extend_schema(parameters=[OpenApiParameter(name="detail", type=bool, required=False, description="دریافت جزئیات کامل فایل‌سیستم‌ها در صورت True", ),
+                               OpenApiParameter(name="contain_poolname", type=bool, required=False, description="در صورت True، نام پول مربوطه در خروجی گنجانده می‌شود"),
+                               OpenApiParameter(name="save_to_db", type=bool, required=False, description="در صورت True، داده‌ها در دیتابیس ذخیره می‌شوند")])
     def get(self, request: Request) -> Response:
-        """
-            QueryParameter:
+        """دریافت لیست نام تمام فایل‌سیستم‌ها یا جزئیات کامل آن‌ها."""
 
-                ---> detail=True|False
-
-                ---> contain_poolname=True|False
-
-                ---> save_to_db=True|False
-
-             دریافت لیست نام تمام فایل‌سیستم‌ها یا جزئیات کامل آن‌ها.
-        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         detail = get_request_param(request, "detail", bool, False)
         contain_poolname = get_request_param(request, "contain_poolname", bool, False)
@@ -167,6 +163,8 @@ class FilesystemListView(APIView, ZpoolValidationMixin, FilesystemValidationMixi
 class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMixin):
     """View برای عملیات روی یک فایل‌سیستم خاص."""
 
+    @extend_schema(parameters=[OpenApiParameter(name="property", type=str, required=False, description="نام پراپرتی برای بازیابی (مثلاً mountpoint). اگر all یا خالی باشد، تمام جزئیات برگردانده می‌شود."),
+                               OpenApiParameter(name="save_to_db", type=bool, required=False, description="در صورت True، داده‌ها در دیتابیس ذخیره می‌شوند")])
     def get(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """
             دریافت جزئیات یک فایل‌سیستم
@@ -214,6 +212,10 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                                  error_code="filesystem_detail_failed",
                                                  error_message="خطا در دریافت جزئیات فایل‌سیستم.")
 
+    @extend_schema(parameters=[OpenApiParameter(name="save_to_db", type=bool, required=False, description="ذخیره در دیتابیس"),
+                               OpenApiParameter(name="quota", type=str, required=False, description="سهمیه فایل‌سیستم (مثلاً 10G)"),
+                               OpenApiParameter(name="reservation", type=str, required=False, description="رزرو فضای فایل‌سیستم"),
+                               OpenApiParameter(name="mountpoint", type=str, required=False, description="نقطه اتصال فایل‌سیستم که میتواند خالی باشد")])
     def post(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """ساخت فایل‌سیستم جدید."""
         save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
@@ -249,6 +251,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                                  error_code="filesystem_creation_failed",
                                                  error_message="خطا در ساخت فایل‌سیستم.")
 
+    @extend_schema(parameters=[OpenApiParameter(name="save_to_db", type=bool, required=False, description="ذخیره در دیتابیس")])
     def delete(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """حذف فایل‌سیستم."""
         save_to_db = get_request_param(request, "save_to_db", bool, False)
@@ -260,9 +263,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
 
         full_name = f"{pool_name}/{fs_name}"
 
-        name_check = self._validate_filesystem_name_availability(
-            pool_name, fs_name, save_to_db, request_data, must_not_exist=False
-        )
+        name_check = self._validate_filesystem_name_availability(pool_name, fs_name, save_to_db, request_data, must_not_exist=False)
         if name_check:
             return name_check
 
@@ -278,8 +279,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
         try:
             fs_manager.destroy_filesystem(full_name)
             return StandardResponse(request_data=request_data, save_to_db=save_to_db,
-                                    message=f"فایل‌سیستم '{full_name}' با موفقیت حذف شد."
-                                    )
+                                    message=f"فایل‌سیستم '{full_name}' با موفقیت حذف شد.")
         except Exception as exc:
             return build_standard_error_response(exc=exc, request_data=request_data, save_to_db=save_to_db,
                                                  error_code="filesystem_deletion_failed",

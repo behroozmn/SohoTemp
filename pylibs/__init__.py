@@ -12,6 +12,8 @@ from rest_framework.request import Request
 import subprocess
 import logging
 import json
+from rest_framework import serializers
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,15 @@ class CLICommandError(Exception):
 
         super().__init__(message)
 
+class StandardResponseSchema(serializers.Serializer):
+    """تعریف Serializerهای سندسازی (فقط برای Swagger)"""
+    ok = serializers.BooleanField(help_text="آیا درخواست موفق بود؟ (همیشه True در این پاسخ)")
+    error = serializers.ReadOnlyField(default=None, help_text="در پاسخ موفق همیشه null است")
+    message = serializers.CharField(help_text="پیام موفقیت‌آمیز")
+    data = serializers.JSONField(help_text="داده اصلی پاسخ")
+    details = serializers.DictField(help_text="جزئیات اضافی", required=False)
+    meta = serializers.DictField(help_text="متادیتای پاسخ (زمان، کد وضعیت و ...)")
+    request_data = serializers.DictField(help_text="داده‌های دریافتی از کاربر")
 
 class StandardResponse(Response):
     """Standard success response with consistent envelope structure."""
@@ -77,6 +88,14 @@ class StandardResponse(Response):
                 request_data=sanitized_request_data,
             )
 
+class StandardErrorResponseSchema(serializers.Serializer):
+    """تعریف Serializerهای سندسازی (فقط برای Swagger)"""
+    ok = serializers.BooleanField(help_text="آیا درخواست موفق بود؟ (همیشه False در این پاسخ)")
+    error = serializers.DictField(help_text="اطلاعات خطا شامل code, message و extra")
+    data = serializers.JSONField(allow_null=True, help_text="در پاسخ خطا همیشه null است")
+    details = serializers.DictField(help_text="جزئیات اضافی (معمولاً خالی)", required=False)
+    meta = serializers.DictField(help_text="متادیتای پاسخ (زمان، کد وضعیت و ...)")
+    request_data = serializers.DictField(help_text="داده‌های دریافتی از کاربر")
 
 class StandardErrorResponse(Response):
 
