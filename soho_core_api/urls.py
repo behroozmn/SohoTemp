@@ -31,7 +31,7 @@ urlpatterns = [
     path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
     path("api/net/", include("soho_core_api.urls_collection.url_network")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
-    path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
+    # path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
     path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
     path("api/service/", include("soho_core_api.urls_collection.url_service")),

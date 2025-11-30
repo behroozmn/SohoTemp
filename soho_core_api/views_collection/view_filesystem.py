@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, List, Union
 from rest_framework.views import APIView
 
-
-from pylibs import get_request_param, build_standard_error_response
+from pylibs import get_request_param, build_standard_error_response, QuerySaveToDB, BodyParameterSaveToDB
 from pylibs.fileSystem import FilesystemManager
 from pylibs.mixins import ZpoolValidationMixin, FilesystemValidationMixin
 from pylibs import StandardResponse, StandardErrorResponse
@@ -15,6 +14,7 @@ from soho_core_api.models import Filesystems
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.request import Request
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 
 def db_update_filesystem_single(fs_data: Dict[str, Any]) -> None:
@@ -133,9 +133,9 @@ def db_sync_filesystems(filesystems_list: List[Dict[str, Any]]) -> None:
 class FilesystemListView(APIView, ZpoolValidationMixin, FilesystemValidationMixin):
     """View برای عملیات دسته‌جمعی روی فایل‌سیستم‌ها."""
 
-    @extend_schema(parameters=[OpenApiParameter(name="detail", type=bool, required=False, description="دریافت جزئیات کامل فایل‌سیستم‌ها در صورت True", ),
-                               OpenApiParameter(name="contain_poolname", type=bool, required=False, description="در صورت True، نام پول مربوطه در خروجی گنجانده می‌شود"),
-                               OpenApiParameter(name="save_to_db", type=bool, required=False, description="در صورت True، داده‌ها در دیتابیس ذخیره می‌شوند")])
+    @extend_schema(parameters=[OpenApiParameter(name="detail", type=bool, required=False, enum=["true", "false"], default="false", description="دریافت جزئیات کامل فایل‌سیستم‌ها در صورت True", ),
+                               OpenApiParameter(name="contain_poolname", type=bool, required=False, enum=["true", "false"], default="false", description="در صورت True، نام پول مربوطه در خروجی گنجانده می‌شود")] +
+                              QuerySaveToDB)
     def get(self, request: Request) -> Response:
         """دریافت لیست نام تمام فایل‌سیستم‌ها یا جزئیات کامل آن‌ها."""
 
@@ -163,8 +163,10 @@ class FilesystemListView(APIView, ZpoolValidationMixin, FilesystemValidationMixi
 class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMixin):
     """View برای عملیات روی یک فایل‌سیستم خاص."""
 
-    @extend_schema(parameters=[OpenApiParameter(name="property", type=str, required=False, description="نام پراپرتی برای بازیابی (مثلاً mountpoint). اگر all یا خالی باشد، تمام جزئیات برگردانده می‌شود."),
-                               OpenApiParameter(name="save_to_db", type=bool, required=False, description="در صورت True، داده‌ها در دیتابیس ذخیره می‌شوند")])
+    @extend_schema(parameters=[OpenApiParameter(name="pool_name", type=str, location="path", required=True, description="نام pool مربوطه"),
+                               OpenApiParameter(name="fs_name", type=str, location="path", required=True, description="نام فایل‌سیستم"),
+                               OpenApiParameter(name="property", type=str, required=False, description="نام پراپرتی برای بازیابی (مثلاً mountpoint). اگر all یا خالی باشد، تمام جزئیات برگردانده می‌شود.")] +
+                              QuerySaveToDB)
     def get(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """
             دریافت جزئیات یک فایل‌سیستم
@@ -212,10 +214,14 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                                  error_code="filesystem_detail_failed",
                                                  error_message="خطا در دریافت جزئیات فایل‌سیستم.")
 
-    @extend_schema(parameters=[OpenApiParameter(name="save_to_db", type=bool, required=False, description="ذخیره در دیتابیس"),
-                               OpenApiParameter(name="quota", type=str, required=False, description="سهمیه فایل‌سیستم (مثلاً 10G)"),
-                               OpenApiParameter(name="reservation", type=str, required=False, description="رزرو فضای فایل‌سیستم"),
-                               OpenApiParameter(name="mountpoint", type=str, required=False, description="نقطه اتصال فایل‌سیستم که میتواند خالی باشد")])
+    @extend_schema(parameters=[OpenApiParameter(name="pool_name", type=str, location="path", required=True, description="نام pool مربوطه"),
+                               OpenApiParameter(name="fs_name", type=str, location="path", required=True, description="نام فایل‌سیستم"), ],
+                   request={"application/json": {"type": "object",
+                                                 "properties": {
+                                                     "quota": {"type": "string", "default": "50G", "description": "سهمیه فایل‌سیستم (مثلاً '50T')"},
+                                                     "reservation": {"type": "string", "default": "50G", "description": "رزرو فضای فایل‌سیستم (مثلاً '50T')"},
+                                                     **BodyParameterSaveToDB["properties"]}}},
+                   description="حذف فایل‌سیستم مشخص‌شده.")
     def post(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """ساخت فایل‌سیستم جدید."""
         save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
@@ -251,7 +257,12 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                                  error_code="filesystem_creation_failed",
                                                  error_message="خطا در ساخت فایل‌سیستم.")
 
-    @extend_schema(parameters=[OpenApiParameter(name="save_to_db", type=bool, required=False, description="ذخیره در دیتابیس")])
+    @extend_schema(
+        parameters=[OpenApiParameter(name="pool_name", type=str, location="path", required=True, description="نام pool مربوطه"),
+                    OpenApiParameter(name="fs_name", type=str, location="path", required=True, description="نام فایل‌سیستم"), ] +
+                   QuerySaveToDB,
+        description="حذف فایل‌سیستم مشخص‌شده."
+    )
     def delete(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """حذف فایل‌سیستم."""
         save_to_db = get_request_param(request, "save_to_db", bool, False)
