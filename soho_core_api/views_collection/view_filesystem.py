@@ -171,7 +171,11 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
         """
             دریافت جزئیات یک فایل‌سیستم
 
-            ---> property=value [all , mountpoint, name , ... ]
+            QueryParameter:
+
+                ---> property=value [all , mountpoint, name , ... ]
+
+                ---> save_to_db=True|False
         """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
