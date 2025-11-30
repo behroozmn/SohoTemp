@@ -171,7 +171,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
         """
             دریافت جزئیات یک فایل‌سیستم
 
-            ---> property=value [mountpoint, name , ]
+            ---> property=value [all , mountpoint, name , ... ]
         """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
@@ -185,7 +185,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
             full_name = f"{pool_name}/{fs_name}"
             fs_manager = FilesystemManager()
 
-            if prop_key and prop_key != "all":
+            if prop_key and prop_key.lower() != "all":
                 value = fs_manager.get_filesystem_property(full_name, prop_key)
                 if value is None:
                     return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=404,
