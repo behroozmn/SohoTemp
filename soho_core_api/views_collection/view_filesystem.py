@@ -132,7 +132,17 @@ class FilesystemListView(APIView, ZpoolValidationMixin, FilesystemValidationMixi
     """View برای عملیات دسته‌جمعی روی فایل‌سیستم‌ها."""
 
     def get(self, request: Request) -> Response:
-        """دریافت لیست نام تمام فایل‌سیستم‌ها یا جزئیات کامل آن‌ها."""
+        """
+            QueryParameter:
+
+                ---> detail=True|False
+
+                ---> contain_poolname=True|False
+
+                ---> save_to_db=True|False
+
+             دریافت لیست نام تمام فایل‌سیستم‌ها یا جزئیات کامل آن‌ها.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         detail = get_request_param(request, "detail", bool, False)
         contain_poolname = get_request_param(request, "contain_poolname", bool, False)
@@ -158,7 +168,11 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
     """View برای عملیات روی یک فایل‌سیستم خاص."""
 
     def get(self, request: Request, pool_name: str, fs_name: str) -> Response:
-        """دریافت جزئیات یک فایل‌سیستم."""
+        """
+            دریافت جزئیات یک فایل‌سیستم
+
+            ---> property=value [mountpoint, name , ]
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         request_data = dict(request.query_params)
@@ -171,7 +185,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
             full_name = f"{pool_name}/{fs_name}"
             fs_manager = FilesystemManager()
 
-            if prop_key:
+            if prop_key and prop_key != "all":
                 value = fs_manager.get_filesystem_property(full_name, prop_key)
                 if value is None:
                     return StandardErrorResponse(request_data=request_data, save_to_db=save_to_db, status=404,
