@@ -168,15 +168,7 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                OpenApiParameter(name="property", type=str, required=False, description="نام پراپرتی برای بازیابی (مثلاً mountpoint). اگر all یا خالی باشد، تمام جزئیات برگردانده می‌شود.")] +
                               QuerySaveToDB)
     def get(self, request: Request, pool_name: str, fs_name: str) -> Response:
-        """
-            دریافت جزئیات یک فایل‌سیستم
-
-            QueryParameter:
-
-                ---> property=value [all , mountpoint, name , ... ]
-
-                ---> save_to_db=True|False
-        """
+        """دریافت جزئیات یک فایل‌سیستم"""
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         request_data = dict(request.query_params)
@@ -220,8 +212,9 @@ class FilesystemDetailView(APIView, ZpoolValidationMixin, FilesystemValidationMi
                                                  "properties": {
                                                      "quota": {"type": "string", "default": "50G", "description": "سهمیه فایل‌سیستم (مثلاً '50T')"},
                                                      "reservation": {"type": "string", "default": "50G", "description": "رزرو فضای فایل‌سیستم (مثلاً '50T')"},
-                                                     **BodyParameterSaveToDB["properties"]}}},
-                   description="حذف فایل‌سیستم مشخص‌شده.")
+                                                     **BodyParameterSaveToDB["properties"]},
+                                                 "required": ["quota", "reservation"]}},
+                   description="ساخت فایل‌سیستم با quota و reservation اجباری.")
     def post(self, request: Request, pool_name: str, fs_name: str) -> Response:
         """ساخت فایل‌سیستم جدید."""
         save_to_db: bool = get_request_param(request, "save_to_db", bool, False)
