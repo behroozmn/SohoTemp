@@ -315,9 +315,7 @@ class FilesystemValidationMixin:
 
     SMB_CONF_PATH = "/etc/samba/smb.conf"
 
-    def _validate_filesystem_name_availability(
-        self, pool_name: str, fs_name: str, save_to_db: bool, request_data: Dict[str, Any], must_not_exist: bool = True
-    ) -> Optional[StandardErrorResponse]:
+    def _validate_filesystem_name_availability(self, pool_name: str, fs_name: str, save_to_db: bool, request_data: Dict[str, Any], must_not_exist: bool = True) -> Optional[StandardErrorResponse]:
         """اعتبارسنجی اینکه فایل‌سیستم وجود نداشته باشد (در هنگام ساخت) یا وجود داشته باشد (در هنگام حذف)."""
         try:
             fs_manager = FilesystemManager()
@@ -352,14 +350,7 @@ class FilesystemValidationMixin:
             )
         return None
 
-    def _validate_quota_against_pool_capacity(
-        self,
-        pool_manager: "ZpoolManager",
-        pool_name: str,
-        quota: Optional[str],
-        save_to_db: bool,
-        request_data: Dict[str, Any],
-    ) -> Optional[StandardErrorResponse]:
+    def _validate_quota_against_pool_capacity(self, pool_manager: "ZpoolManager", pool_name: str, quota: Optional[str], save_to_db: bool, request_data: Dict[str, Any], ) -> Optional[StandardErrorResponse]:
         """اعتبارسنجی اینکه quota درخواستی بیشتر از فضای آزاد pool نباشد."""
         if not quota:
             return None
@@ -374,7 +365,7 @@ class FilesystemValidationMixin:
                     error_code="pool_not_found",
                     error_message=f"Pool '{pool_name}' یافت نشد."
                 )
-            available_str = pool_detail.get("free", "0") # //TODO: در حال حاضصر از مشخصه free استفلاده میکند ولی این مشخصه کامل نیست و باید یک مشخصه جایگزین پیدا شود
+            available_str = pool_detail.get("free", "0")  # //TODO: در حال حاضصر از مشخصه free استفلاده میکند ولی این مشخصه کامل نیست و باید یک مشخصه جایگزین پیدا شود
             available_bytes = self._parse_size_to_bytes(available_str)
             print(f"quota_bytes:{quota_bytes}")
             print(f"available_bytes:{available_bytes}-----available_str:{available_str}")
@@ -410,9 +401,7 @@ class FilesystemValidationMixin:
         else:
             return int(size_str)
 
-    def _is_filesystem_used_in_samba(
-        self, mountpoint: str, save_to_db: bool, request_data: Dict[str, Any]
-    ) -> Optional[StandardErrorResponse]:
+    def _is_filesystem_used_in_samba(self, mountpoint: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
         """بررسی اینکه آیا مسیر مونت‌شده فایل‌سیستم در smb.conf وجود دارد."""
         if not os.path.exists(self.SMB_CONF_PATH):
             return None
