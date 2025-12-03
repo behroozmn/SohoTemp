@@ -265,7 +265,7 @@ def get_request_param(request: Union[Request, dict], param_name: str, return_typ
         return default
 
 
-def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True, capture_output: bool = True, use_sudo: bool = False, log_on_error: bool = True, log_on_success: bool = False) -> Tuple[str, str]:
+def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True, capture_output: bool = True, use_sudo: bool = False, log_on_error: bool = True, log_on_success: bool = False, input: Optional[str] = None) -> Tuple[str, str]:
     """اجرای یک دستور خط فرمان (CLI) با مدیریت جامع خطا.
 
     Args:
@@ -276,6 +276,7 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
         use_sudo (bool): آیا دستور با sudo اجرا شود؟ (پیش‌فرض: False)
         log_on_error (bool): آیا خطا لاگ شود؟ (پیش‌فرض: True)
         log_on_success (bool): آیا موفقیت لاگ شود؟ (پیش‌فرض: False)
+        input (Optional[str]): رشته ورودی که به stdin دستور فرستاده می‌شود (مثلاً برای رمز عبور)
 
     Returns:
         Tuple[str, str]: (stdout, stderr)
@@ -293,7 +294,10 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
         logger.debug(f"اجرای دستور: {cmd_str}")
     print(full_cmd)
     try:
-        result = subprocess.run(full_cmd, capture_output=capture_output, text=True, timeout=timeout, check=check)
+        # اگر input داده شده باشد، stdin باید باز باشد
+        stdin = subprocess.PIPE if input is not None else None
+
+        result = subprocess.run(full_cmd, input=input, stdin=stdin, capture_output=capture_output, text=True, timeout=timeout, check=check, )
         stdout = result.stdout.strip() if result.stdout else ""
         stderr = result.stderr.strip() if result.stderr else ""
 

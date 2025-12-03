@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 from pylibs import logger, CLICommandError, run_cli_command
 
+
 class SambaManager:
     """
     مدیریت کامل کاربران، گروه‌ها و مسیرهای اشتراکی سرویس Samba.
@@ -149,11 +150,7 @@ class SambaManager:
             run_cli_command(cmd, use_sudo=True)
 
         # تنظیم پسورد سامبا
-        run_cli_command(
-            ["/usr/bin/smbpasswd", "-a", "-s", username],
-            input=f"{password}\n{password}\n",
-            use_sudo=True
-        )
+        run_cli_command(["/usr/bin/smbpasswd", "-a", "-s", username], input=f"{password}\n{password}\n", use_sudo=True)
 
         # تنظیم تاریخ انقضا
         if expiration_date:
