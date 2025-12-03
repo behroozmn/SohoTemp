@@ -5,12 +5,13 @@ import re
 import os
 from typing import Tuple, Optional, Union, Dict, Any, List
 
-from pylibs import StandardErrorResponse, logger
 from pylibs.disk import DiskManager
 from pylibs.zpool import ZpoolManager
 from pylibs.fileSystem import FilesystemManager
 from typing import Union, Optional, Dict, Any, List
 from pylibs import StandardErrorResponse, logger, CLICommandError
+from typing import Optional, Dict, Any
+from pylibs.samba import SambaManager
 
 
 class DiskValidationMixin:
@@ -424,5 +425,195 @@ class FilesystemValidationMixin:
                 status=500,
                 error_code="samba_check_failed",
                 error_message="خطا در بررسی وضعیت Samba. امکان حذف فایل‌سیستم وجود ندارد."
+            )
+        return None
+
+
+# ---------- Samba User Validation Mixin ----------
+class SambaUserValidationMixin:
+    def _validate_samba_user_exists(self, username: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
+        if must_exist:
+            manager = SambaManager()
+            user = manager.get_samba_users(username=username)
+            if user is None:
+                return StandardErrorResponse(
+                    error_code="samba_user_not_found",
+                    error_message=f"کاربر سامبا '{username}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        else:
+            manager = SambaManager()
+            user = manager.get_samba_users(username=username)
+            if user is not None:
+                return StandardErrorResponse(
+                    error_code="samba_user_already_exists",
+                    error_message=f"کاربر سامبا '{username}' از قبل وجود دارد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        return None
+
+    def _validate_samba_username_format(self, username: str, save_to_db: bool, request_data: dict) -> Optional[StandardErrorResponse]:
+        if not isinstance(username, str) or not username.strip():
+            return StandardErrorResponse(
+                error_code="invalid_username",
+                error_message="نام کاربری نمی‌تواند خالی یا غیررشته‌ای باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        username = username.strip()
+        if len(username) > 32:
+            return StandardErrorResponse(
+                error_code="username_too_long",
+                error_message="نام کاربری سامبا نباید بیشتر از 32 کاراکتر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if not re.match(r"^[a-z][a-z0-9_-]*$", username):
+            return StandardErrorResponse(
+                error_code="invalid_username_format",
+                error_message="نام کاربری سامبا باید با حرف کوچک انگلیسی شروع شود و فقط شامل حروف کوچک، اعداد، '-' یا '_' باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+    def _validate_samba_password_provided(self, password: Optional[str], save_to_db: bool, request_data: dict, field_name: str = "password") -> Optional[StandardErrorResponse]:
+        if not password or not password.strip():
+            return StandardErrorResponse(
+                error_code=f"missing_{field_name}",
+                error_message=f"{'رمز عبور' if field_name == 'password' else 'رمز جدید'} اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+
+# ---------- Samba Group Validation Mixin ----------
+class SambaGroupValidationMixin:
+    def _validate_samba_group_exists(self, groupname: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
+        if must_exist:
+            manager = SambaManager()
+            group = manager.get_samba_groups(groupname=groupname)
+            if group is None:
+                return StandardErrorResponse(
+                    error_code="samba_group_not_found",
+                    error_message=f"گروه سامبا '{groupname}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        else:
+            manager = SambaManager()
+            group = manager.get_samba_groups(groupname=groupname)
+            if group is not None:
+                return StandardErrorResponse(
+                    error_code="samba_group_already_exists",
+                    error_message=f"گروه سامبا '{groupname}' از قبل وجود دارد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        return None
+
+    def _validate_samba_groupname_format(self, groupname: str, save_to_db: bool, request_data: dict) -> Optional[StandardErrorResponse]:
+        if not isinstance(groupname, str) or not groupname.strip():
+            return StandardErrorResponse(
+                error_code="invalid_groupname",
+                error_message="نام گروه نمی‌تواند خالی یا غیررشته‌ای باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        groupname = groupname.strip()
+        if len(groupname) > 32:
+            return StandardErrorResponse(
+                error_code="groupname_too_long",
+                error_message="نام گروه سامبا نباید بیشتر از 32 کاراکتر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if not re.match(r"^[a-z][a-z0-9_-]*$", groupname):
+            return StandardErrorResponse(
+                error_code="invalid_groupname_format",
+                error_message="نام گروه سامبا باید با حرف کوچک انگلیسی شروع شود و فقط شامل حروف کوچک، اعداد، '-' یا '_' باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+
+# ---------- Samba Sharepoint Validation Mixin ----------
+class SambaSharepointValidationMixin:
+    def _validate_samba_sharepoint_exists(self, share_name: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
+        if must_exist:
+            manager = SambaManager()
+            share = manager.get_samba_sharepoints(sharepoint_name=share_name)
+            if share is None:
+                return StandardErrorResponse(
+                    error_code="samba_share_not_found",
+                    error_message=f"مسیر اشتراکی '{share_name}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        else:
+            manager = SambaManager()
+            share = manager.get_samba_sharepoints(sharepoint_name=share_name)
+            if share is not None:
+                return StandardErrorResponse(
+                    error_code="samba_share_already_exists",
+                    error_message=f"مسیر اشتراکی '{share_name}' از قبل وجود دارد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        return None
+
+    def _validate_samba_sharepoint_name_format(self, share_name: str, save_to_db: bool, request_data: dict) -> Optional[StandardErrorResponse]:
+        if not isinstance(share_name, str) or not share_name.strip():
+            return StandardErrorResponse(
+                error_code="invalid_share_name",
+                error_message="نام مسیر اشتراکی نمی‌تواند خالی یا غیررشته‌ای باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        share_name = share_name.strip()
+        if len(share_name) > 64:
+            return StandardErrorResponse(
+                error_code="share_name_too_long",
+                error_message="نام مسیر اشتراکی نباید بیشتر از 64 کاراکتر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if not re.match(r"^[a-zA-Z0-9._-]+$", share_name):
+            return StandardErrorResponse(
+                error_code="invalid_share_name_format",
+                error_message="نام مسیر اشتراکی فقط می‌تواند شامل حروف، اعداد، '.', '-', '_' باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+    def _validate_samba_path_provided(self, path: Optional[str], save_to_db: bool, request_data: dict) -> Optional[StandardErrorResponse]:
+        if not path or not path.strip():
+            return StandardErrorResponse(
+                error_code="missing_path",
+                error_message="مسیر فیزیکی (path) اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
             )
         return None
