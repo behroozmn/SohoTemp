@@ -18,15 +18,7 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(
-        self,
-        username: Optional[str] = None,
-        *,
-        all_props: bool = True,
-        property_name: Optional[str] = None,
-        only_custom_users: bool = False,
-        only_shared_users: bool = False,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_users(self, username: Optional[str] = None, *, all_props: bool = True, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات کاربران سامبا.
 
@@ -76,15 +68,7 @@ class SambaManager:
                     filtered_users.append(u)
             return filtered_users
 
-    def get_samba_groups(
-        self,
-        groupname: Optional[str] = None,
-        *,
-        all_props: bool = True,
-        property_name: Optional[str] = None,
-        only_custom_groups: bool = False,
-        only_shared_groups: bool = False,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_groups: bool = False, only_shared_groups: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات گروه‌های سامبا.
         ساختار مشابه get_samba_users ولی برای گروه‌ها.
@@ -121,15 +105,7 @@ class SambaManager:
                     filtered_groups.append(g)
             return filtered_groups
 
-    def get_samba_sharepoints(
-        self,
-        sharepoint_name: Optional[str] = None,
-        *,
-        all_props: bool = True,
-        property_name: Optional[str] = None,
-        only_custom_shares: bool = False,
-        only_active_shares: bool = False,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_sharepoints(self, sharepoint_name: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_shares: bool = False, only_active_shares: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات مسیرهای اشتراکی سامبا از smb.conf.
         """
@@ -157,13 +133,7 @@ class SambaManager:
                     filtered.append(s)
             return filtered
 
-    def create_samba_user(
-        self,
-        username: str,
-        password: str,
-        full_name: Optional[str] = None,
-        expiration_date: Optional[str] = None,
-    ) -> None:
+    def create_samba_user(self, username: str, password: str, full_name: Optional[str] = None, expiration_date: Optional[str] = None, ) -> None:
         """ایجاد کاربر جدید سامبا."""
         # ایجاد کاربر لینوکس اگر وجود ندارد
         try:
@@ -194,21 +164,7 @@ class SambaManager:
             if "already exists" not in str(e):
                 raise
 
-    def create_samba_sharepoint(
-        self,
-        name: str,
-        path: str,
-        valid_users: Optional[List[str]] = None,
-        valid_groups: Optional[List[str]] = None,
-        read_only: bool = False,
-        guest_ok: bool = False,
-        browseable: bool = True,
-        max_connections: Optional[int] = None,
-        create_mask: str = "0644",
-        directory_mask: str = "0755",
-        inherit_permissions: bool = False,
-        expiration_time: Optional[str] = None,
-    ) -> None:
+    def create_samba_sharepoint(self, name: str, path: str, valid_users: Optional[List[str]] = None, valid_groups: Optional[List[str]] = None, read_only: bool = False, guest_ok: bool = False, browseable: bool = True, max_connections: Optional[int] = None, create_mask: str = "0644", directory_mask: str = "0755", inherit_permissions: bool = False, expiration_time: Optional[str] = None, ) -> None:
         """ایجاد یک مسیر اشتراکی جدید در smb.conf."""
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
@@ -231,11 +187,7 @@ class SambaManager:
 
         self._append_share_to_conf(share_section)
 
-    def update_samba_sharepoint(
-        self,
-        name: str,
-        **kwargs: Any
-    ) -> None:
+    def update_samba_sharepoint(self, name: str, **kwargs: Any) -> None:
         """به‌روزرسانی تمام پراپرتی‌های یک مسیر اشتراکی موجود."""
         shares = self._parse_smb_conf()
         share = next((s for s in shares if s["name"] == name), None)
@@ -400,21 +352,7 @@ class SambaManager:
         except:
             return True
 
-    def _build_share_section(
-        self,
-        name: str,
-        path: str,
-        valid_users: Optional[List[str]],
-        valid_groups: Optional[List[str]],
-        read_only: bool,
-        guest_ok: bool,
-        browseable: bool,
-        max_connections: Optional[int],
-        create_mask: str,
-        directory_mask: str,
-        inherit_permissions: bool,
-        expiration_time: Optional[str],
-    ) -> str:
+    def _build_share_section(self, name: str, path: str, valid_users: Optional[List[str]], valid_groups: Optional[List[str]], read_only: bool, guest_ok: bool, browseable: bool, max_connections: Optional[int], create_mask: str, directory_mask: str, inherit_permissions: bool, expiration_time: Optional[str], ) -> str:
         section = f"#Begin: {name}\n[{name}]\n"
         section += f"path = {path}\n"
         section += f"create mask = {create_mask}\n"
