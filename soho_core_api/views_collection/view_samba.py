@@ -5,32 +5,63 @@ from rest_framework.views import APIView
 from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
-from pylibs import (get_request_param, build_standard_error_response, QuerySaveToDB, BodyParameterSaveToDB, StandardResponse, StandardErrorResponse, )
+from pylibs import (
+    get_request_param,
+    build_standard_error_response,
+    QuerySaveToDB,
+    BodyParameterSaveToDB,
+    StandardResponse,
+    StandardErrorResponse,
+)
 from pylibs.samba import SambaManager
-from pylibs.mixins import (SambaUserValidationMixin, SambaGroupValidationMixin, SambaSharepointValidationMixin, )
+from pylibs.mixins import (
+    SambaUserValidationMixin,
+    SambaGroupValidationMixin,
+    SambaSharepointValidationMixin,
+)
 from drf_spectacular.utils import inline_serializer
 from rest_framework import serializers
 
 # OpenAPI Parameters مشترک
-ParamProperty = OpenApiParameter(name="property", type=str, required=False,
-                                 description='نام یک پراپرتی خاص (مثل "Domain") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
-                                 examples=[OpenApiExample("مثال all", value="all"),
-                                           OpenApiExample("مثال پراپرتی خاص", value="Full Name"), ])
-ParamOnlyCustom = OpenApiParameter(name="only_custom", type=bool, required=False, default="false", description="فقط موارد ایجادشده توسط مدیر سیستم")
-ParamOnlyShared = OpenApiParameter(name="only_shared", type=bool, required=False, default="false", description="فقط مواردی که در smb.conf استفاده شده‌اند")
-ParamOnlyActive = OpenApiParameter(name="only_active", type=bool, required=False, default="false", description="فقط مسیرهای اشتراکی فعال (available=yes)")
-
+ParamProperty = OpenApiParameter(
+    name="property",
+    type=str,
+    required=False,
+    description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
+    examples=[
+        OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
+        OpenApiExample("دریافت یک پراپرتی خاص", value="Logoff time"),
+    ]
+)
+ParamOnlyCustom = OpenApiParameter(
+    name="only_custom", type=bool, required=False, default="false",
+    description="فقط موارد ایجادشده توسط مدیر سیستم"
+)
+ParamOnlyShared = OpenApiParameter(
+    name="only_shared", type=bool, required=False, default="false",
+    description="فقط مواردی که در smb.conf استفاده شده‌اند"
+)
+ParamOnlyActive = OpenApiParameter(
+    name="only_active", type=bool, required=False, default="false",
+    description="فقط مسیرهای اشتراکی فعال (available=yes)"
+)
 
 # ========== User View ==========
 class SambaUserView(APIView, SambaUserValidationMixin):
     @extend_schema(
-        parameters=[OpenApiParameter(name="username", type=str, location="path", required=False),
-                    ParamProperty, ParamOnlyCustom, ParamOnlyShared, ] + QuerySaveToDB,
+        parameters=[
+            OpenApiParameter(name="username", type=str, location="path", required=False),
+            ParamProperty,
+            ParamOnlyCustom,
+            ParamOnlyShared,
+        ] + QuerySaveToDB,
         responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})}
     )
     def get(self, request: Request, username: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop = get_request_param(request, "property", str, None)
+        if prop:
+            prop = prop.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
@@ -50,18 +81,37 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 if error_resp:
                     return error_resp
 
-            # اگر prop خاصی درخواست شده باشد و data dict باشد
-            if prop and prop.lower() != "all" and isinstance(data, dict):
-                value = data.get(prop)
-                if value is None:
-                    return StandardErrorResponse(
-                        error_code="property_not_found",
-                        error_message=f"پراپرتی '{prop}' برای کاربر '{username or 'all'}' یافت نشد.",
-                        status=404,
-                        request_data=request_data,
-                        save_to_db=save_to_db,
-                    )
-                data = {prop: value}
+                if prop and prop.lower() != "all":
+                    if isinstance(data, dict):
+                        value = data.get(prop)
+                        if value is None:
+                            return StandardErrorResponse(
+                                error_code="property_not_found",
+                                error_message=f"پراپرتی '{prop}' برای کاربر '{username}' یافت نشد.",
+                                status=404,
+                                request_data=request_data,
+                                save_to_db=save_to_db,
+                            )
+                        data = {prop: value}
+                    else:
+                        data = {prop: None}
+            else:
+                if prop and prop.lower() != "all":
+                    if isinstance(data, list):
+                        new_data = []
+                        for user_dict in data:
+                            if isinstance(user_dict, dict):
+                                uname = user_dict.get("Unix username")
+                                if uname is not None:
+                                    value = user_dict.get(prop)
+                                    new_data.append({"username": uname, prop: value})
+                                else:
+                                    new_data.append({"username": "unknown", prop: None})
+                            else:
+                                new_data.append({"username": "unknown", prop: None})
+                        data = new_data
+                    else:
+                        data = []
 
             return StandardResponse(
                 data=data,
@@ -124,20 +174,21 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 save_to_db=save_to_db,
             )
 
-
 # ========== Group View ==========
 class SambaGroupView(APIView, SambaGroupValidationMixin):
     @extend_schema(
         parameters=[
-                       OpenApiParameter(name="groupname", type=str, location="path", required=False),
-                       ParamProperty,
-                       ParamOnlyCustom,
-                       ParamOnlyShared,
-                   ] + QuerySaveToDB
+            OpenApiParameter(name="groupname", type=str, location="path", required=False),
+            ParamProperty,
+            ParamOnlyCustom,
+            ParamOnlyShared,
+        ] + QuerySaveToDB
     )
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop = get_request_param(request, "property", str, None)
+        if prop:
+            prop = prop.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
@@ -157,17 +208,37 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 if error_resp:
                     return error_resp
 
-            if prop and prop.lower() != "all" and isinstance(data, dict):
-                value = data.get(prop)
-                if value is None:
-                    return StandardErrorResponse(
-                        error_code="property_not_found",
-                        error_message=f"پراپرتی '{prop}' برای گروه '{groupname or 'all'}' یافت نشد.",
-                        status=404,
-                        request_data=request_data,
-                        save_to_db=save_to_db,
-                    )
-                data = {prop: value}
+                if prop and prop.lower() != "all":
+                    if isinstance(data, dict):
+                        value = data.get(prop)
+                        if value is None:
+                            return StandardErrorResponse(
+                                error_code="property_not_found",
+                                error_message=f"پراپرتی '{prop}' برای گروه '{groupname}' یافت نشد.",
+                                status=404,
+                                request_data=request_data,
+                                save_to_db=save_to_db,
+                            )
+                        data = {prop: value}
+                    else:
+                        data = {prop: None}
+            else:
+                if prop and prop.lower() != "all":
+                    if isinstance(data, list):
+                        new_data = []
+                        for group_dict in data:
+                            if isinstance(group_dict, dict):
+                                gname = group_dict.get("name")
+                                if gname is not None:
+                                    value = group_dict.get(prop)
+                                    new_data.append({"groupname": gname, prop: value})
+                                else:
+                                    new_data.append({"groupname": "unknown", prop: None})
+                            else:
+                                new_data.append({"groupname": "unknown", prop: None})
+                        data = new_data
+                    else:
+                        data = []
 
             return StandardResponse(
                 data=data,
@@ -217,20 +288,21 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 save_to_db=save_to_db,
             )
 
-
 # ========== Sharepoint View ==========
 class SambaSharepointView(APIView, SambaSharepointValidationMixin):
     @extend_schema(
         parameters=[
-                       OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
-                       ParamProperty,
-                       ParamOnlyCustom,
-                       ParamOnlyActive,
-                   ] + QuerySaveToDB
+            OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
+            ParamProperty,
+            ParamOnlyCustom,
+            ParamOnlyActive,
+        ] + QuerySaveToDB
     )
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop = get_request_param(request, "property", str, None)
+        if prop:
+            prop = prop.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_active = get_request_param(request, "only_active", bool, False)
         request_data = dict(request.query_params)
@@ -250,17 +322,37 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                 if error_resp:
                     return error_resp
 
-            if prop and prop.lower() != "all" and isinstance(data, dict):
-                value = data.get(prop)
-                if value is None:
-                    return StandardErrorResponse(
-                        error_code="property_not_found",
-                        error_message=f"پراپرتی '{prop}' برای مسیر اشتراکی '{sharepoint_name or 'all'}' یافت نشد.",
-                        status=404,
-                        request_data=request_data,
-                        save_to_db=save_to_db,
-                    )
-                data = {prop: value}
+                if prop and prop.lower() != "all":
+                    if isinstance(data, dict):
+                        value = data.get(prop)
+                        if value is None:
+                            return StandardErrorResponse(
+                                error_code="property_not_found",
+                                error_message=f"پراپرتی '{prop}' برای مسیر اشتراکی '{sharepoint_name}' یافت نشد.",
+                                status=404,
+                                request_data=request_data,
+                                save_to_db=save_to_db,
+                            )
+                        data = {prop: value}
+                    else:
+                        data = {prop: None}
+            else:
+                if prop and prop.lower() != "all":
+                    if isinstance(data, list):
+                        new_data = []
+                        for share_dict in data:
+                            if isinstance(share_dict, dict):
+                                sname = share_dict.get("name")
+                                if sname is not None:
+                                    value = share_dict.get(prop)
+                                    new_data.append({"sharepoint_name": sname, prop: value})
+                                else:
+                                    new_data.append({"sharepoint_name": "unknown", prop: None})
+                            else:
+                                new_data.append({"sharepoint_name": "unknown", prop: None})
+                        data = new_data
+                    else:
+                        data = []
 
             return StandardResponse(
                 data=data,
