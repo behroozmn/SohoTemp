@@ -59,73 +59,95 @@ class SambaUserView(APIView, SambaUserValidationMixin):
     )
     def get(self, request: Request, username: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop = get_request_param(request, "property", str, None)
-        if prop:
-            prop = prop.strip()
+        prop_key = get_request_param(request, "property", str, None)
+        if prop_key:
+            prop_key = prop_key.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
 
         try:
             manager = SambaManager()
-            data = manager.get_samba_users(
-                username=username,
-                all_props=(not prop or prop.lower() == "all"),
-                property_name=prop if prop and prop.lower() != "all" else None,
-                only_custom_users=only_custom,
-                only_shared_users=only_shared,
-            )
 
             if username:
+                # --- اعتبارسنجی وجود کاربر ---
                 error_resp = self._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
                 if error_resp:
                     return error_resp
 
-                if prop and prop.lower() != "all":
-                    if isinstance(data, dict):
-                        value = data.get(prop)
-                        if value is None:
-                            return StandardErrorResponse(
-                                error_code="property_not_found",
-                                error_message=f"پراپرتی '{prop}' برای کاربر '{username}' یافت نشد.",
-                                status=404,
-                                request_data=request_data,
-                                save_to_db=save_to_db,
-                            )
-                        data = {prop: value}
-                    else:
-                        data = {prop: None}
+                # --- دریافت پراپرتی خاص ---
+                if prop_key and prop_key.lower() != "all":
+                    value = manager.get_samba_user_property(username, prop_key)
+                    if value is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="property_not_found",
+                            error_message=f"پراپرتی '{prop_key}' در کاربر '{username}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data={prop_key: value},
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد."
+                    )
+                else:
+                    # --- دریافت تمام اطلاعات کاربر ---
+                    data = manager.get_samba_users(
+                        username=username,
+                        only_custom_users=only_custom,
+                        only_shared_users=only_shared,
+                    )
+                    if data is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="user_not_found",
+                            error_message=f"کاربر '{username}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data=data,
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message="جزئیات کاربر سامبا با موفقیت بازیابی شد."
+                    )
             else:
-                if prop and prop.lower() != "all":
-                    if isinstance(data, list):
-                        new_data = []
-                        for user_dict in data:
-                            if isinstance(user_dict, dict):
-                                uname = user_dict.get("Unix username")
-                                if uname is not None:
-                                    value = user_dict.get(prop)
-                                    new_data.append({"username": uname, prop: value})
-                                else:
-                                    new_data.append({"username": "unknown", prop: None})
+                # --- لیست کاربران ---
+                data = manager.get_samba_users(
+                    only_custom_users=only_custom,
+                    only_shared_users=only_shared,
+                )
+                if prop_key and prop_key.lower() != "all":
+                    # فیلتر لیست بر اساس پراپرتی
+                    filtered = []
+                    for user_dict in data:
+                        if isinstance(user_dict, dict):
+                            uname = user_dict.get("Unix username")
+                            if uname is not None:
+                                value = user_dict.get(prop_key)
+                                filtered.append({"username": uname, prop_key: value})
                             else:
-                                new_data.append({"username": "unknown", prop: None})
-                        data = new_data
-                    else:
-                        data = []
+                                filtered.append({"username": "unknown", prop_key: None})
+                        else:
+                            filtered.append({"username": "unknown", prop_key: None})
+                    data = filtered
 
-            return StandardResponse(
-                data=data,
-                message="اطلاعات کاربر(ها) سامبا با موفقیت بازیابی شد.",
-                request_data=request_data,
-                save_to_db=save_to_db,
-            )
+                return StandardResponse(
+                    data=data,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                    message="لیست کاربران سامبا با موفقیت بازیابی شد."
+                )
+
         except Exception as exc:
             return build_standard_error_response(
                 exc=exc,
-                error_code="samba_user_fetch_failed",
-                error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا.",
                 request_data=request_data,
                 save_to_db=save_to_db,
+                error_code="samba_user_fetch_failed",
+                error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا."
             )
 
     @extend_schema(
@@ -186,73 +208,90 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
     )
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop = get_request_param(request, "property", str, None)
-        if prop:
-            prop = prop.strip()
+        prop_key = get_request_param(request, "property", str, None)
+        if prop_key:
+            prop_key = prop_key.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
 
         try:
             manager = SambaManager()
-            data = manager.get_samba_groups(
-                groupname=groupname,
-                all_props=(not prop or prop.lower() == "all"),
-                property_name=prop if prop and prop.lower() != "all" else None,
-                only_custom_groups=only_custom,
-                only_shared_groups=only_shared,
-            )
 
             if groupname:
                 error_resp = self._validate_samba_group_exists(groupname, save_to_db, request_data, must_exist=True)
                 if error_resp:
                     return error_resp
 
-                if prop and prop.lower() != "all":
-                    if isinstance(data, dict):
-                        value = data.get(prop)
-                        if value is None:
-                            return StandardErrorResponse(
-                                error_code="property_not_found",
-                                error_message=f"پراپرتی '{prop}' برای گروه '{groupname}' یافت نشد.",
-                                status=404,
-                                request_data=request_data,
-                                save_to_db=save_to_db,
-                            )
-                        data = {prop: value}
-                    else:
-                        data = {prop: None}
+                if prop_key and prop_key.lower() != "all":
+                    value = manager.get_samba_group_property(groupname, prop_key)
+                    if value is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="property_not_found",
+                            error_message=f"پراپرتی '{prop_key}' در گروه '{groupname}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data={prop_key: value},
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد."
+                    )
+                else:
+                    data = manager.get_samba_groups(
+                        groupname=groupname,
+                        only_custom_groups=only_custom,
+                        only_shared_groups=only_shared,
+                    )
+                    if data is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="group_not_found",
+                            error_message=f"گروه '{groupname}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data=data,
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message="جزئیات گروه سامبا با موفقیت بازیابی شد."
+                    )
             else:
-                if prop and prop.lower() != "all":
-                    if isinstance(data, list):
-                        new_data = []
-                        for group_dict in data:
-                            if isinstance(group_dict, dict):
-                                gname = group_dict.get("name")
-                                if gname is not None:
-                                    value = group_dict.get(prop)
-                                    new_data.append({"groupname": gname, prop: value})
-                                else:
-                                    new_data.append({"groupname": "unknown", prop: None})
+                data = manager.get_samba_groups(
+                    only_custom_groups=only_custom,
+                    only_shared_groups=only_shared,
+                )
+                if prop_key and prop_key.lower() != "all":
+                    filtered = []
+                    for group_dict in data:
+                        if isinstance(group_dict, dict):
+                            gname = group_dict.get("name")
+                            if gname is not None:
+                                value = group_dict.get(prop_key)
+                                filtered.append({"groupname": gname, prop_key: value})
                             else:
-                                new_data.append({"groupname": "unknown", prop: None})
-                        data = new_data
-                    else:
-                        data = []
+                                filtered.append({"groupname": "unknown", prop_key: None})
+                        else:
+                            filtered.append({"groupname": "unknown", prop_key: None})
+                    data = filtered
 
-            return StandardResponse(
-                data=data,
-                message="اطلاعات گروه(ها) سامبا با موفقیت بازیابی شد.",
-                request_data=request_data,
-                save_to_db=save_to_db,
-            )
+                return StandardResponse(
+                    data=data,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                    message="لیست گروه‌های سامبا با موفقیت بازیابی شد."
+                )
+
         except Exception as exc:
             return build_standard_error_response(
                 exc=exc,
-                error_code="samba_group_fetch_failed",
-                error_message="خطا در دریافت اطلاعات گروه(ها) سامبا.",
                 request_data=request_data,
                 save_to_db=save_to_db,
+                error_code="samba_group_fetch_failed",
+                error_message="خطا در دریافت اطلاعات گروه(ها) سامبا."
             )
 
     @extend_schema(
@@ -300,73 +339,90 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
     )
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop = get_request_param(request, "property", str, None)
-        if prop:
-            prop = prop.strip()
+        prop_key = get_request_param(request, "property", str, None)
+        if prop_key:
+            prop_key = prop_key.strip()
         only_custom = get_request_param(request, "only_custom", bool, False)
         only_active = get_request_param(request, "only_active", bool, False)
         request_data = dict(request.query_params)
 
         try:
             manager = SambaManager()
-            data = manager.get_samba_sharepoints(
-                sharepoint_name=sharepoint_name,
-                all_props=(not prop or prop.lower() == "all"),
-                property_name=prop if prop and prop.lower() != "all" else None,
-                only_custom_shares=only_custom,
-                only_active_shares=only_active,
-            )
 
             if sharepoint_name:
                 error_resp = self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, must_exist=True)
                 if error_resp:
                     return error_resp
 
-                if prop and prop.lower() != "all":
-                    if isinstance(data, dict):
-                        value = data.get(prop)
-                        if value is None:
-                            return StandardErrorResponse(
-                                error_code="property_not_found",
-                                error_message=f"پراپرتی '{prop}' برای مسیر اشتراکی '{sharepoint_name}' یافت نشد.",
-                                status=404,
-                                request_data=request_data,
-                                save_to_db=save_to_db,
-                            )
-                        data = {prop: value}
-                    else:
-                        data = {prop: None}
+                if prop_key and prop_key.lower() != "all":
+                    value = manager.get_samba_sharepoint_property(sharepoint_name, prop_key)
+                    if value is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="property_not_found",
+                            error_message=f"پراپرتی '{prop_key}' در مسیر اشتراکی '{sharepoint_name}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data={prop_key: value},
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد."
+                    )
+                else:
+                    data = manager.get_samba_sharepoints(
+                        sharepoint_name=sharepoint_name,
+                        only_custom_shares=only_custom,
+                        only_active_shares=only_active,
+                    )
+                    if data is None:
+                        return StandardErrorResponse(
+                            request_data=request_data,
+                            save_to_db=save_to_db,
+                            status=404,
+                            error_code="share_not_found",
+                            error_message=f"مسیر اشتراکی '{sharepoint_name}' یافت نشد."
+                        )
+                    return StandardResponse(
+                        data=data,
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                        message="جزئیات مسیر اشتراکی سامبا با موفقیت بازیابی شد."
+                    )
             else:
-                if prop and prop.lower() != "all":
-                    if isinstance(data, list):
-                        new_data = []
-                        for share_dict in data:
-                            if isinstance(share_dict, dict):
-                                sname = share_dict.get("name")
-                                if sname is not None:
-                                    value = share_dict.get(prop)
-                                    new_data.append({"sharepoint_name": sname, prop: value})
-                                else:
-                                    new_data.append({"sharepoint_name": "unknown", prop: None})
+                data = manager.get_samba_sharepoints(
+                    only_custom_shares=only_custom,
+                    only_active_shares=only_active,
+                )
+                if prop_key and prop_key.lower() != "all":
+                    filtered = []
+                    for share_dict in data:
+                        if isinstance(share_dict, dict):
+                            sname = share_dict.get("name")
+                            if sname is not None:
+                                value = share_dict.get(prop_key)
+                                filtered.append({"sharepoint_name": sname, prop_key: value})
                             else:
-                                new_data.append({"sharepoint_name": "unknown", prop: None})
-                        data = new_data
-                    else:
-                        data = []
+                                filtered.append({"sharepoint_name": "unknown", prop_key: None})
+                        else:
+                            filtered.append({"sharepoint_name": "unknown", prop_key: None})
+                    data = filtered
 
-            return StandardResponse(
-                data=data,
-                message="اطلاعات مسیر(های) اشتراکی سامبا با موفقیت بازیابی شد.",
-                request_data=request_data,
-                save_to_db=save_to_db,
-            )
+                return StandardResponse(
+                    data=data,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                    message="لیست مسیرهای اشتراکی سامبا با موفقیت بازیابی شد."
+                )
+
         except Exception as exc:
             return build_standard_error_response(
                 exc=exc,
-                error_code="samba_share_fetch_failed",
-                error_message="خطا در دریافت اطلاعات مسیر(های) اشتراکی سامبا.",
                 request_data=request_data,
                 save_to_db=save_to_db,
+                error_code="samba_share_fetch_failed",
+                error_message="خطا در دریافت اطلاعات مسیر(های) اشتراکی سامبا."
             )
 
     @extend_schema(

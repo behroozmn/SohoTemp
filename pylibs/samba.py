@@ -18,24 +18,15 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(self, username: Optional[str] = None, *, all_props: bool = True, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
-        """
-        دریافت اطلاعات کاربران سامبا.
-
-        Args:
-            username: نام کاربر خاص. اگر None باشد، تمام کاربران برگردانده می‌شوند.
-            all_props: اگر True باشد، تمام پراپرتی‌ها برگردانده می‌شوند.
-            property_name: نام یک پراپرتی خاص برای بازیابی.
-            only_custom_users: اگر True باشد، فقط کاربران غیرسیستمی (custom) برگردانده می‌شوند.
-            only_shared_users: اگر True باشد، فقط کاربرانی که در smb.conf استفاده شده‌اند.
-
-        Returns:
-            - Dict: اگر username داده شده باشد.
-            - List[Dict]: اگر username داده نشده باشد.
-            - str: اگر property_name مشخص باشد و فقط یک مقدار بازگردانده شود.
-            - None: اگر کاربر یافت نشود.
-        """
-        # لیست تمام کاربران سامبا
+    def get_samba_users(
+            self,
+            username: Optional[str] = None,
+            *,
+            all_props: bool = True,
+            property_name: Optional[str] = None,
+            only_custom_users: bool = False,
+            only_shared_users: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         try:
             stdout, _ = run_cli_command(["/usr/bin/pdbedit", "-L", "-v"], use_sudo=True)
         except CLICommandError as e:
@@ -45,28 +36,40 @@ class SambaManager:
         users = self._parse_pdbedit_output(stdout)
         shared_users = self._extract_shared_users_from_conf() if only_shared_users else set()
 
+        # فیلتر اولیه
+        filtered_users = []
+        for u in users:
+            uname = u.get("Unix username")
+            if uname is None:
+                continue
+            if only_shared_users and uname not in shared_users:
+                continue
+            if only_custom_users and self._is_system_user(uname):
+                continue
+            filtered_users.append(u)
+
         if username:
-            user = next((u for u in users if u.get("Unix username") == username), None)
-            if not user:
+            user = next((u for u in filtered_users if u.get("Unix username") == username), None)
+            if user is None:
                 return None
-            if only_shared_users and username not in shared_users:
-                return None
-            if property_name:
+
+            if property_name is not None:
+                # 🔑 فقط مقدار پراپرتی خواسته‌شده را برمی‌گرداند
                 return user.get(property_name)
-            return user if all_props else {property_name: user.get(property_name)} if property_name else user
+            else:
+                return user
+
         else:
-            filtered_users = []
-            for u in users:
-                uname = u.get("Unix username")
-                if only_shared_users and uname not in shared_users:
-                    continue
-                if only_custom_users and self._is_system_user(uname):
-                    continue
-                if property_name:
-                    filtered_users.append({uname: u.get(property_name)})
-                else:
-                    filtered_users.append(u)
-            return filtered_users
+            if property_name is not None:
+                # برای لیست: فقط آن پراپرتی را از هر کاربر بگیر
+                result = []
+                for u in filtered_users:
+                    uname = u.get("Unix username")
+                    val = u.get(property_name)
+                    result.append({"Unix username": uname, property_name: val})
+                return result
+            else:
+                return filtered_users
 
     def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_groups: bool = False, only_shared_groups: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
@@ -425,3 +428,21 @@ class SambaManager:
             run_cli_command(["/usr/bin/sudo", "/usr/sbin/service", "smbd", "reload"], use_sudo=False)
         except CLICommandError:
             run_cli_command(["/usr/bin/sudo", "/bin/systemctl", "reload", "smbd"], use_sudo=False)
+
+    def get_samba_user_property(self, username: str, prop_key: str) -> Optional[str]:
+        user = self.get_samba_users(username=username)
+        if user and isinstance(user, dict):
+            return user.get(prop_key)
+        return None
+
+    def get_samba_group_property(self, groupname: str, prop_key: str) -> Optional[str]:
+        group = self.get_samba_groups(groupname=groupname)
+        if group and isinstance(group, dict):
+            return group.get(prop_key)
+        return None
+
+    def get_samba_sharepoint_property(self, name: str, prop_key: str) -> Optional[str]:
+        share = self.get_samba_sharepoints(sharepoint_name=name)
+        if share and isinstance(share, dict):
+            return share.get(prop_key)
+        return None
