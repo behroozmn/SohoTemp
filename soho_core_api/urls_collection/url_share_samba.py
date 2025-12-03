@@ -1,16 +1,16 @@
 from django.urls import path
-from soho_core_api.views_collection import view_share_samba
+from soho_core_api.views_collection.view_samba import SambaUserView, SambaGroupView, SambaSharepointView
 
 urlpatterns = [
+    # ========== User Endpoints ==========
+    path("samba/users/", SambaUserView.as_view(), name="samba-user-list"),
+    path("samba/users/<str:username>/", SambaUserView.as_view(), name="samba-user-detail"),
 
-    path('', view_share_samba.SambaListView.as_view()),
-    path('config/append/', view_share_samba.SambaCreateView.as_view()),
-    path('config/remove/', view_share_samba.SambaDeleteView.as_view()),
-    path('user/add/', view_share_samba.SambaUserCreateView.as_view()),
-    path('user/enable/', view_share_samba.SambaUserEnableView.as_view()),
-    path('user/passwd/', view_share_samba.SambaUserChangePasswordView.as_view()),
-    path('user/list/', view_share_samba.SambaUserListView.as_view()),
+    # ========== Group Endpoints ==========
+    path("samba/groups/", SambaGroupView.as_view(), name="samba-group-list"),
+    path("samba/groups/<str:groupname>/", SambaGroupView.as_view(), name="samba-group-detail"),
 
-    path("user/delete/<str:username>/", view_share_samba.SambaUserDeleteView.as_view()),
-
+    # ========== Sharepoint Endpoints ==========
+    path("samba/sharepoints/", SambaSharepointView.as_view(), name="samba-sharepoint-list"),
+    path("samba/sharepoints/<str:sharepoint_name>/", SambaSharepointView.as_view(), name="samba-sharepoint-detail"),
 ]

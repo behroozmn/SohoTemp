@@ -1,396 +1,489 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import configparser
-from typing import Any, Dict, Optional
-import subprocess
+# soho_core_api/pylibs/samba.py
+from __future__ import annotations
 import os
-import shutil
+import re
+import json
 from datetime import datetime
-
-from pylibs.file import File_Temp
-
-
-def ok(data: Any, detail: Any = None) -> Dict[str, Any]:
-    """Return a success envelope (DRF-ready)."""
-    return {"ok": True, "error": None, "data": data, "details": detail}
-
-
-def fail(message: str, code: str = "samba_error", extra: str = None) -> Dict[str, Any]:
-    """Return a failure envelope (DRF-ready)."""
-    return {"ok": False, "error": {"code": code, "message": message, "extra": extra}}
-
+from typing import Dict, Any, List, Optional, Union
+from pylibs import logger, CLICommandError, run_cli_command
 
 class SambaManager:
-    def __init__(self, config_path: str = "/etc/samba/smb.conf") -> None:
-        self.config_path = config_path
+    """
+    مدیریت کامل کاربران، گروه‌ها و مسیرهای اشتراکی سرویس Samba.
+    تمام توابع فقط داده خام (Dict, List, str, None) یا استثنا برمی‌گردانند.
+    """
+    SMB_CONF_PATH = "/etc/samba/smb.conf"
+    SOHO_SECTION_MARKER = "## SOHO Configurations ##"
 
-    def add_samba_share_block(self, share_name, path, create_mask="0777", directory_mask="0777", valid_users=None, available=True, browseable=True, read_only=False, guest_ok=False, inherit_permissions=False, max_connections="0"):
-        # --- ثبت زمان ---
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    def __init__(self) -> None:
+        pass
 
-        # --- بررسی دسترسی ---
-        # if os.geteuid() != 0:
-        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+    def get_samba_users(
+        self,
+        username: Optional[str] = None,
+        *,
+        all_props: bool = True,
+        property_name: Optional[str] = None,
+        only_custom_users: bool = False,
+        only_shared_users: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+        """
+        دریافت اطلاعات کاربران سامبا.
 
-        if not os.path.isabs(path):
-            return fail("Path must be an absolute path.", extra="نام فایل را باید کامل وارد نمایید")
+        Args:
+            username: نام کاربر خاص. اگر None باشد، تمام کاربران برگردانده می‌شوند.
+            all_props: اگر True باشد، تمام پراپرتی‌ها برگردانده می‌شوند.
+            property_name: نام یک پراپرتی خاص برای بازیابی.
+            only_custom_users: اگر True باشد، فقط کاربران غیرسیستمی (custom) برگردانده می‌شوند.
+            only_shared_users: اگر True باشد، فقط کاربرانی که در smb.conf استفاده شده‌اند.
 
-        # Normalize lists to space-separated strings
-        def list_to_str(lst):
-            if lst is None:
-                return ""
-            if isinstance(lst, str):
-                return lst.strip()
-            return " ".join(str(u).strip() for u in lst if u)
+        Returns:
+            - Dict: اگر username داده شده باشد.
+            - List[Dict]: اگر username داده نشده باشد.
+            - str: اگر property_name مشخص باشد و فقط یک مقدار بازگردانده شود.
+            - None: اگر کاربر یافت نشود.
+        """
+        # لیست تمام کاربران سامبا
+        try:
+            stdout, _ = run_cli_command(["/usr/bin/pdbedit", "-L", "-v"], use_sudo=True)
+        except CLICommandError as e:
+            logger.error(f"خطا در دریافت لیست کاربران سامبا: {e}")
+            raise
 
-        valid_users_str = list_to_str(valid_users)
+        users = self._parse_pdbedit_output(stdout)
+        shared_users = self._extract_shared_users_from_conf() if only_shared_users else set()
 
-        # Build the share block exactly as requested
-        share_block = f"""#Begin: {share_name}
-[{share_name}]
-browseable = {'Yes' if browseable else 'No'}
-path = {path}
-create mask = {create_mask}
-writable = yes
-guest ok = {'Yes' if guest_ok else 'No'}
-valid users = {valid_users_str}
-#End: {share_name} - CreatedTime: {timestamp}
-"""
+        if username:
+            user = next((u for u in users if u.get("Unix username") == username), None)
+            if not user:
+                return None
+            if only_shared_users and username not in shared_users:
+                return None
+            if property_name:
+                return user.get(property_name)
+            return user if all_props else {property_name: user.get(property_name)} if property_name else user
+        else:
+            filtered_users = []
+            for u in users:
+                uname = u.get("Unix username")
+                if only_shared_users and uname not in shared_users:
+                    continue
+                if only_custom_users and self._is_system_user(uname):
+                    continue
+                if property_name:
+                    filtered_users.append({uname: u.get(property_name)})
+                else:
+                    filtered_users.append(u)
+            return filtered_users
 
+    def get_samba_groups(
+        self,
+        groupname: Optional[str] = None,
+        *,
+        all_props: bool = True,
+        property_name: Optional[str] = None,
+        only_custom_groups: bool = False,
+        only_shared_groups: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+        """
+        دریافت اطلاعات گروه‌های سامبا.
+        ساختار مشابه get_samba_users ولی برای گروه‌ها.
+        """
+        try:
+            stdout, _ = run_cli_command(["/usr/bin/getent", "group"], use_sudo=True)
+        except CLICommandError as e:
+            logger.error(f"خطا در دریافت گروه‌ها: {e}")
+            raise
 
-        ######## Combine Behrooz And Zand Config
-        # comment = Server Share A
-        # browseable = yes
-        # writable = yes
-        # guest ok = no
-        # valid users = zand
-        # path = /Pool1/FF2
-        # create mask = 0777
-        # directory mask = 0777
-        # max connections = 0
-        # read only = No
-        # available = Yes
-        # inherit permissions = No
+        groups = self._parse_getent_group_output(stdout)
+        shared_groups = self._extract_shared_groups_from_conf() if only_shared_groups else set()
 
-        # Soho LastCOnfig
-        ##################share_block = f"""#Begin: {share_name}
-        ##################[{share_name}]
-        ##################path = {path}
-        ##################create mask = {create_mask}
-        ##################directory mask = {directory_mask}
-        ##################max connections = {max_connections}
-        ##################read only = {'Yes' if read_only else 'No'}
-        ##################available = {'Yes' if available else 'No'}
-        ##################guest ok = {'Yes' if guest_ok else 'No'}
-        ##################browseable = {'Yes' if browseable else 'No'}
-        ##################inherit permissions = {'Yes' if inherit_permissions else 'No'}
-        ##################valid users = {valid_users_str}
-        ###################End: {share_name} - CreatedTime: {timestamp}
-        ##################"""
+        if groupname:
+            group = next((g for g in groups if g["name"] == groupname), None)
+            if not group:
+                return None
+            if only_shared_groups and groupname not in shared_groups:
+                return None
+            if property_name:
+                return group.get(property_name)
+            return group
+        else:
+            filtered_groups = []
+            for g in groups:
+                gname = g["name"]
+                if only_shared_groups and gname not in shared_groups:
+                    continue
+                if only_custom_groups and self._is_system_group(gname):
+                    continue
+                if property_name:
+                    filtered_groups.append({gname: g.get(property_name)})
+                else:
+                    filtered_groups.append(g)
+            return filtered_groups
 
+    def get_samba_sharepoints(
+        self,
+        sharepoint_name: Optional[str] = None,
+        *,
+        all_props: bool = True,
+        property_name: Optional[str] = None,
+        only_custom_shares: bool = False,
+        only_active_shares: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+        """
+        دریافت اطلاعات مسیرهای اشتراکی سامبا از smb.conf.
+        """
+        shares = self._parse_smb_conf()
+        if only_active_shares:
+            shares = [s for s in shares if s.get("available", "yes").lower() == "yes"]
 
-        # --- ایجاد نسخه پشتیبان با تاریخ ---
-        backup_path = f"{self.config_path}.backup_{timestamp}"
-        shutil.copy2(self.config_path, backup_path)
-        # ------------------------------------
+        if sharepoint_name:
+            share = next((s for s in shares if s["name"] == sharepoint_name), None)
+            if not share:
+                return None
+            if only_custom_shares and not share.get("is_custom", False):
+                return None
+            if property_name:
+                return share.get(property_name)
+            return share
+        else:
+            filtered = []
+            for s in shares:
+                if only_custom_shares and not s.get("is_custom", False):
+                    continue
+                if property_name:
+                    filtered.append({s["name"]: s.get(property_name)})
+                else:
+                    filtered.append(s)
+            return filtered
 
-        # Read current config
-        with open(self.config_path, "r") as f:
+    def create_samba_user(
+        self,
+        username: str,
+        password: str,
+        full_name: Optional[str] = None,
+        expiration_date: Optional[str] = None,
+    ) -> None:
+        """ایجاد کاربر جدید سامبا."""
+        # ایجاد کاربر لینوکس اگر وجود ندارد
+        try:
+            run_cli_command(["/usr/bin/id", username], use_sudo=True)
+        except CLICommandError:
+            # کاربر وجود ندارد → ایجاد کن
+            cmd = ["/usr/sbin/useradd", "-m", username]
+            if full_name:
+                cmd.extend(["-c", full_name])
+            run_cli_command(cmd, use_sudo=True)
+
+        # تنظیم پسورد سامبا
+        run_cli_command(
+            ["/usr/bin/smbpasswd", "-a", "-s", username],
+            input=f"{password}\n{password}\n",
+            use_sudo=True
+        )
+
+        # تنظیم تاریخ انقضا
+        if expiration_date:
+            self.set_user_expiration(username, expiration_date)
+
+    def create_samba_group(self, groupname: str) -> None:
+        """ایجاد گروه جدید سامبا."""
+        try:
+            run_cli_command(["/usr/sbin/groupadd", groupname], use_sudo=True)
+        except CLICommandError as e:
+            if "already exists" not in str(e):
+                raise
+
+    def create_samba_sharepoint(
+        self,
+        name: str,
+        path: str,
+        valid_users: Optional[List[str]] = None,
+        valid_groups: Optional[List[str]] = None,
+        read_only: bool = False,
+        guest_ok: bool = False,
+        browseable: bool = True,
+        max_connections: Optional[int] = None,
+        create_mask: str = "0644",
+        directory_mask: str = "0755",
+        inherit_permissions: bool = False,
+        expiration_time: Optional[str] = None,
+    ) -> None:
+        """ایجاد یک مسیر اشتراکی جدید در smb.conf."""
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            run_cli_command(["/usr/bin/chown", "root:root", path], use_sudo=True)
+
+        share_section = self._build_share_section(
+            name=name,
+            path=path,
+            valid_users=valid_users,
+            valid_groups=valid_groups,
+            read_only=read_only,
+            guest_ok=guest_ok,
+            browseable=browseable,
+            max_connections=max_connections,
+            create_mask=create_mask,
+            directory_mask=directory_mask,
+            inherit_permissions=inherit_permissions,
+            expiration_time=expiration_time
+        )
+
+        self._append_share_to_conf(share_section)
+
+    def update_samba_sharepoint(
+        self,
+        name: str,
+        **kwargs: Any
+    ) -> None:
+        """به‌روزرسانی تمام پراپرتی‌های یک مسیر اشتراکی موجود."""
+        shares = self._parse_smb_conf()
+        share = next((s for s in shares if s["name"] == name), None)
+        if not share:
+            raise ValueError(f"مسیر اشتراکی '{name}' یافت نشد.")
+
+        # بروزرسانی مقادیر
+        share.update(kwargs)
+        new_section = self._build_share_section_from_dict(share)
+        self._replace_share_in_conf(name, new_section)
+
+    def change_samba_user_password(self, username: str, new_password: str) -> None:
+        """تغییر پسورد کاربر سامبا."""
+        run_cli_command(
+            ["/usr/bin/smbpasswd", "-s", username],
+            input=f"{new_password}\n{new_password}\n",
+            use_sudo=True
+        )
+
+    def enable_samba_user(self, username: str) -> None:
+        """فعال‌سازی کاربر سامبا."""
+        run_cli_command(["/usr/bin/smbpasswd", "-e", username], use_sudo=True)
+
+    def disable_samba_user(self, username: str) -> None:
+        """غیرفعال‌سازی کاربر سامبا."""
+        run_cli_command(["/usr/bin/smbpasswd", "-d", username], use_sudo=True)
+
+    def delete_samba_sharepoint(self, name: str) -> None:
+        """حذف یک مسیر اشتراکی از smb.conf."""
+        self._remove_share_from_conf(name)
+
+    def delete_samba_user_or_group(self, name: str, is_group: bool = False) -> None:
+        """حذف کاربر یا گروه سامبا."""
+        if is_group:
+            run_cli_command(["/usr/sbin/groupdel", name], use_sudo=True)
+        else:
+            run_cli_command(["/usr/sbin/userdel", "-r", name], use_sudo=True)
+            # حذف از پایگاه سامبا
+            try:
+                run_cli_command(["/usr/bin/pdbedit", "-x", name], use_sudo=True)
+            except CLICommandError:
+                pass  # ممکن است از قبل حذف شده باشد
+
+    def set_user_expiration(self, username: str, expiration_date: str) -> None:
+        """تعیین تاریخ انقضا برای کاربر."""
+        # تاریخ به فرمت YYYY-MM-DD
+        from datetime import datetime
+        dt = datetime.strptime(expiration_date, "%Y-%m-%d")
+        epoch_days = (dt - datetime(1970, 1, 1)).days
+        run_cli_command(["/usr/bin/smbpasswd", "-e", "-E", str(epoch_days), username], use_sudo=True)
+
+    def set_group_expiration(self, groupname: str, expiration_date: str) -> None:
+        """سامبا از انقضای گروه پشتیبانی نمی‌کند؛ اما می‌توانیم در متادیتای داخلی ذخیره کنیم."""
+        raise NotImplementedError("سامبا از انقضای گروه پشتیبانی نمی‌کند.")
+
+    def set_sharepoint_expiration(self, sharepoint_name: str, expiration_time: str) -> None:
+        """تعیین زمان انقضا برای مسیر اشتراکی (معمولًا در کامنت ذخیره می‌شود)."""
+        self.update_samba_sharepoint(sharepoint_name, expiration_time=expiration_time)
+
+    # ----------------------------
+    # Internal Helper Methods
+    # ----------------------------
+
+    def _parse_pdbedit_output(self, output: str) -> List[Dict[str, str]]:
+        users = []
+        current = {}
+        for line in output.strip().split("\n"):
+            if line.strip() == "":
+                if current:
+                    users.append(current)
+                    current = {}
+                continue
+            if ":" in line:
+                key, val = line.split(":", 1)
+                current[key.strip()] = val.strip()
+        if current:
+            users.append(current)
+        return users
+
+    def _parse_getent_group_output(self, output: str) -> List[Dict[str, Any]]:
+        groups = []
+        for line in output.strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split(":")
+            if len(parts) >= 3:
+                groups.append({
+                    "name": parts[0],
+                    "gid": parts[2],
+                    "members": parts[3].split(",") if parts[3] else []
+                })
+        return groups
+
+    def _parse_smb_conf(self) -> List[Dict[str, Any]]:
+        if not os.path.exists(self.SMB_CONF_PATH):
+            return []
+        with open(self.SMB_CONF_PATH, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Check if share already exists (by #Begin marker)
-        begin_marker = f"{share_name}"
-        if begin_marker in content:
-            return fail("Share '{share_name}' already exists. Skipping.")
+        # پیدا کردن بخش SOHO
+        if self.SOHO_SECTION_MARKER not in content:
+            return []
 
-        # Append the new block at the end
-        with open(self.config_path, "a") as f:
-            f.write("\n" + share_block)
+        soho_start = content.find(self.SOHO_SECTION_MARKER)
+        soho_part = content[soho_start:]
 
-        print("Remember to restart Samba: sudo systemctl restart smbd nmbd")
-        return ok({"info": f"[SUCCESS] Share {share_name} added to {self.config_path} with markers."})
+        shares = []
+        pattern = r"#Begin: ([^\n]+)\n\[([^\]]+)\]([\s\S]*?)#End: \2.*?(\d{4}/\d{2}/\d{2}-\d{2}:\d{2}:\d{2})?"
+        for match in re.finditer(pattern, soho_part):
+            name = match.group(1).strip()
+            section_body = match.group(3)
+            created_time = match.group(4)
 
-    def remove_samba_share_block(self, share_name):
-        """
-        Returns:
-            True  -> if block was found and removed
-            False -> if block not found
-        """
-        # if os.geteuid() != 0:
-        #     raise PermissionError("This function must be run as root (sudo).")
-
-        if not os.path.exists(self.config_path):
-            raise FileNotFoundError(f"Config file not found: {self.config_path}")
-
-        # ایجاد backup با تاریخ و زمان
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_path = f"{self.config_path}.backup_{timestamp}"
-        shutil.copy2(self.config_path, backup_path)
-        print(f"[INFO] Backup saved as: {backup_path}")
-
-        begin_marker = f"#Begin: {share_name}"
-        end_marker_prefix = f"#End: {share_name}"
-
-        with open(self.config_path, "r") as f:
-            lines = f.readlines()
-
-        new_lines = []
-        skip = False
-        block_found = False
-
-        for line in lines:
-            if line.strip() == begin_marker:
-                skip = True
-                block_found = True
-                continue  # خط #Begin را هم ننویس
-            elif skip and line.startswith(end_marker_prefix):
-                skip = False
-                continue  # خط #End را هم ننویس
-            elif not skip:
-                new_lines.append(line)
-
-        # اگر بلوک پیدا نشد
-        if not block_found:
-            return fail(f"[INFO] Share block '{share_name}' not found in {self.config_path}.")
-
-        # نوشتن فایل جدید
-        with open(self.config_path, "w") as f:
-            f.writelines(new_lines)
-
-        print(f"[SUCCESS] Share block '{share_name}' removed from {self.config_path}.")
-
-        return ok({"info": f"[SUCCESS] Share {share_name} Remove from {self.config_path} with markers."})
-
-    def list_shares(self) -> Dict[str, Any]:
-        """
-        Parse smb.conf and return all shares with their configurations.
-        Returns a DRF-ready response dict using `ok()` or `fail()`.
-        """
-        if not os.path.exists(self.config_path):
-            return fail(f"Samba config file not found: {self.config_path}", "file_not_found")
-
-        try:
-            config = configparser.ConfigParser(
-                strict=False,
-                interpolation=None,
-                comment_prefixes=('#', ';'),
-                inline_comment_prefixes=('#', ';')
-            )
-            # Preserve case (important for Samba keys like 'valid users')
-            config.optionxform = str
-            config.read(self.config_path)
-
-            shares = {}
-            for section in config.sections():
-                # Skip global section (usually named 'global')
-                if section.lower() in {'global', 'printers', 'print$', 'Files'.lower(), 'homes'}:
+            props = {"name": name, "is_custom": True, "created_time": created_time}
+            for line in section_body.strip().split("\n"):
+                line = line.strip()
+                if line.startswith("#") or not line:
                     continue
-                # Convert section to dict
-                shares[section] = dict(config[section])
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    props[k.strip()] = v.strip()
 
-            return ok(shares, detail=f"Found {len(shares)} share(s) in {self.config_path}")
+            # اضافه کردن expiration اگر وجود داشته باشد (در کامنت)
+            exp_match = re.search(r"#Expiration:\s*(\S+)", section_body)
+            if exp_match:
+                props["expiration_time"] = exp_match.group(1)
 
-        except Exception as e:
-            return fail(f"Failed to parse smb.conf: {str(e)}", "parse_error", extra=str(e))
+            shares.append(props)
+        return shares
 
-    def create_samba_user(self, username: str, password: str) -> Dict[str, Any]:
-        """
-        Create a Samba user and set password non-interactively.
-        Equivalent to: echo -e "pass\npass" | smbpasswd -a -s username
-        Does NOT enable the user (you must call enable_samba_user separately).
-        """
-        # if os.geteuid() != 0:
-        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+    def _extract_shared_users_from_conf(self) -> set:
+        users = set()
+        shares = self._parse_smb_conf()
+        for s in shares:
+            vu = s.get("valid users", "")
+            if vu:
+                users.update(u.strip() for u in vu.split(",") if u.strip())
+        return users
 
-        if not username or not isinstance(username, str):
-            return fail("Username must be a non-empty string.")
+    def _extract_shared_groups_from_conf(self) -> set:
+        groups = set()
+        shares = self._parse_smb_conf()
+        for s in shares:
+            vg = s.get("valid groups", "")
+            if vg:
+                groups.update(g.strip() for g in vg.split(",") if g.strip())
+        return groups
 
-        if not password or not isinstance(password, str):
-            return fail("Password must be a non-empty string.")
-
-        if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
-            return fail("Invalid username: only letters, digits, ., -, _ allowed.")
-
+    def _is_system_user(self, username: str) -> bool:
         try:
-            passwd_input = f"{password}\n{password}\n"
-            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-a", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
+            stdout, _ = run_cli_command(["/usr/bin/id", "-u", username], use_sudo=True)
+            uid = int(stdout.strip())
+            return uid < 1000  # معمولاً UID < 1000 برای سیستم
+        except:
+            return True
 
-            if result.returncode == 0:
-                return ok({"username": username}, detail="Samba user created successfully (password set).")
-            else:
-                stderr = result.stderr.strip()
-                if "user exists" in stderr.lower():
-                    return fail(f"Samba user '{username}' already exists.", code="user_exists", extra=stderr)
-                else:
-                    return fail(f"Failed to create Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
-
-        except subprocess.TimeoutExpired:
-            return fail("smbpasswd command timed out.", code="timeout")
-        except FileNotFoundError:
-            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
-        except Exception as e:
-            return fail(f"Exception during Samba user creation: {str(e)}", code="exception", extra=str(e))
-
-    def enable_samba_user(self, username: str) -> Dict[str, Any]:
-        """
-        Enable an existing Samba user.
-        Equivalent to: smbpasswd -e username
-        """
-        # if os.geteuid() != 0:
-        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
-
-        if not username or not isinstance(username, str):
-            return fail("Username must be a non-empty string.")
-
+    def _is_system_group(self, groupname: str) -> bool:
         try:
-            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-e", username], capture_output=True, text=True, timeout=5)
+            stdout, _ = run_cli_command(["/usr/bin/getent", "group", groupname], use_sudo=True)
+            gid = int(stdout.strip().split(":")[2])
+            return gid < 1000
+        except:
+            return True
 
-            if result.returncode == 0:
-                return ok({"username": username}, detail="Samba user enabled successfully.")
-            else:
-                stderr = result.stderr.strip()
-                if "not found" in stderr.lower() or "does not exist" in stderr.lower():
-                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
-                else:
-                    return fail(f"Failed to enable Samba user: {stderr}", code="enable_error", extra=stderr)
+    def _build_share_section(
+        self,
+        name: str,
+        path: str,
+        valid_users: Optional[List[str]],
+        valid_groups: Optional[List[str]],
+        read_only: bool,
+        guest_ok: bool,
+        browseable: bool,
+        max_connections: Optional[int],
+        create_mask: str,
+        directory_mask: str,
+        inherit_permissions: bool,
+        expiration_time: Optional[str],
+    ) -> str:
+        section = f"#Begin: {name}\n[{name}]\n"
+        section += f"path = {path}\n"
+        section += f"create mask = {create_mask}\n"
+        section += f"directory mask = {directory_mask}\n"
+        if max_connections is not None:
+            section += f"max connections = {max_connections}\n"
+        section += f"read only = {'yes' if read_only else 'no'}\n"
+        section += f"available = yes\n"
+        section += f"guest ok = {'yes' if guest_ok else 'no'}\n"
+        section += f"browseable = {'yes' if browseable else 'no'}\n"
+        section += f"inherit permissions = {'yes' if inherit_permissions else 'no'}\n"
+        if valid_users:
+            section += f"valid users = {', '.join(valid_users)}\n"
+        if valid_groups:
+            section += f"valid groups = {', '.join(valid_groups)}\n"
+        if expiration_time:
+            section += f"#Expiration: {expiration_time}\n"
+        current_time = datetime.now().strftime("%Y/%m/%d-%H:%M:%S")
+        section += f"#End: {name} - CreatedTime: {current_time}\n\n"
+        return section
 
-        except subprocess.TimeoutExpired:
-            return fail("smbpasswd enable command timed out.", code="timeout")
-        except FileNotFoundError:
-            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
-        except Exception as e:
-            return fail(f"Exception during Samba user enable: {str(e)}", code="exception", extra=str(e))
+    def _build_share_section_from_dict(self, share: Dict[str, Any]) -> str:
+        return self._build_share_section(
+            name=share["name"],
+            path=share.get("path", ""),
+            valid_users=[u.strip() for u in share.get("valid users", "").split(",")] if share.get("valid users") else None,
+            valid_groups=[g.strip() for g in share.get("valid groups", "").split(",")] if share.get("valid groups") else None,
+            read_only=share.get("read only", "no").lower() == "yes",
+            guest_ok=share.get("guest ok", "no").lower() == "yes",
+            browseable=share.get("browseable", "yes").lower() == "yes",
+            max_connections=int(share["max connections"]) if share.get("max connections") else None,
+            create_mask=share.get("create mask", "0644"),
+            directory_mask=share.get("directory mask", "0755"),
+            inherit_permissions=share.get("inherit permissions", "no").lower() == "yes",
+            expiration_time=share.get("expiration_time"),
+        )
 
-    def change_samba_password(self, username: str, new_password: str) -> Dict[str, Any]:
-        """
-        Change Samba user password non-interactively.
-        Equivalent to: echo -e "newpass\nnewpass" | smbpasswd -s username
-        Requires root privileges.
-        """
-        # if os.geteuid() != 0:
-        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
+    def _append_share_to_conf(self, section: str) -> None:
+        with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
+            content = f.read()
+            if self.SOHO_SECTION_MARKER not in content:
+                content += f"\n\n{self.SOHO_SECTION_MARKER}\n\n"
+            f.seek(0)
+            f.write(content.rstrip() + "\n" + section)
+        self._reload_samba()
 
-        if not username or not isinstance(username, str):
-            return fail("Username must be a non-empty string.")
+    def _replace_share_in_conf(self, name: str, new_section: str) -> None:
+        with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
+            content = f.read()
+            pattern = rf"#Begin: {re.escape(name)}[\s\S]*?#End: {re.escape(name)}.*?\n\n?"
+            new_content = re.sub(pattern, new_section, content, flags=re.MULTILINE)
+            f.seek(0)
+            f.write(new_content)
+            f.truncate()
+        self._reload_samba()
 
-        if not new_password or not isinstance(new_password, str):
-            return fail("New password must be a non-empty string.")
+    def _remove_share_from_conf(self, name: str) -> None:
+        with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
+            content = f.read()
+            pattern = rf"#Begin: {re.escape(name)}[\s\S]*?#End: {re.escape(name)}.*?\n\n?"
+            new_content = re.sub(pattern, "", content, flags=re.MULTILINE)
+            f.seek(0)
+            f.write(new_content)
+            f.truncate()
+        self._reload_samba()
 
+    def _reload_samba(self) -> None:
+        """ریلود سرویس سامبا برای اعمال تغییرات."""
         try:
-            # دو بار رمز عبور جدید را به smbpasswd می‌دهیم
-            passwd_input = f"{new_password}\n{new_password}\n"
-            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-s", username], input=passwd_input, text=True, capture_output=True, timeout=10)
-
-            if result.returncode == 0:
-                return ok({"username": username}, detail="Samba password changed successfully.")
-            else:
-                stderr = result.stderr.strip()
-                if "user not found" in stderr.lower() or "does not exist" in stderr.lower():
-                    return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
-                else:
-                    return fail(f"Failed to change Samba password: {stderr}", code="smbpasswd_error", extra=stderr)
-
-        except subprocess.TimeoutExpired:
-            return fail("smbpasswd command timed out.", code="timeout")
-        except FileNotFoundError:
-            return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
-        except Exception as e:
-            return fail(f"Exception during password change: {str(e)}", code="exception", extra=str(e))
-
-    def list_samba_users_detailed(self) -> Dict[str, Any]:
-        """
-        Parse output of: sudo pdbedit -L -v
-        Handles blocks separated by '---------------'
-        """
-
-        # TODO:// این قسمت بررسی دسترسی از نوع یوزر هست که من باید اونو با سودو انحام دهم پس نیاز به این بررسی نیست
-        # if os.geteuid() != 0:
-        #     return fail("This function must be run as root (sudo)", extra="نیاز به دسترسی روت دارد")
-
-        try:
-            result = subprocess.run(["/usr/bin/sudo", "/usr/bin/pdbedit", "-L", "-v"], capture_output=True, text=True, timeout=15)
-
-            if result.returncode != 0:
-                stderr = result.stderr.strip()
-                if "No such file" in stderr or "command not found" in stderr.lower():
-                    return fail("pdbedit not found. Is Samba installed?", code="command_missing", extra=stderr)
-                elif "No users" in stderr or "no such user" in stderr.lower():
-                    return ok({}, detail="No Samba users found.")
-                else:
-                    return fail(f"pdbedit failed: {stderr}", code="pdbedit_error", extra=stderr)
-
-            raw_output = result.stdout.strip()
-            if not raw_output:
-                return ok({}, detail="No Samba users found.")
-
-            # تقسیم بر اساس خط جداکننده
-            blocks = raw_output.split("---------------")
-            users = {}
-
-            for block in blocks:
-                block = block.strip()
-                if not block or "Unix username:" not in block:
-                    continue
-
-                user_info = {}
-                username = None
-
-                for line in block.splitlines():
-                    line = line.strip()
-                    if not line or ":" not in line:
-                        continue
-
-                    key, value = line.split(":", 1)
-                    key = key.strip()
-                    value = value.strip()
-
-                    if key == "Unix username":
-                        username = value
-                    else:
-                        user_info[key] = value
-
-                if username:
-                    users[username] = user_info
-
-            return ok(users, detail=f"Found {len(users)} Samba user(s) with full details.")
-
-        except subprocess.TimeoutExpired:
-            return fail("pdbedit command timed out.", code="timeout")
-        except FileNotFoundError:
-            return fail("pdbedit command not found. Is Samba installed?", code="command_missing")
-        except Exception as e:
-            return fail(f"Exception during listing Samba users: {str(e)}", code="exception", extra=str(e))
-
-    def delete_samba_user(self, username: str) -> Dict[str, Any]:
-        """
-        Delete a Samba user non-interactively.
-        Equivalent to: smbpasswd -x username
-        Requires root privileges (uses sudo).
-        """
-        if not username or not isinstance(username, str):
-            return fail("Username must be a non-empty string.")
-
-        if not username.replace("_", "").replace("-", "").replace(".", "").isalnum():
-            return fail("Invalid username: only letters, digits, ., -, _ allowed.")
-        obj_file = File_Temp()
-        if not obj_file.string_exists_in_file(username, "/etc/samba/smb.conf"):
-            try:
-                result = subprocess.run(["/usr/bin/sudo", "/usr/bin/smbpasswd", "-x", username], capture_output=True, text=True, timeout=10)
-
-                if result.returncode == 0:
-                    return ok({"username": username}, detail=f"Samba user '{username}' deleted successfully.")
-                else:
-                    stderr = result.stderr.strip()
-                    if "does not exist" in stderr.lower() or "not found" in stderr.lower():
-                        return fail(f"Samba user '{username}' does not exist.", code="user_not_found", extra=stderr)
-                    else:
-                        return fail(f"Failed to delete Samba user: {stderr}", code="smbpasswd_error", extra=stderr)
-
-            except subprocess.TimeoutExpired:
-                return fail("smbpasswd delete command timed out.", code="timeout")
-            except FileNotFoundError:
-                return fail("smbpasswd command not found. Is Samba installed?", code="command_missing")
-            except Exception as e:
-                return fail(f"Exception during Samba user deletion: {str(e)}", code="exception", extra=str(e))
-        else:
-            return fail(f"user {username} is ussing in shareConfiguration:")
+            run_cli_command(["/usr/bin/sudo", "/usr/sbin/service", "smbd", "reload"], use_sudo=False)
+        except CLICommandError:
+            run_cli_command(["/usr/bin/sudo", "/bin/systemctl", "reload", "smbd"], use_sudo=False)
