@@ -23,40 +23,43 @@ from drf_spectacular.utils import inline_serializer
 from rest_framework import serializers
 
 # OpenAPI Parameters مشترک
-ParamProperty = OpenApiParameter(
-    name="property",
-    type=str,
-    required=False,
-    description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
-    examples=[
-        OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
-        OpenApiExample("دریافت یک پراپرتی خاص", value="Logoff time"),
-    ]
-)
-ParamOnlyCustom = OpenApiParameter(
-    name="only_custom", type=bool, required=False, default="false",
-    description="فقط موارد ایجادشده توسط مدیر سیستم"
-)
-ParamOnlyShared = OpenApiParameter(
-    name="only_shared", type=bool, required=False, default="false",
-    description="فقط مواردی که در smb.conf استفاده شده‌اند"
-)
-ParamOnlyActive = OpenApiParameter(
-    name="only_active", type=bool, required=False, default="false",
-    description="فقط مسیرهای اشتراکی فعال (available=yes)"
-)
+ParamProperty = OpenApiParameter(name="property", type=str, required=False,
+                                 description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
+                                 examples=[
+                                     OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
+                                     OpenApiExample("نام کاربری یونیکس", value="Unix username"),
+                                     OpenApiExample("نام کاربری ویندوز (NT)", value="NT username"),
+                                     OpenApiExample("پرچم‌های حساب", value="Account Flags"),
+                                     OpenApiExample("شناسه کاربر (User SID)", value="User SID"),
+                                     OpenApiExample("شناسه گروه اصلی", value="Primary Group SID"),
+                                     OpenApiExample("نام کامل", value="Full Name"),
+                                     OpenApiExample("مسیر home", value="Home Directory"),
+                                     OpenApiExample("درایو home", value="HomeDir Drive"),
+                                     OpenApiExample("اسکریپت ورود", value="Logon Script"),
+                                     OpenApiExample("مسیر پروفایل", value="Profile Path"),
+                                     OpenApiExample("دامنه", value="Domain"),
+                                     OpenApiExample("توضیحات حساب", value="Account desc"),
+                                     OpenApiExample("ورک‌استیشن‌های مجاز", value="Workstations"),
+                                     OpenApiExample("اطلاعات تماس", value="Munged dial"),
+                                     OpenApiExample("زمان آخرین ورود", value="Logon time"),
+                                     OpenApiExample("زمان انقضا (Logoff time)", value="Logoff time"),
+                                     OpenApiExample("زمان حذف اجباری", value="Kickoff time"),
+                                     OpenApiExample("آخرین تغییر رمز", value="Password last set"),
+                                     OpenApiExample("امکان تغییر رمز", value="Password can change"),
+                                     OpenApiExample("تاریخ اجباری تغییر رمز", value="Password must change"),
+                                     OpenApiExample("آخرین رمز اشتباه", value="Last bad password"),
+                                     OpenApiExample("تعداد رمزهای اشتباه", value="Bad password count"),
+                                     OpenApiExample("ساعت‌های مجاز ورود", value="Logon hours"), ])
+ParamOnlyCustom = OpenApiParameter(name="only_custom", type=bool, required=False, default="false", description="فقط موارد ایجادشده توسط مدیر سیستم")
+ParamOnlyShared = OpenApiParameter(name="only_shared", type=bool, required=False, default="false", description="فقط مواردی که در smb.conf استفاده شده‌اند")
+ParamOnlyActive = OpenApiParameter(name="only_active", type=bool, required=False, default="false", description="فقط مسیرهای اشتراکی فعال (available=yes)")
+
 
 # ========== User View ==========
 class SambaUserView(APIView, SambaUserValidationMixin):
     @extend_schema(
-        parameters=[
-            OpenApiParameter(name="username", type=str, location="path", required=False),
-            ParamProperty,
-            ParamOnlyCustom,
-            ParamOnlyShared,
-        ] + QuerySaveToDB,
-        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})}
-    )
+        parameters=[OpenApiParameter(name="username", type=str, location="path", required=False), ParamProperty, ParamOnlyCustom, ParamOnlyShared, ] + QuerySaveToDB,
+        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})})
     def get(self, request: Request, username: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
@@ -196,15 +199,16 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 save_to_db=save_to_db,
             )
 
+
 # ========== Group View ==========
 class SambaGroupView(APIView, SambaGroupValidationMixin):
     @extend_schema(
         parameters=[
-            OpenApiParameter(name="groupname", type=str, location="path", required=False),
-            ParamProperty,
-            ParamOnlyCustom,
-            ParamOnlyShared,
-        ] + QuerySaveToDB
+                       OpenApiParameter(name="groupname", type=str, location="path", required=False),
+                       ParamProperty,
+                       ParamOnlyCustom,
+                       ParamOnlyShared,
+                   ] + QuerySaveToDB
     )
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
@@ -327,15 +331,16 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 save_to_db=save_to_db,
             )
 
+
 # ========== Sharepoint View ==========
 class SambaSharepointView(APIView, SambaSharepointValidationMixin):
     @extend_schema(
         parameters=[
-            OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
-            ParamProperty,
-            ParamOnlyCustom,
-            ParamOnlyActive,
-        ] + QuerySaveToDB
+                       OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
+                       ParamProperty,
+                       ParamOnlyCustom,
+                       ParamOnlyActive,
+                   ] + QuerySaveToDB
     )
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
