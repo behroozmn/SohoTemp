@@ -11,7 +11,7 @@ from pylibs import (
     QuerySaveToDB,
     BodyParameterSaveToDB,
     StandardResponse,
-    StandardErrorResponse,
+    StandardErrorResponse, CLICommandError,
 )
 from pylibs.samba import SambaManager
 from pylibs.mixins import (
@@ -61,21 +61,19 @@ class SambaUserView(APIView, SambaUserValidationMixin):
     پشتیبانی از عملیات: دریافت لیست/جزئیات، ایجاد، تغییر رمز، فعال/غیرفعال کردن، حذف.
     """
 
-    @extend_schema(
-        parameters=[
-                       OpenApiParameter(
-                           name="username",
-                           type=str,
-                           location="path",
-                           required=False,
-                           description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."
-                       ),
-                       ParamProperty,
-                       ParamOnlyCustom,
-                       ParamOnlyShared,
-                   ] + QuerySaveToDB,
-        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})}
-    )
+    @extend_schema(parameters=[
+                                  OpenApiParameter(
+                                      name="username",
+                                      type=str,
+                                      location="path",
+                                      required=False,
+                                      description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."
+                                  ),
+                                  ParamProperty,
+                                  ParamOnlyCustom,
+                                  ParamOnlyShared,
+                              ] + QuerySaveToDB,
+                   responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})})
     def get(self, request: Request, username: Optional[str] = None) -> Response:
         """
         دریافت اطلاعات کاربر(ها) سامبا.
@@ -167,19 +165,17 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا."
             )
 
-    @extend_schema(
-        request={"application/json": {
-            "type": "object",
-            "properties": {
-                "password": {"type": "string", "description": "رمز عبور کاربر"},
-                "full_name": {"type": "string", "description": "نام کامل کاربر"},
-                "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
-                **BodyParameterSaveToDB["properties"]
-            },
-            "required": ["password"]
-        }},
-        responses={201: StandardResponse}
-    )
+    @extend_schema(request={"application/json": {
+        "type": "object",
+        "properties": {
+            "password": {"type": "string", "description": "رمز عبور کاربر"},
+            "full_name": {"type": "string", "description": "نام کامل کاربر"},
+            "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
+            **BodyParameterSaveToDB["properties"]
+        },
+        "required": ["password"]
+    }},
+        responses={201: StandardResponse})
     def post(self, request: Request, username: str) -> Response:
         """
         ایجاد یک کاربر جدید سامبا.
@@ -216,26 +212,24 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 save_to_db=save_to_db,
             )
 
-    @extend_schema(
-        parameters=[
-                       OpenApiParameter(
-                           name="username", type=str, location="path", required=True,
-                           description="نام کاربر سامبا"
-                       ),
-                       OpenApiParameter(
-                           name="action", type=str, required=True, enum=["enable", "disable", "change_password"],
-                           description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"
-                       ),
-                   ] + QuerySaveToDB,
-        request={"application/json": {
-            "type": "object",
-            "properties": {
-                "new_password": {"type": "string", "description": "رمز عبور جدید (فقط برای action=change_password)"},
-                **BodyParameterSaveToDB["properties"]
-            }
-        }},
-        responses={200: StandardResponse}
-    )
+    @extend_schema(parameters=[
+                                  OpenApiParameter(
+                                      name="username", type=str, location="path", required=True,
+                                      description="نام کاربر سامبا"
+                                  ),
+                                  OpenApiParameter(
+                                      name="action", type=str, required=True, enum=["enable", "disable", "change_password"],
+                                      description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"
+                                  ),
+                              ] + QuerySaveToDB,
+                   request={"application/json": {
+                       "type": "object",
+                       "properties": {
+                           "new_password": {"type": "string", "description": "رمز عبور جدید (فقط برای action=change_password)"},
+                           **BodyParameterSaveToDB["properties"]
+                       }
+                   }},
+                   responses={200: StandardResponse})
     def put(self, request: Request, username: str) -> Response:
         """
         انجام عملیات‌های زیر روی یک کاربر سامبا:
@@ -305,27 +299,48 @@ class SambaUserView(APIView, SambaUserValidationMixin):
     )
     def delete(self, request: Request, username: str) -> Response:
         """
-        حذف یک کاربر سامبا.
+        حذف کاربر سامبا:
+        1. ابتدا از پایگاه داده سامبا (pdbedit)
+        2. سپس از سیستم لینوکس (userdel -r)
         """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        request_data = dict(request.data)
+        request_data = dict(request.query_params)
 
         error_resp = self._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
         if error_resp:
             return error_resp
 
+        manager = SambaManager()
+
         try:
-            SambaManager().delete_samba_user_or_group(username, is_group=False)
+            # مرحله ۱: حذف از پایگاه سامبا
+            manager.delete_samba_user_from_samba_db(username)
+        except CLICommandError as e:
+            # اگر کاربر در سامبا نبود، خطا را نادیده بگیر (مانند حذف دستی قبلی)
+            if "Failed to find" in e.stderr or "does not exist" in e.stderr:
+                pass
+            else:
+                return build_standard_error_response(
+                    exc=e,
+                    error_code="samba_user_samba_db_delete_failed",
+                    error_message="خطا در حذف کاربر از پایگاه داده سامبا.",
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+
+        try:
+            # مرحله ۲: حذف از سیستم لینوکس
+            manager.delete_samba_user_from_system(username)
             return StandardResponse(
                 message=f"کاربر '{username}' با موفقیت حذف شد.",
                 request_data=request_data,
                 save_to_db=save_to_db,
             )
-        except Exception as exc:
+        except CLICommandError as e:
             return build_standard_error_response(
-                exc=exc,
-                error_code="samba_user_delete_failed",
-                error_message="خطا در حذف کاربر سامبا.",
+                exc=e,
+                error_code="samba_user_system_delete_failed",
+                error_message="خطا در حذف کاربر از سیستم لینوکس.",
                 request_data=request_data,
                 save_to_db=save_to_db,
             )
@@ -456,6 +471,43 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 exc=exc,
                 error_code="samba_group_create_failed",
                 error_message="خطا در ایجاد گروه سامبا.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+
+    @extend_schema(
+        parameters=[
+                       OpenApiParameter(
+                           name="groupname", type=str, location="path", required=True,
+                           description="نام گروه سامبا"
+                       ),
+                   ] + QuerySaveToDB,
+        responses={200: StandardResponse}
+    )
+    def delete(self, request: Request, groupname: str) -> Response:
+        """
+        حذف یک گروه سامبا از سیستم.
+        """
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        request_data = dict(request.query_params)
+
+        error_resp = self._validate_samba_group_exists(groupname, save_to_db, request_data, must_exist=True)
+        if error_resp:
+            return error_resp
+
+        try:
+            manager = SambaManager()
+            manager.delete_samba_group(groupname)
+            return StandardResponse(
+                message=f"گروه '{groupname}' با موفقیت حذف شد.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        except Exception as exc:
+            return build_standard_error_response(
+                exc=exc,
+                error_code="samba_group_delete_failed",
+                error_message="خطا در حذف گروه سامبا.",
                 request_data=request_data,
                 save_to_db=save_to_db,
             )

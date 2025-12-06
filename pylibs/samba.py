@@ -330,25 +330,43 @@ class SambaManager:
         """
         self._remove_share_from_conf(name)
 
-    def delete_samba_user_or_group(self, name: str, is_group: bool = False) -> None:
+    def delete_samba_user_from_system(self, username: str) -> None:
         """
-        حذف یک کاربر یا گروه سامبا.
+        حذف کاربر از سیستم عامل لینوکس (همراه با home directory).
 
         Args:
-            name: نام کاربر یا گروه.
-            is_group: اگر True باشد، گروه حذف می‌شود؛ در غیر این صورت کاربر.
+            username: نام کاربر لینوکس.
 
         Raises:
-            CLICommandError: در صورت خطا در حذف.
+            CLICommandError: در صورت خطا در اجرای دستور userdel.
         """
-        if is_group:
-            run_cli_command(["/usr/sbin/groupdel", name], use_sudo=True)
-        else:
-            run_cli_command(["/usr/sbin/userdel", "-r", name], use_sudo=True)
-            try:
-                run_cli_command(["/usr/bin/pdbedit", "-x", name], use_sudo=True)
-            except CLICommandError:
-                pass
+        cmd = ["/usr/sbin/userdel", "-r", username]
+        run_cli_command(cmd, use_sudo=True)
+
+    def delete_samba_user_from_samba_db(self, username: str) -> None:
+        """
+        حذف کاربر از پایگاه داده سامبا (pdbedit).
+
+        Args:
+            username: نام کاربر سامبا.
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای دستور pdbedit -x.
+        """
+        cmd = ["/usr/bin/pdbedit", "-x", username]
+        run_cli_command(cmd, use_sudo=True)
+
+    def delete_samba_group(self, groupname: str) -> None:
+        """
+        حذف یک گروه سامبا از سیستم.
+
+        Args:
+            groupname: نام گروه سامبا.
+
+        Raises:
+            CLICommandError: در صورت خطا در حذف گروه.
+        """
+        run_cli_command(["/usr/sbin/groupdel", groupname], use_sudo=True)
 
     def set_user_expiration(self, username: str, expiration_date: str) -> None:
         """
