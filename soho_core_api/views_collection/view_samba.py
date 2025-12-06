@@ -56,10 +56,34 @@ ParamOnlyActive = OpenApiParameter(name="only_active", type=bool, required=False
 
 # ========== User View ==========
 class SambaUserView(APIView, SambaUserValidationMixin):
+    """
+    View برای مدیریت کاربران سرویس Samba.
+    پشتیبانی از عملیات: دریافت لیست/جزئیات، ایجاد، تغییر رمز، فعال/غیرفعال کردن، حذف.
+    """
+
     @extend_schema(
-        parameters=[OpenApiParameter(name="username", type=str, location="path", required=False), ParamProperty, ParamOnlyCustom, ParamOnlyShared, ] + QuerySaveToDB,
-        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})})
+        parameters=[
+                       OpenApiParameter(
+                           name="username",
+                           type=str,
+                           location="path",
+                           required=False,
+                           description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."
+                       ),
+                       ParamProperty,
+                       ParamOnlyCustom,
+                       ParamOnlyShared,
+                   ] + QuerySaveToDB,
+        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})}
+    )
     def get(self, request: Request, username: Optional[str] = None) -> Response:
+        """
+        دریافت اطلاعات کاربر(ها) سامبا.
+
+        - اگر `username` داده شود: جزئیات یک کاربر خاص.
+        - اگر `username` داده نشود: لیست تمام کاربران.
+        - با پارامتر `property` می‌توان فقط یک پراپرتی خاص را دریافت کرد.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key:
@@ -112,10 +136,8 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                         message="جزئیات کاربر سامبا با موفقیت بازیابی شد."
                     )
             else:
-                # --- لیست کاربران ---
                 data = manager.get_samba_users(only_custom_users=only_custom, only_shared_users=only_shared, )
                 if prop_key and prop_key.lower() != "all":
-                    # فیلتر لیست بر اساس پراپرتی
                     filtered = []
                     for user_dict in data:
                         if isinstance(user_dict, dict):
@@ -150,14 +172,18 @@ class SambaUserView(APIView, SambaUserValidationMixin):
             "type": "object",
             "properties": {
                 "password": {"type": "string", "description": "رمز عبور کاربر"},
-                "full_name": {"type": "string"},
-                "expiration_date": {"type": "string", "format": "date"},
+                "full_name": {"type": "string", "description": "نام کامل کاربر"},
+                "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
                 **BodyParameterSaveToDB["properties"]
             },
             "required": ["password"]
         }},
-        responses={201: StandardResponse})
+        responses={201: StandardResponse}
+    )
     def post(self, request: Request, username: str) -> Response:
+        """
+        ایجاد یک کاربر جدید سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
 
@@ -186,6 +212,120 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 exc=exc,
                 error_code="samba_user_create_failed",
                 error_message="خطا در ایجاد کاربر سامبا.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+
+    @extend_schema(
+        parameters=[
+                       OpenApiParameter(
+                           name="username", type=str, location="path", required=True,
+                           description="نام کاربر سامبا"
+                       ),
+                       OpenApiParameter(
+                           name="action", type=str, required=True, enum=["enable", "disable", "change_password"],
+                           description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"
+                       ),
+                   ] + QuerySaveToDB,
+        request={"application/json": {
+            "type": "object",
+            "properties": {
+                "new_password": {"type": "string", "description": "رمز عبور جدید (فقط برای action=change_password)"},
+                **BodyParameterSaveToDB["properties"]
+            }
+        }},
+        responses={200: StandardResponse}
+    )
+    def put(self, request: Request, username: str) -> Response:
+        """
+        انجام عملیات‌های زیر روی یک کاربر سامبا:
+        - فعال‌سازی (action=enable)
+        - غیرفعال‌سازی (action=disable)
+        - تغییر رمز عبور (action=change_password)
+        """
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        action = get_request_param(request, "action", str, None)
+        request_data = dict(request.data)
+
+        error_resp = self._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
+        if error_resp:
+            return error_resp
+
+        try:
+            manager = SambaManager()
+            if action == "enable":
+                manager.enable_samba_user(username)
+                message = f"کاربر '{username}' با موفقیت فعال شد."
+            elif action == "disable":
+                manager.disable_samba_user(username)
+                message = f"کاربر '{username}' با موفقیت غیرفعال شد."
+            elif action == "change_password":
+                new_password = get_request_param(request, "new_password", str, None)
+                if not new_password:
+                    return StandardErrorResponse(
+                        error_code="missing_new_password",
+                        error_message="رمز عبور جدید اجباری است.",
+                        status=400,
+                        request_data=request_data,
+                        save_to_db=save_to_db,
+                    )
+                manager.change_samba_user_password(username, new_password)
+                message = f"رمز عبور کاربر '{username}' با موفقیت تغییر کرد."
+            else:
+                return StandardErrorResponse(
+                    error_code="invalid_action",
+                    error_message="مقدار action باید یکی از مقادیر 'enable', 'disable' یا 'change_password' باشد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+
+            return StandardResponse(
+                message=message,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        except Exception as exc:
+            return build_standard_error_response(
+                exc=exc,
+                error_code="samba_user_operation_failed",
+                error_message="خطا در انجام عملیات روی کاربر سامبا.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+
+    @extend_schema(
+        parameters=[
+                       OpenApiParameter(
+                           name="username", type=str, location="path", required=True,
+                           description="نام کاربر سامبا"
+                       ),
+                   ] + QuerySaveToDB,
+        responses={200: StandardResponse}
+    )
+    def delete(self, request: Request, username: str) -> Response:
+        """
+        حذف یک کاربر سامبا.
+        """
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        request_data = dict(request.data)
+
+        error_resp = self._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
+        if error_resp:
+            return error_resp
+
+        try:
+            SambaManager().delete_samba_user_or_group(username, is_group=False)
+            return StandardResponse(
+                message=f"کاربر '{username}' با موفقیت حذف شد.",
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        except Exception as exc:
+            return build_standard_error_response(
+                exc=exc,
+                error_code="samba_user_delete_failed",
+                error_message="خطا در حذف کاربر سامبا.",
                 request_data=request_data,
                 save_to_db=save_to_db,
             )

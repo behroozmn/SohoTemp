@@ -71,6 +71,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://172\.16\.16\.(?:[1-9]?\d|1\d\d|2[0-4]\d|25[0-5]):5173$",
+    r"^http://172\.16\.16\.(?:[1-9]?\d|1\d\d|2[0-4]\d|25[0-5]):4173",
 ]
 from corsheaders.defaults import default_headers
 
