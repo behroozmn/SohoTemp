@@ -96,11 +96,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                     )
                 else:
                     # --- دریافت تمام اطلاعات کاربر ---
-                    data = manager.get_samba_users(
-                        username=username,
-                        only_custom_users=only_custom,
-                        only_shared_users=only_shared,
-                    )
+                    data = manager.get_samba_users(username=username, only_custom_users=only_custom, only_shared_users=only_shared, )
                     if data is None:
                         return StandardErrorResponse(
                             request_data=request_data,
@@ -117,10 +113,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                     )
             else:
                 # --- لیست کاربران ---
-                data = manager.get_samba_users(
-                    only_custom_users=only_custom,
-                    only_shared_users=only_shared,
-                )
+                data = manager.get_samba_users(only_custom_users=only_custom, only_shared_users=only_shared, )
                 if prop_key and prop_key.lower() != "all":
                     # فیلتر لیست بر اساس پراپرتی
                     filtered = []
@@ -163,7 +156,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
             },
             "required": ["password"]
         }},
-        responses={201: StandardResponse}    )
+        responses={201: StandardResponse})
     def post(self, request: Request, username: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -206,7 +199,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                        ParamProperty,
                        ParamOnlyCustom,
                        ParamOnlyShared,
-                   ] + QuerySaveToDB    )
+                   ] + QuerySaveToDB)
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
@@ -300,7 +293,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
             "type": "object",
             "properties": {**BodyParameterSaveToDB["properties"]},
             "required": []
-        }}    )
+        }})
     def post(self, request: Request, groupname: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -336,7 +329,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                        ParamProperty,
                        ParamOnlyCustom,
                        ParamOnlyActive,
-                   ] + QuerySaveToDB    )
+                   ] + QuerySaveToDB)
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
@@ -443,7 +436,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                 **BodyParameterSaveToDB["properties"]
             },
             "required": ["path"]
-        }}    )
+        }})
     def post(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -488,7 +481,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
             )
 
     @extend_schema(
-        request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}}    )
+        request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}})
     def put(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)

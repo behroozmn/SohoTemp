@@ -19,7 +19,26 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(self, username: Optional[str] = None, *, all_props: bool = True, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_users(self, username: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+        """
+        دریافت اطلاعات کاربران سامبا.
+
+        Args:
+            username: نام کاربر خاص. اگر None باشد، تمام کاربران برگردانده می‌شوند.
+            property_name: نام یک پراپرتی خاص برای بازیابی (مثلاً "Logoff time").
+                           اگر None باشد، تمام پراپرتی‌ها برگردانده می‌شوند.
+            only_custom_users: اگر True باشد، فقط کاربران غیرسیستمی (custom) برگردانده می‌شوند.
+            only_shared_users: اگر True باشد، فقط کاربرانی که در smb.conf استفاده شده‌اند.
+
+        Returns:
+            - dict: اگر username مشخص باشد و کاربر یافت شود.
+            - list[dict]: اگر username داده نشده باشد.
+            - str: اگر property_name مشخص باشد و فقط یک مقدار بازگردانده شود.
+            - None: اگر کاربر یافت نشود.
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای دستور CLI (مثل pdbedit).
+        """
         try:
             stdout, _ = run_cli_command(["/usr/bin/pdbedit", "-L", "-v"], use_sudo=True)
         except CLICommandError as e:
@@ -29,7 +48,6 @@ class SambaManager:
         users = self._parse_pdbedit_output(stdout)
         shared_users = self._extract_shared_users_from_conf() if only_shared_users else set()
 
-        # فیلتر اولیه
         filtered_users = []
         for u in users:
             uname = u.get("Unix username")
@@ -45,16 +63,12 @@ class SambaManager:
             user = next((u for u in filtered_users if u.get("Unix username") == username), None)
             if user is None:
                 return None
-
             if property_name is not None:
-                # 🔑 فقط مقدار پراپرتی خواسته‌شده را برمی‌گرداند
                 return user.get(property_name)
             else:
                 return user
-
         else:
             if property_name is not None:
-                # برای لیست: فقط آن پراپرتی را از هر کاربر بگیر
                 result = []
                 for u in filtered_users:
                     uname = u.get("Unix username")
@@ -67,7 +81,21 @@ class SambaManager:
     def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_groups: bool = False, only_shared_groups: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات گروه‌های سامبا.
-        ساختار مشابه get_samba_users ولی برای گروه‌ها.
+
+        Args:
+            groupname: نام گروه خاص. اگر None باشد، تمام گروه‌ها برگردانده می‌شوند.
+            property_name: نام یک پراپرتی خاص برای بازیابی.
+            only_custom_groups: اگر True باشد، فقط گروه‌های غیرسیستمی برگردانده می‌شوند.
+            only_shared_groups: اگر True باشد، فقط گروه‌هایی که در smb.conf استفاده شده‌اند.
+
+        Returns:
+            - dict: اگر groupname مشخص باشد و گروه یافت شود.
+            - list[dict]: اگر groupname داده نشده باشد.
+            - str: اگر property_name مشخص باشد و فقط یک مقدار بازگردانده شود.
+            - None: اگر گروه یافت نشود.
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای دستور `getent group`.
         """
         try:
             stdout, _ = run_cli_command(["/usr/bin/getent", "group"], use_sudo=True)
@@ -104,6 +132,21 @@ class SambaManager:
     def get_samba_sharepoints(self, sharepoint_name: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_shares: bool = False, only_active_shares: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات مسیرهای اشتراکی سامبا از smb.conf.
+
+        Args:
+            sharepoint_name: نام مسیر اشتراکی خاص. اگر None باشد، تمام مسیرها برگردانده می‌شوند.
+            property_name: نام یک پراپرتی خاص برای بازیابی.
+            only_custom_shares: اگر True باشد، فقط مسیرهای ایجادشده توسط مدیر سیستم برگردانده می‌شوند.
+            only_active_shares: اگر True باشد، فقط مسیرهایی که available=yes هستند.
+
+        Returns:
+            - dict: اگر sharepoint_name مشخص باشد و مسیر یافت شود.
+            - list[dict]: اگر sharepoint_name داده نشده باشد.
+            - str: اگر property_name مشخص باشد و فقط یک مقدار بازگردانده شود.
+            - None: اگر مسیر یافت نشود.
+
+        Raises:
+            FileNotFoundError, IOError: در صورتی که دسترسی به فایل smb.conf با مشکل مواجه شود.
         """
         shares = self._parse_smb_conf()
         if only_active_shares:
@@ -130,26 +173,41 @@ class SambaManager:
             return filtered
 
     def create_samba_user(self, username: str, password: str, full_name: Optional[str] = None, expiration_date: Optional[str] = None, ) -> None:
-        """ایجاد کاربر جدید سامبا."""
-        # ایجاد کاربر لینوکس اگر وجود ندارد
+        """
+        ایجاد یک کاربر جدید سامبا.
+
+        Args:
+            username: نام کاربری یونیکس (کوچک، بدون فاصله).
+            password: رمز عبور کاربر سامبا.
+            full_name: نام کامل (اختیاری).
+            expiration_date: تاریخ انقضا به فرمت "YYYY-MM-DD" (اختیاری).
+
+        Raises:
+            CLICommandError: در صورت خطا در ایجاد کاربر لینوکس یا تنظیم رمز سامبا.
+        """
         try:
             run_cli_command(["/usr/bin/id", username], use_sudo=True)
         except CLICommandError:
-            # کاربر وجود ندارد → ایجاد کن
             cmd = ["/usr/sbin/useradd", "-m", username]
             if full_name:
                 cmd.extend(["-c", full_name])
             run_cli_command(cmd, use_sudo=True)
 
-        # تنظیم پسورد سامبا
         run_cli_command(["/usr/bin/smbpasswd", "-a", "-s", username], input=f"{password}\n{password}\n", use_sudo=True)
 
-        # تنظیم تاریخ انقضا
         if expiration_date:
             self.set_user_expiration(username, expiration_date)
 
     def create_samba_group(self, groupname: str) -> None:
-        """ایجاد گروه جدید سامبا."""
+        """
+        ایجاد یک گروه جدید سامبا.
+
+        Args:
+            groupname: نام گروه یونیکس (کوچک، بدون فاصله).
+
+        Raises:
+            CLICommandError: در صورت خطا در ایجاد گروه.
+        """
         try:
             run_cli_command(["/usr/sbin/groupadd", groupname], use_sudo=True)
         except CLICommandError as e:
@@ -157,7 +215,26 @@ class SambaManager:
                 raise
 
     def create_samba_sharepoint(self, name: str, path: str, valid_users: Optional[List[str]] = None, valid_groups: Optional[List[str]] = None, read_only: bool = False, guest_ok: bool = False, browseable: bool = True, max_connections: Optional[int] = None, create_mask: str = "0644", directory_mask: str = "0755", inherit_permissions: bool = False, expiration_time: Optional[str] = None, ) -> None:
-        """ایجاد یک مسیر اشتراکی جدید در smb.conf."""
+        """
+        ایجاد یک مسیر اشتراکی جدید در فایل smb.conf.
+
+        Args:
+            name: نام منحصر به فرد مسیر اشتراکی.
+            path: مسیر فیزیکی در سیستم فایل.
+            valid_users: لیست کاربران مجاز (اختیاری).
+            valid_groups: لیست گروه‌های مجاز (اختیاری).
+            read_only: اگر True باشد، فقط خواندنی است.
+            guest_ok: اگر True باشد، دسترسی مهمان فعال است.
+            browseable: اگر True باشد، در لیست‌های اشتراک قابل مشاهده است.
+            max_connections: حداکثر تعداد اتصال همزمان (اختیاری).
+            create_mask: ماسک دسترسی فایل‌های جدید (پیش‌فرض: "0644").
+            directory_mask: ماسک دسترسی دایرکتوری‌های جدید (پیش‌فرض: "0755").
+            inherit_permissions: ارث‌بری دسترسی‌ها از والد (اختیاری).
+            expiration_time: زمان انقضا (اختیاری، در کامنت ذخیره می‌شود).
+
+        Raises:
+            OSError, IOError: در صورت خطا در دسترسی به smb.conf یا ایجاد مسیر فیزیکی.
+        """
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
             run_cli_command(["/usr/bin/chown", "root:root", path], use_sudo=True)
@@ -180,19 +257,37 @@ class SambaManager:
         self._append_share_to_conf(share_section)
 
     def update_samba_sharepoint(self, name: str, **kwargs: Any) -> None:
-        """به‌روزرسانی تمام پراپرتی‌های یک مسیر اشتراکی موجود."""
+        """
+        به‌روزرسانی تمام پراپرتی‌های یک مسیر اشتراکی موجود.
+
+        Args:
+            name: نام مسیر اشتراکی موجود.
+            **kwargs: پراپرتی‌های جدید برای بروزرسانی.
+
+        Raises:
+            ValueError: اگر مسیر اشتراکی یافت نشود.
+            OSError, IOError: در صورت خطا در دسترسی به smb.conf.
+        """
         shares = self._parse_smb_conf()
         share = next((s for s in shares if s["name"] == name), None)
         if not share:
             raise ValueError(f"مسیر اشتراکی '{name}' یافت نشد.")
 
-        # بروزرسانی مقادیر
         share.update(kwargs)
         new_section = self._build_share_section_from_dict(share)
         self._replace_share_in_conf(name, new_section)
 
     def change_samba_user_password(self, username: str, new_password: str) -> None:
-        """تغییر پسورد کاربر سامبا."""
+        """
+        تغییر رمز عبور یک کاربر سامبا.
+
+        Args:
+            username: نام کاربر.
+            new_password: رمز عبور جدید.
+
+        Raises:
+            CLICommandError: در صورت خطا در تغییر رمز.
+        """
         run_cli_command(
             ["/usr/bin/smbpasswd", "-s", username],
             input=f"{new_password}\n{new_password}\n",
@@ -200,43 +295,94 @@ class SambaManager:
         )
 
     def enable_samba_user(self, username: str) -> None:
-        """فعال‌سازی کاربر سامبا."""
+        """
+        فعال‌سازی یک کاربر سامبا.
+
+        Args:
+            username: نام کاربر.
+
+        Raises:
+            CLICommandError: در صورت خطا در فعال‌سازی.
+        """
         run_cli_command(["/usr/bin/smbpasswd", "-e", username], use_sudo=True)
 
     def disable_samba_user(self, username: str) -> None:
-        """غیرفعال‌سازی کاربر سامبا."""
+        """
+        غیرفعال‌سازی یک کاربر سامبا.
+
+        Args:
+            username: نام کاربر.
+
+        Raises:
+            CLICommandError: در صورت خطا در غیرفعال‌سازی.
+        """
         run_cli_command(["/usr/bin/smbpasswd", "-d", username], use_sudo=True)
 
     def delete_samba_sharepoint(self, name: str) -> None:
-        """حذف یک مسیر اشتراکی از smb.conf."""
+        """
+        حذف یک مسیر اشتراکی از smb.conf.
+
+        Args:
+            name: نام مسیر اشتراکی.
+
+        Raises:
+            OSError, IOError: در صورت خطا در دسترسی به smb.conf.
+        """
         self._remove_share_from_conf(name)
 
     def delete_samba_user_or_group(self, name: str, is_group: bool = False) -> None:
-        """حذف کاربر یا گروه سامبا."""
+        """
+        حذف یک کاربر یا گروه سامبا.
+
+        Args:
+            name: نام کاربر یا گروه.
+            is_group: اگر True باشد، گروه حذف می‌شود؛ در غیر این صورت کاربر.
+
+        Raises:
+            CLICommandError: در صورت خطا در حذف.
+        """
         if is_group:
             run_cli_command(["/usr/sbin/groupdel", name], use_sudo=True)
         else:
             run_cli_command(["/usr/sbin/userdel", "-r", name], use_sudo=True)
-            # حذف از پایگاه سامبا
             try:
                 run_cli_command(["/usr/bin/pdbedit", "-x", name], use_sudo=True)
             except CLICommandError:
-                pass  # ممکن است از قبل حذف شده باشد
+                pass
 
     def set_user_expiration(self, username: str, expiration_date: str) -> None:
-        """تعیین تاریخ انقضا برای کاربر."""
-        # تاریخ به فرمت YYYY-MM-DD
-        from datetime import datetime
+        """
+        تعیین تاریخ انقضا برای کاربر.
+
+        Args:
+            username: نام کاربر.
+            expiration_date: تاریخ به فرمت "YYYY-MM-DD".
+
+        Raises:
+            ValueError: اگر فرمت تاریخ نامعتبر باشد.
+            CLICommandError: در صورت خطا در تنظیم انقضا.
+        """
         dt = datetime.strptime(expiration_date, "%Y-%m-%d")
         epoch_days = (dt - datetime(1970, 1, 1)).days
         run_cli_command(["/usr/bin/smbpasswd", "-e", "-E", str(epoch_days), username], use_sudo=True)
 
     def set_group_expiration(self, groupname: str, expiration_date: str) -> None:
-        """سامبا از انقضای گروه پشتیبانی نمی‌کند؛ اما می‌توانیم در متادیتای داخلی ذخیره کنیم."""
+        """
+        سامبا از انقضای گروه پشتیبانی نمی‌کند. این متد فقط برای سازگاری است.
+
+        Raises:
+            NotImplementedError: همیشه این استثنا رخ می‌دهد.
+        """
         raise NotImplementedError("سامبا از انقضای گروه پشتیبانی نمی‌کند.")
 
     def set_sharepoint_expiration(self, sharepoint_name: str, expiration_time: str) -> None:
-        """تعیین زمان انقضا برای مسیر اشتراکی (معمولًا در کامنت ذخیره می‌شود)."""
+        """
+        تعیین زمان انقضا برای مسیر اشتراکی (در کامنت smb.conf).
+
+        Args:
+            sharepoint_name: نام مسیر اشتراکی.
+            expiration_time: زمان انقضا (هر فرمت رشته‌ای قابل قبول است).
+        """
         self.update_samba_sharepoint(sharepoint_name, expiration_time=expiration_time)
 
     # ----------------------------
@@ -245,7 +391,13 @@ class SambaManager:
 
     def _parse_pdbedit_output(self, output: str) -> List[Dict[str, str]]:
         """
-        Parse output of `pdbedit -L -v` which uses '---------------' as user separator.
+        تجزیه خروجی دستور `pdbedit -L -v` که از '---------------' برای جداکردن کاربران استفاده می‌کند.
+
+        Args:
+            output: خروجی خام دستور pdbedit.
+
+        Returns:
+            لیستی از دیکشنری‌های حاوی جزئیات هر کاربر.
         """
         users = []
         current = {}
@@ -253,30 +405,27 @@ class SambaManager:
 
         for line in lines:
             stripped = line.strip()
-            # اگر خط جداکننده باشد
             if stripped == "---------------":
                 if current:
                     users.append(current)
                     current = {}
                 continue
 
-            # اگر خط خالی یا غیرقابل پارس باشد
             if not stripped or ": " not in stripped:
                 continue
 
-            # تقسیم کلید و مقدار
             key, val = stripped.split(": ", 1)
             key = key.strip()
             val = val.strip()
             current[key] = val
 
-        # اضافه کردن آخرین کاربر
         if current:
             users.append(current)
 
         return users
 
     def _parse_getent_group_output(self, output: str) -> List[Dict[str, Any]]:
+        """تجزیه خروجی دستور `getent group` به لیست گروه‌ها."""
         groups = []
         for line in output.strip().split("\n"):
             if not line:
@@ -291,12 +440,12 @@ class SambaManager:
         return groups
 
     def _parse_smb_conf(self) -> List[Dict[str, Any]]:
+        """خواندن و تجزیه فایل smb.conf برای استخراج مسیرهای اشتراکی."""
         if not os.path.exists(self.SMB_CONF_PATH):
             return []
         with open(self.SMB_CONF_PATH, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # پیدا کردن بخش SOHO
         if self.SOHO_SECTION_MARKER not in content:
             return []
 
@@ -319,7 +468,6 @@ class SambaManager:
                     k, v = line.split("=", 1)
                     props[k.strip()] = v.strip()
 
-            # اضافه کردن expiration اگر وجود داشته باشد (در کامنت)
             exp_match = re.search(r"#Expiration:\s*(\S+)", section_body)
             if exp_match:
                 props["expiration_time"] = exp_match.group(1)
@@ -328,6 +476,7 @@ class SambaManager:
         return shares
 
     def _extract_shared_users_from_conf(self) -> set:
+        """استخراج لیست کاربرانی که در smb.conf استفاده شده‌اند."""
         users = set()
         shares = self._parse_smb_conf()
         for s in shares:
@@ -337,6 +486,7 @@ class SambaManager:
         return users
 
     def _extract_shared_groups_from_conf(self) -> set:
+        """استخراج لیست گروه‌هایی که در smb.conf استفاده شده‌اند."""
         groups = set()
         shares = self._parse_smb_conf()
         for s in shares:
@@ -346,14 +496,16 @@ class SambaManager:
         return groups
 
     def _is_system_user(self, username: str) -> bool:
+        """بررسی اینکه آیا کاربر یک کاربر سیستمی (UID < 1000) است یا خیر."""
         try:
             stdout, _ = run_cli_command(["/usr/bin/id", "-u", username], use_sudo=True)
             uid = int(stdout.strip())
-            return uid < 1000  # معمولاً UID < 1000 برای سیستم
+            return uid < 1000
         except:
             return True
 
     def _is_system_group(self, groupname: str) -> bool:
+        """بررسی اینکه آیا گروه یک گروه سیستمی (GID < 1000) است یا خیر."""
         try:
             stdout, _ = run_cli_command(["/usr/bin/getent", "group", groupname], use_sudo=True)
             gid = int(stdout.strip().split(":")[2])
@@ -362,6 +514,7 @@ class SambaManager:
             return True
 
     def _build_share_section(self, name: str, path: str, valid_users: Optional[List[str]], valid_groups: Optional[List[str]], read_only: bool, guest_ok: bool, browseable: bool, max_connections: Optional[int], create_mask: str, directory_mask: str, inherit_permissions: bool, expiration_time: Optional[str], ) -> str:
+        """ساخت بخش متنی یک مسیر اشتراکی برای افزودن به smb.conf."""
         section = f"#Begin: {name}\n[{name}]\n"
         section += f"path = {path}\n"
         section += f"create mask = {create_mask}\n"
@@ -384,6 +537,7 @@ class SambaManager:
         return section
 
     def _build_share_section_from_dict(self, share: Dict[str, Any]) -> str:
+        """ساخت بخش متنی بر اساس دیکشنری موجود (برای به‌روزرسانی)."""
         return self._build_share_section(
             name=share["name"],
             path=share.get("path", ""),
@@ -400,6 +554,7 @@ class SambaManager:
         )
 
     def _append_share_to_conf(self, section: str) -> None:
+        """افزودن یک مسیر اشتراکی به انتهای smb.conf."""
         with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
             content = f.read()
             if self.SOHO_SECTION_MARKER not in content:
@@ -409,6 +564,7 @@ class SambaManager:
         self._reload_samba()
 
     def _replace_share_in_conf(self, name: str, new_section: str) -> None:
+        """جایگزینی یک مسیر اشتراکی موجود در smb.conf."""
         with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
             content = f.read()
             pattern = rf"#Begin: {re.escape(name)}[\s\S]*?#End: {re.escape(name)}.*?\n\n?"
@@ -419,6 +575,7 @@ class SambaManager:
         self._reload_samba()
 
     def _remove_share_from_conf(self, name: str) -> None:
+        """حذف یک مسیر اشتراکی از smb.conf."""
         with open(self.SMB_CONF_PATH, "r+", encoding="utf-8") as f:
             content = f.read()
             pattern = rf"#Begin: {re.escape(name)}[\s\S]*?#End: {re.escape(name)}.*?\n\n?"
@@ -436,18 +593,21 @@ class SambaManager:
             run_cli_command(["/usr/bin/sudo", "/bin/systemctl", "reload", "smbd"], use_sudo=False)
 
     def get_samba_user_property(self, username: str, prop_key: str) -> Optional[str]:
+        """دریافت مقدار یک پراپرتی خاص از یک کاربر سامبا."""
         user = self.get_samba_users(username=username)
         if user and isinstance(user, dict):
             return user.get(prop_key)
         return None
 
     def get_samba_group_property(self, groupname: str, prop_key: str) -> Optional[str]:
+        """دریافت مقدار یک پراپرتی خاص از یک گروه سامبا."""
         group = self.get_samba_groups(groupname=groupname)
         if group and isinstance(group, dict):
             return group.get(prop_key)
         return None
 
     def get_samba_sharepoint_property(self, name: str, prop_key: str) -> Optional[str]:
+        """دریافت مقدار یک پراپرتی خاص از یک مسیر اشتراکی سامبا."""
         share = self.get_samba_sharepoints(sharepoint_name=name)
         if share and isinstance(share, dict):
             return share.get(prop_key)
