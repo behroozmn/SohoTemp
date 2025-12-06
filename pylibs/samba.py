@@ -19,7 +19,12 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(self, username: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_users(
+        self,
+        username: Optional[str] = None,
+        *,
+        property_name: Optional[str] = None,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات کاربران سامبا.
 
@@ -27,8 +32,6 @@ class SambaManager:
             username: نام کاربر خاص. اگر None باشد، تمام کاربران برگردانده می‌شوند.
             property_name: نام یک پراپرتی خاص برای بازیابی (مثلاً "Logoff time").
                            اگر None باشد، تمام پراپرتی‌ها برگردانده می‌شوند.
-            only_custom_users: اگر True باشد، فقط کاربران غیرسیستمی (custom) برگردانده می‌شوند.
-            only_shared_users: اگر True باشد، فقط کاربرانی که در smb.conf استفاده شده‌اند.
 
         Returns:
             - dict: اگر username مشخص باشد و کاربر یافت شود.
@@ -46,21 +49,9 @@ class SambaManager:
             raise
 
         users = self._parse_pdbedit_output(stdout)
-        shared_users = self._extract_shared_users_from_conf() if only_shared_users else set()
-
-        filtered_users = []
-        for u in users:
-            uname = u.get("Unix username")
-            if uname is None:
-                continue
-            if only_shared_users and uname not in shared_users:
-                continue
-            if only_custom_users and self._is_system_user(uname):
-                continue
-            filtered_users.append(u)
 
         if username:
-            user = next((u for u in filtered_users if u.get("Unix username") == username), None)
+            user = next((u for u in users if u.get("Unix username") == username), None)
             if user is None:
                 return None
             if property_name is not None:
@@ -70,23 +61,26 @@ class SambaManager:
         else:
             if property_name is not None:
                 result = []
-                for u in filtered_users:
+                for u in users:
                     uname = u.get("Unix username")
                     val = u.get(property_name)
                     result.append({"Unix username": uname, property_name: val})
                 return result
             else:
-                return filtered_users
+                return users
 
-    def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_groups: bool = False, only_shared_groups: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_groups(
+        self,
+        groupname: Optional[str] = None,
+        *,
+        property_name: Optional[str] = None,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات گروه‌های سامبا.
 
         Args:
             groupname: نام گروه خاص. اگر None باشد، تمام گروه‌ها برگردانده می‌شوند.
             property_name: نام یک پراپرتی خاص برای بازیابی.
-            only_custom_groups: اگر True باشد، فقط گروه‌های غیرسیستمی برگردانده می‌شوند.
-            only_shared_groups: اگر True باشد، فقط گروه‌هایی که در smb.conf استفاده شده‌اند.
 
         Returns:
             - dict: اگر groupname مشخص باشد و گروه یافت شود.
@@ -104,39 +98,33 @@ class SambaManager:
             raise
 
         groups = self._parse_getent_group_output(stdout)
-        shared_groups = self._extract_shared_groups_from_conf() if only_shared_groups else set()
 
         if groupname:
             group = next((g for g in groups if g["name"] == groupname), None)
             if not group:
                 return None
-            if only_shared_groups and groupname not in shared_groups:
-                return None
             if property_name:
                 return group.get(property_name)
             return group
         else:
-            filtered_groups = []
-            for g in groups:
-                gname = g["name"]
-                if only_shared_groups and gname not in shared_groups:
-                    continue
-                if only_custom_groups and self._is_system_group(gname):
-                    continue
-                if property_name:
-                    filtered_groups.append({gname: g.get(property_name)})
-                else:
-                    filtered_groups.append(g)
-            return filtered_groups
+            if property_name:
+                return [{g["name"]: g.get(property_name)} for g in groups]
+            else:
+                return groups
 
-    def get_samba_sharepoints(self, sharepoint_name: Optional[str] = None, *, property_name: Optional[str] = None, only_custom_shares: bool = False, only_active_shares: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_sharepoints(
+        self,
+        sharepoint_name: Optional[str] = None,
+        *,
+        property_name: Optional[str] = None,
+        only_active_shares: bool = False,
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات مسیرهای اشتراکی سامبا از smb.conf.
 
         Args:
             sharepoint_name: نام مسیر اشتراکی خاص. اگر None باشد، تمام مسیرها برگردانده می‌شوند.
             property_name: نام یک پراپرتی خاص برای بازیابی.
-            only_custom_shares: اگر True باشد، فقط مسیرهای ایجادشده توسط مدیر سیستم برگردانده می‌شوند.
             only_active_shares: اگر True باشد، فقط مسیرهایی که available=yes هستند.
 
         Returns:
@@ -156,21 +144,14 @@ class SambaManager:
             share = next((s for s in shares if s["name"] == sharepoint_name), None)
             if not share:
                 return None
-            if only_custom_shares and not share.get("is_custom", False):
-                return None
             if property_name:
                 return share.get(property_name)
             return share
         else:
-            filtered = []
-            for s in shares:
-                if only_custom_shares and not s.get("is_custom", False):
-                    continue
-                if property_name:
-                    filtered.append({s["name"]: s.get(property_name)})
-                else:
-                    filtered.append(s)
-            return filtered
+            if property_name:
+                return [{s["name"]: s.get(property_name)} for s in shares]
+            else:
+                return shares
 
     def create_samba_user(self, username: str, password: str, full_name: Optional[str] = None, expiration_date: Optional[str] = None, ) -> None:
         """
@@ -492,44 +473,6 @@ class SambaManager:
 
             shares.append(props)
         return shares
-
-    def _extract_shared_users_from_conf(self) -> set:
-        """استخراج لیست کاربرانی که در smb.conf استفاده شده‌اند."""
-        users = set()
-        shares = self._parse_smb_conf()
-        for s in shares:
-            vu = s.get("valid users", "")
-            if vu:
-                users.update(u.strip() for u in vu.split(",") if u.strip())
-        return users
-
-    def _extract_shared_groups_from_conf(self) -> set:
-        """استخراج لیست گروه‌هایی که در smb.conf استفاده شده‌اند."""
-        groups = set()
-        shares = self._parse_smb_conf()
-        for s in shares:
-            vg = s.get("valid groups", "")
-            if vg:
-                groups.update(g.strip() for g in vg.split(",") if g.strip())
-        return groups
-
-    def _is_system_user(self, username: str) -> bool:
-        """بررسی اینکه آیا کاربر یک کاربر سیستمی (UID < 1000) است یا خیر."""
-        try:
-            stdout, _ = run_cli_command(["/usr/bin/id", "-u", username], use_sudo=True)
-            uid = int(stdout.strip())
-            return uid < 1000
-        except:
-            return True
-
-    def _is_system_group(self, groupname: str) -> bool:
-        """بررسی اینکه آیا گروه یک گروه سیستمی (GID < 1000) است یا خیر."""
-        try:
-            stdout, _ = run_cli_command(["/usr/bin/getent", "group", groupname], use_sudo=True)
-            gid = int(stdout.strip().split(":")[2])
-            return gid < 1000
-        except:
-            return True
 
     def _build_share_section(self, name: str, path: str, valid_users: Optional[List[str]], valid_groups: Optional[List[str]], read_only: bool, guest_ok: bool, browseable: bool, max_connections: Optional[int], create_mask: str, directory_mask: str, inherit_permissions: bool, expiration_time: Optional[str], ) -> str:
         """ساخت بخش متنی یک مسیر اشتراکی برای افزودن به smb.conf."""

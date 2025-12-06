@@ -11,7 +11,8 @@ from pylibs import (
     QuerySaveToDB,
     BodyParameterSaveToDB,
     StandardResponse,
-    StandardErrorResponse, CLICommandError,
+    StandardErrorResponse,
+    CLICommandError,
 )
 from pylibs.samba import SambaManager
 from pylibs.mixins import (
@@ -22,37 +23,46 @@ from pylibs.mixins import (
 from drf_spectacular.utils import inline_serializer
 from rest_framework import serializers
 
-# OpenAPI Parameters مشترک
-ParamProperty = OpenApiParameter(name="property", type=str, required=False,
-                                 description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
-                                 examples=[OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
-                                           OpenApiExample("نام کاربری یونیکس", value="Unix username"),
-                                           OpenApiExample("نام کاربری ویندوز (NT)", value="NT username"),
-                                           OpenApiExample("پرچم‌های حساب", value="Account Flags"),
-                                           OpenApiExample("شناسه کاربر (User SID)", value="User SID"),
-                                           OpenApiExample("شناسه گروه اصلی", value="Primary Group SID"),
-                                           OpenApiExample("نام کامل", value="Full Name"),
-                                           OpenApiExample("مسیر home", value="Home Directory"),
-                                           OpenApiExample("درایو home", value="HomeDir Drive"),
-                                           OpenApiExample("اسکریپت ورود", value="Logon Script"),
-                                           OpenApiExample("مسیر پروفایل", value="Profile Path"),
-                                           OpenApiExample("دامنه", value="Domain"),
-                                           OpenApiExample("توضیحات حساب", value="Account desc"),
-                                           OpenApiExample("ورک‌استیشن‌های مجاز", value="Workstations"),
-                                           OpenApiExample("اطلاعات تماس", value="Munged dial"),
-                                           OpenApiExample("زمان آخرین ورود", value="Logon time"),
-                                           OpenApiExample("زمان انقضا (Logoff time)", value="Logoff time"),
-                                           OpenApiExample("زمان حذف اجباری", value="Kickoff time"),
-                                           OpenApiExample("آخرین تغییر رمز", value="Password last set"),
-                                           OpenApiExample("امکان تغییر رمز", value="Password can change"),
-                                           OpenApiExample("تاریخ اجباری تغییر رمز", value="Password must change"),
-                                           OpenApiExample("آخرین رمز اشتباه", value="Last bad password"),
-                                           OpenApiExample("تعداد رمزهای اشتباه", value="Bad password count"),
-                                           OpenApiExample("ساعت‌های مجاز ورود", value="Logon hours"), ])
-ParamOnlyCustom = OpenApiParameter(name="only_custom", type=bool, required=False, default="false", description="فقط موارد ایجادشده توسط مدیر سیستم")
-ParamOnlyShared = OpenApiParameter(name="only_shared", type=bool, required=False, default="false", description="فقط مواردی که در smb.conf استفاده شده‌اند")
-ParamOnlyActive = OpenApiParameter(name="only_active", type=bool, required=False, default="false", description="فقط مسیرهای اشتراکی فعال (available=yes)")
-
+# OpenAPI Parameters
+ParamProperty = OpenApiParameter(
+    name="property",
+    type=str,
+    required=False,
+    description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
+    examples=[
+        OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
+        OpenApiExample("نام کاربری یونیکس", value="Unix username"),
+        OpenApiExample("نام کاربری ویندوز (NT)", value="NT username"),
+        OpenApiExample("پرچم‌های حساب", value="Account Flags"),
+        OpenApiExample("شناسه کاربر (User SID)", value="User SID"),
+        OpenApiExample("شناسه گروه اصلی", value="Primary Group SID"),
+        OpenApiExample("نام کامل", value="Full Name"),
+        OpenApiExample("مسیر home", value="Home Directory"),
+        OpenApiExample("درایو home", value="HomeDir Drive"),
+        OpenApiExample("اسکریپت ورود", value="Logon Script"),
+        OpenApiExample("مسیر پروفایل", value="Profile Path"),
+        OpenApiExample("دامنه", value="Domain"),
+        OpenApiExample("توضیحات حساب", value="Account desc"),
+        OpenApiExample("ورک‌استیشن‌های مجاز", value="Workstations"),
+        OpenApiExample("اطلاعات تماس", value="Munged dial"),
+        OpenApiExample("زمان آخرین ورود", value="Logon time"),
+        OpenApiExample("زمان انقضا (Logoff time)", value="Logoff time"),
+        OpenApiExample("زمان حذف اجباری", value="Kickoff time"),
+        OpenApiExample("آخرین تغییر رمز", value="Password last set"),
+        OpenApiExample("امکان تغییر رمز", value="Password can change"),
+        OpenApiExample("تاریخ اجباری تغییر رمز", value="Password must change"),
+        OpenApiExample("آخرین رمز اشتباه", value="Last bad password"),
+        OpenApiExample("تعداد رمزهای اشتباه", value="Bad password count"),
+        OpenApiExample("ساعت‌های مجاز ورود", value="Logon hours"),
+    ]
+)
+ParamOnlyActive = OpenApiParameter(
+    name="only_active",
+    type=bool,
+    required=False,
+    default="false",
+    description="فقط مسیرهای اشتراکی فعال (available=yes)"
+)
 
 # ========== User View ==========
 class SambaUserView(APIView, SambaUserValidationMixin):
@@ -61,23 +71,22 @@ class SambaUserView(APIView, SambaUserValidationMixin):
     پشتیبانی از عملیات: دریافت لیست/جزئیات، ایجاد، تغییر رمز، فعال/غیرفعال کردن، حذف.
     """
 
-    @extend_schema(parameters=[
-                                  OpenApiParameter(
-                                      name="username",
-                                      type=str,
-                                      location="path",
-                                      required=False,
-                                      description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."
-                                  ),
-                                  ParamProperty,
-                                  ParamOnlyCustom,
-                                  ParamOnlyShared,
-                              ] + QuerySaveToDB,
-                   responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="username",
+                type=str,
+                location="path",
+                required=False,
+                description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."
+            ),
+            ParamProperty,
+        ] + QuerySaveToDB,
+        responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})}
+    )
     def get(self, request: Request, username: Optional[str] = None) -> Response:
         """
         دریافت اطلاعات کاربر(ها) سامبا.
-
         - اگر `username` داده شود: جزئیات یک کاربر خاص.
         - اگر `username` داده نشود: لیست تمام کاربران.
         - با پارامتر `property` می‌توان فقط یک پراپرتی خاص را دریافت کرد.
@@ -86,20 +95,16 @@ class SambaUserView(APIView, SambaUserValidationMixin):
         prop_key = get_request_param(request, "property", str, None)
         if prop_key:
             prop_key = prop_key.strip()
-        only_custom = get_request_param(request, "only_custom", bool, False)
-        only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
 
         try:
             manager = SambaManager()
 
             if username:
-                # --- اعتبارسنجی وجود کاربر ---
                 error_resp = self._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
                 if error_resp:
                     return error_resp
 
-                # --- دریافت پراپرتی خاص ---
                 if prop_key and prop_key.lower() != "all":
                     value = manager.get_samba_user_property(username, prop_key)
                     if value is None:
@@ -117,8 +122,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                         message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد."
                     )
                 else:
-                    # --- دریافت تمام اطلاعات کاربر ---
-                    data = manager.get_samba_users(username=username, only_custom_users=only_custom, only_shared_users=only_shared, )
+                    data = manager.get_samba_users(username=username)
                     if data is None:
                         return StandardErrorResponse(
                             request_data=request_data,
@@ -134,7 +138,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                         message="جزئیات کاربر سامبا با موفقیت بازیابی شد."
                     )
             else:
-                data = manager.get_samba_users(only_custom_users=only_custom, only_shared_users=only_shared, )
+                data = manager.get_samba_users()
                 if prop_key and prop_key.lower() != "all":
                     filtered = []
                     for user_dict in data:
@@ -165,17 +169,19 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا."
             )
 
-    @extend_schema(request={"application/json": {
-        "type": "object",
-        "properties": {
-            "password": {"type": "string", "description": "رمز عبور کاربر"},
-            "full_name": {"type": "string", "description": "نام کامل کاربر"},
-            "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
-            **BodyParameterSaveToDB["properties"]
-        },
-        "required": ["password"]
-    }},
-        responses={201: StandardResponse})
+    @extend_schema(
+        request={"application/json": {
+            "type": "object",
+            "properties": {
+                "password": {"type": "string", "description": "رمز عبور کاربر"},
+                "full_name": {"type": "string", "description": "نام کامل کاربر"},
+                "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
+                **BodyParameterSaveToDB["properties"]
+            },
+            "required": ["password"]
+        }},
+        responses={201: StandardResponse}
+    )
     def post(self, request: Request, username: str) -> Response:
         """
         ایجاد یک کاربر جدید سامبا.
@@ -212,24 +218,26 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 save_to_db=save_to_db,
             )
 
-    @extend_schema(parameters=[
-                                  OpenApiParameter(
-                                      name="username", type=str, location="path", required=True,
-                                      description="نام کاربر سامبا"
-                                  ),
-                                  OpenApiParameter(
-                                      name="action", type=str, required=True, enum=["enable", "disable", "change_password"],
-                                      description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"
-                                  ),
-                              ] + QuerySaveToDB,
-                   request={"application/json": {
-                       "type": "object",
-                       "properties": {
-                           "new_password": {"type": "string", "description": "رمز عبور جدید (فقط برای action=change_password)"},
-                           **BodyParameterSaveToDB["properties"]
-                       }
-                   }},
-                   responses={200: StandardResponse})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="username", type=str, location="path", required=True,
+                description="نام کاربر سامبا"
+            ),
+            OpenApiParameter(
+                name="action", type=str, required=True, enum=["enable", "disable", "change_password"],
+                description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"
+            ),
+        ] + QuerySaveToDB,
+        request={"application/json": {
+            "type": "object",
+            "properties": {
+                "new_password": {"type": "string", "description": "رمز عبور جدید (فقط برای action=change_password)"},
+                **BodyParameterSaveToDB["properties"]
+            }
+        }},
+        responses={200: StandardResponse}
+    )
     def put(self, request: Request, username: str) -> Response:
         """
         انجام عملیات‌های زیر روی یک کاربر سامبا:
@@ -290,11 +298,11 @@ class SambaUserView(APIView, SambaUserValidationMixin):
 
     @extend_schema(
         parameters=[
-                       OpenApiParameter(
-                           name="username", type=str, location="path", required=True,
-                           description="نام کاربر سامبا"
-                       ),
-                   ] + QuerySaveToDB,
+            OpenApiParameter(
+                name="username", type=str, location="path", required=True,
+                description="نام کاربر سامبا"
+            ),
+        ] + QuerySaveToDB,
         responses={200: StandardResponse}
     )
     def delete(self, request: Request, username: str) -> Response:
@@ -313,10 +321,8 @@ class SambaUserView(APIView, SambaUserValidationMixin):
         manager = SambaManager()
 
         try:
-            # مرحله ۱: حذف از پایگاه سامبا
             manager.delete_samba_user_from_samba_db(username)
         except CLICommandError as e:
-            # اگر کاربر در سامبا نبود، خطا را نادیده بگیر (مانند حذف دستی قبلی)
             if "Failed to find" in e.stderr or "does not exist" in e.stderr:
                 pass
             else:
@@ -329,7 +335,6 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 )
 
         try:
-            # مرحله ۲: حذف از سیستم لینوکس
             manager.delete_samba_user_from_system(username)
             return StandardResponse(
                 message=f"کاربر '{username}' با موفقیت حذف شد.",
@@ -348,20 +353,18 @@ class SambaUserView(APIView, SambaUserValidationMixin):
 
 # ========== Group View ==========
 class SambaGroupView(APIView, SambaGroupValidationMixin):
+
     @extend_schema(
         parameters=[
-                       OpenApiParameter(name="groupname", type=str, location="path", required=False),
-                       ParamProperty,
-                       ParamOnlyCustom,
-                       ParamOnlyShared,
-                   ] + QuerySaveToDB)
+            OpenApiParameter(name="groupname", type=str, location="path", required=False),
+            ParamProperty,
+        ] + QuerySaveToDB
+    )
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key:
             prop_key = prop_key.strip()
-        only_custom = get_request_param(request, "only_custom", bool, False)
-        only_shared = get_request_param(request, "only_shared", bool, False)
         request_data = dict(request.query_params)
 
         try:
@@ -389,11 +392,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                         message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد."
                     )
                 else:
-                    data = manager.get_samba_groups(
-                        groupname=groupname,
-                        only_custom_groups=only_custom,
-                        only_shared_groups=only_shared,
-                    )
+                    data = manager.get_samba_groups(groupname=groupname)
                     if data is None:
                         return StandardErrorResponse(
                             request_data=request_data,
@@ -409,10 +408,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                         message="جزئیات گروه سامبا با موفقیت بازیابی شد."
                     )
             else:
-                data = manager.get_samba_groups(
-                    only_custom_groups=only_custom,
-                    only_shared_groups=only_shared,
-                )
+                data = manager.get_samba_groups()
                 if prop_key and prop_key.lower() != "all":
                     filtered = []
                     for group_dict in data:
@@ -448,7 +444,8 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
             "type": "object",
             "properties": {**BodyParameterSaveToDB["properties"]},
             "required": []
-        }})
+        }}
+    )
     def post(self, request: Request, groupname: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -477,11 +474,11 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
 
     @extend_schema(
         parameters=[
-                       OpenApiParameter(
-                           name="groupname", type=str, location="path", required=True,
-                           description="نام گروه سامبا"
-                       ),
-                   ] + QuerySaveToDB,
+            OpenApiParameter(
+                name="groupname", type=str, location="path", required=True,
+                description="نام گروه سامبا"
+            ),
+        ] + QuerySaveToDB,
         responses={200: StandardResponse}
     )
     def delete(self, request: Request, groupname: str) -> Response:
@@ -515,19 +512,19 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
 
 # ========== Sharepoint View ==========
 class SambaSharepointView(APIView, SambaSharepointValidationMixin):
+
     @extend_schema(
         parameters=[
-                       OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
-                       ParamProperty,
-                       ParamOnlyCustom,
-                       ParamOnlyActive,
-                   ] + QuerySaveToDB)
+            OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
+            ParamProperty,
+            ParamOnlyActive,
+        ] + QuerySaveToDB
+    )
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key:
             prop_key = prop_key.strip()
-        only_custom = get_request_param(request, "only_custom", bool, False)
         only_active = get_request_param(request, "only_active", bool, False)
         request_data = dict(request.query_params)
 
@@ -558,7 +555,6 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                 else:
                     data = manager.get_samba_sharepoints(
                         sharepoint_name=sharepoint_name,
-                        only_custom_shares=only_custom,
                         only_active_shares=only_active,
                     )
                     if data is None:
@@ -576,10 +572,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                         message="جزئیات مسیر اشتراکی سامبا با موفقیت بازیابی شد."
                     )
             else:
-                data = manager.get_samba_sharepoints(
-                    only_custom_shares=only_custom,
-                    only_active_shares=only_active,
-                )
+                data = manager.get_samba_sharepoints(only_active_shares=only_active)
                 if prop_key and prop_key.lower() != "all":
                     filtered = []
                     for share_dict in data:
@@ -628,7 +621,8 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                 **BodyParameterSaveToDB["properties"]
             },
             "required": ["path"]
-        }})
+        }}
+    )
     def post(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -673,7 +667,8 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
             )
 
     @extend_schema(
-        request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}})
+        request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}}
+    )
     def put(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
