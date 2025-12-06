@@ -295,9 +295,7 @@ def run_cli_command(command: List[str], *, timeout: int = 60, check: bool = True
     print(full_cmd)
     try:
         # اگر input داده شده باشد، stdin باید باز باشد
-        stdin = subprocess.PIPE if input is not None else None
-
-        result = subprocess.run(full_cmd, input=input, stdin=stdin, capture_output=capture_output, text=True, timeout=timeout, check=check, )
+        result = subprocess.run(full_cmd, input=input, capture_output=capture_output, text=True, timeout=timeout, check=check, )
         stdout = result.stdout.strip() if result.stdout else ""
         stderr = result.stderr.strip() if result.stderr else ""
 

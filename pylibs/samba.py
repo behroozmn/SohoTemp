@@ -19,15 +19,7 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(
-            self,
-            username: Optional[str] = None,
-            *,
-            all_props: bool = True,
-            property_name: Optional[str] = None,
-            only_custom_users: bool = False,
-            only_shared_users: bool = False,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_users(self, username: Optional[str] = None, *, all_props: bool = True, property_name: Optional[str] = None, only_custom_users: bool = False, only_shared_users: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         try:
             stdout, _ = run_cli_command(["/usr/bin/pdbedit", "-L", "-v"], use_sudo=True)
         except CLICommandError as e:
@@ -252,19 +244,36 @@ class SambaManager:
     # ----------------------------
 
     def _parse_pdbedit_output(self, output: str) -> List[Dict[str, str]]:
+        """
+        Parse output of `pdbedit -L -v` which uses '---------------' as user separator.
+        """
         users = []
         current = {}
-        for line in output.strip().split("\n"):
-            if line.strip() == "":
+        lines = output.strip().split("\n")
+
+        for line in lines:
+            stripped = line.strip()
+            # اگر خط جداکننده باشد
+            if stripped == "---------------":
                 if current:
                     users.append(current)
                     current = {}
                 continue
-            if ":" in line:
-                key, val = line.split(":", 1)
-                current[key.strip()] = val.strip()
+
+            # اگر خط خالی یا غیرقابل پارس باشد
+            if not stripped or ": " not in stripped:
+                continue
+
+            # تقسیم کلید و مقدار
+            key, val = stripped.split(": ", 1)
+            key = key.strip()
+            val = val.strip()
+            current[key] = val
+
+        # اضافه کردن آخرین کاربر
         if current:
             users.append(current)
+
         return users
 
     def _parse_getent_group_output(self, output: str) -> List[Dict[str, Any]]:
