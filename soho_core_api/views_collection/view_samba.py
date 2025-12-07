@@ -409,6 +409,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                                                      "directory_mask": {"type": "string", "default": "0755"},
                                                      "inherit_permissions": {"type": "boolean", "default": False},
                                                      "expiration_time": {"type": "string"},
+                                                     "available": {"type": "boolean", "default": True},
                                                      **BodyParameterSaveToDB["properties"]},
                                       "required": ["path"]}})
     def post(self, request: Request, sharepoint_name: str) -> Response:
@@ -430,6 +431,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                                                    valid_users=get_request_param(request, "valid_users", list, None),
                                                    valid_groups=get_request_param(request, "valid_groups", list, None),
                                                    read_only=get_request_param(request, "read_only", bool, False),
+                                                   available=get_request_param(request, "available", bool, True),
                                                    guest_ok=get_request_param(request, "guest_ok", bool, False),
                                                    browseable=get_request_param(request, "browseable", bool, True),
                                                    max_connections=get_request_param(request, "max_connections", int, None),

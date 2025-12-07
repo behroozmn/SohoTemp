@@ -203,7 +203,7 @@ class SambaManager:
             if "already exists" not in str(e):
                 raise
 
-    def create_samba_sharepoint(self, name: str, path: str, valid_users: Optional[List[str]] = None, valid_groups: Optional[List[str]] = None, read_only: bool = False, guest_ok: bool = False, browseable: bool = True, max_connections: Optional[int] = None, create_mask: str = "0644", directory_mask: str = "0755", inherit_permissions: bool = False, expiration_time: Optional[str] = None, ) -> None:
+    def create_samba_sharepoint(self, name: str, path: str, valid_users: Optional[List[str]] = None, valid_groups: Optional[List[str]] = None, read_only: bool = False, guest_ok: bool = False, browseable: bool = True, max_connections: Optional[int] = None, create_mask: str = "0644", directory_mask: str = "0755", inherit_permissions: bool = False, expiration_time: Optional[str] = None, available: bool = True,) -> None:
         """
         ایجاد یک مسیر اشتراکی جدید در فایل smb.conf.
 
@@ -221,6 +221,8 @@ class SambaManager:
             directory_mask: ماسک دسترسی دایرکتوری‌های جدید (پیش‌فرض: "0755").
             inherit_permissions: ارث‌بری دسترسی‌ها از والد (اختیاری).
             expiration_time: زمان انقضا (اختیاری، در کامنت ذخیره می‌شود).
+            available: اگر True باشد، مسیر اشتراکی فعال است (پیش‌فرض: True).
+
 
         Raises:
             OSError, IOError: در صورت خطا در دسترسی به smb.conf یا ایجاد مسیر فیزیکی.
@@ -241,7 +243,8 @@ class SambaManager:
             create_mask=create_mask,
             directory_mask=directory_mask,
             inherit_permissions=inherit_permissions,
-            expiration_time=expiration_time
+            expiration_time=expiration_time,
+            available=available,
         )
 
         self._append_share_to_conf(share_section)
@@ -494,7 +497,7 @@ class SambaManager:
             shares.append(props)
         return shares
 
-    def _build_share_section(self, name: str, path: str, valid_users: Optional[List[str]], valid_groups: Optional[List[str]], read_only: bool, guest_ok: bool, browseable: bool, max_connections: Optional[int], create_mask: str, directory_mask: str, inherit_permissions: bool, expiration_time: Optional[str], ) -> str:
+    def _build_share_section(self, name: str, path: str, valid_users: Optional[List[str]], valid_groups: Optional[List[str]], read_only: bool, guest_ok: bool, browseable: bool, max_connections: Optional[int], create_mask: str, directory_mask: str, inherit_permissions: bool, expiration_time: Optional[str], available: bool = True,) -> str:
         """ساخت بخش متنی یک مسیر اشتراکی برای افزودن به smb.conf."""
         section = f"#Begin: {name}\n[{name}]\n"
         section += f"path = {path}\n"
@@ -503,7 +506,7 @@ class SambaManager:
         if max_connections is not None:
             section += f"max connections = {max_connections}\n"
         section += f"read only = {'yes' if read_only else 'no'}\n"
-        section += f"available = yes\n"
+        section += f"available = {'yes' if available else 'no'}\n"  # ← فقط این خط
         section += f"guest ok = {'yes' if guest_ok else 'no'}\n"
         section += f"browseable = {'yes' if browseable else 'no'}\n"
         section += f"inherit permissions = {'yes' if inherit_permissions else 'no'}\n"
@@ -532,6 +535,7 @@ class SambaManager:
             directory_mask=share.get("directory mask", "0755"),
             inherit_permissions=share.get("inherit permissions", "no").lower() == "yes",
             expiration_time=share.get("expiration_time"),
+            available=share.get("available", "yes").lower() == "yes",
         )
 
     def _append_share_to_conf(self, section: str) -> None:
