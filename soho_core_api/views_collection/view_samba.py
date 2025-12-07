@@ -24,9 +24,7 @@ from drf_spectacular.utils import inline_serializer
 from rest_framework import serializers
 
 # OpenAPI Parameters
-ParamProperty = OpenApiParameter(name="property",
-                                 type=str,
-                                 required=False,
+ParamProperty = OpenApiParameter(name="property", type=str, required=False,
                                  description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها. اگر ارسال نشود، معادل "all" در نظر گرفته می‌شود.',
                                  examples=[OpenApiExample("دریافت همه پراپرتی‌ها", value="all"),
                                            OpenApiExample("نام کاربری یونیکس", value="Unix username"),
@@ -52,10 +50,7 @@ ParamProperty = OpenApiParameter(name="property",
                                            OpenApiExample("آخرین رمز اشتباه", value="Last bad password"),
                                            OpenApiExample("تعداد رمزهای اشتباه", value="Bad password count"),
                                            OpenApiExample("ساعت‌های مجاز ورود", value="Logon hours"), ])
-ParamOnlyActive = OpenApiParameter(name="only_active",
-                                   type=bool,
-                                   required=False,
-                                   default="false",
+ParamOnlyActive = OpenApiParameter(name="only_active", type=bool, required=False, default="false",
                                    description="فقط مسیرهای اشتراکی فعال (available=yes)")
 
 
@@ -66,10 +61,7 @@ class SambaUserView(APIView, SambaUserValidationMixin):
     پشتیبانی از عملیات: دریافت لیست/جزئیات، ایجاد، تغییر رمز، فعال/غیرفعال کردن، حذف.
     """
 
-    @extend_schema(parameters=[OpenApiParameter(name="username",
-                                                type=str,
-                                                location="path",
-                                                required=False,
+    @extend_schema(parameters=[OpenApiParameter(name="username", type=str, location="path", required=False,
                                                 description="نام کاربر سامبا. اگر ارسال نشود، لیست تمام کاربران برگردانده می‌شود."), ParamProperty, ] + QuerySaveToDB,
                    responses={200: inline_serializer("SambaUserResponse", {"data": serializers.JSONField()})})
     def get(self, request: Request, username: Optional[str] = None) -> Response:
@@ -96,27 +88,13 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                 if prop_key and prop_key.lower() != "all":
                     value = manager.get_samba_user_property(username, prop_key)
                     if value is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="property_not_found",
-                                                     error_message=f"پراپرتی '{prop_key}' در کاربر '{username}' یافت نشد.")
-                    return StandardResponse(data={prop_key: value},
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در کاربر '{username}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(data={prop_key: value}, message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
                 else:
                     data = manager.get_samba_users(username=username)
                     if data is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="user_not_found",
-                                                     error_message=f"کاربر '{username}' یافت نشد.")
-                    return StandardResponse(data=data,
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message="جزئیات کاربر سامبا با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(error_code="user_not_found", error_message=f"کاربر '{username}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(message="جزئیات کاربر سامبا با موفقیت بازیابی شد.", data=data, request_data=request_data, save_to_db=save_to_db, )
             else:
                 data = manager.get_samba_users()
                 if prop_key and prop_key.lower() != "all":
@@ -133,31 +111,19 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                             filtered.append({"username": "unknown", prop_key: None})
                     data = filtered
 
-                return StandardResponse(data=data,
-                                        request_data=request_data,
-                                        save_to_db=save_to_db,
-                                        message="لیست کاربران سامبا با موفقیت بازیابی شد.")
+                return StandardResponse(data=data, message="لیست کاربران سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
 
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db,
-                                                 error_code="samba_user_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا.")
+            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed", error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
     @extend_schema(request={"application/json": {"type": "object",
-                                                 "properties": {
-                                                     "password": {"type": "string", "description": "رمز عبور کاربر"},
-                                                     "full_name": {"type": "string", "description": "نام کامل کاربر"},
-                                                     "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
-                                                     **BodyParameterSaveToDB["properties"]},
-                                                 "required": ["password"]}},
-                   responses={201: StandardResponse}
-                   )
+                                                 "properties": {"password": {"type": "string", "description": "رمز عبور کاربر"},
+                                                                "full_name": {"type": "string", "description": "نام کامل کاربر"},
+                                                                "expiration_date": {"type": "string", "format": "date", "description": "تاریخ انقضا به فرمت YYYY-MM-DD"},
+                                                                **BodyParameterSaveToDB["properties"]},
+                                                 "required": ["password"]}}, responses={201: StandardResponse})
     def post(self, request: Request, username: str) -> Response:
-        """
-        ایجاد یک کاربر جدید سامبا.
-        """
+        """ایجاد یک کاربر جدید سامبا."""
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
 
@@ -175,16 +141,9 @@ class SambaUserView(APIView, SambaUserValidationMixin):
 
         try:
             SambaManager().create_samba_user(username, password, full_name, expiration)
-            return StandardResponse(message=f"کاربر سامبا '{username}' با موفقیت ایجاد شد.",
-                                    request_data=request_data,
-                                    save_to_db=save_to_db,
-                                    status=201, )
+            return StandardResponse(message=f"کاربر سامبا '{username}' با موفقیت ایجاد شد.", status=201, request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_user_create_failed",
-                                                 error_message="خطا در ایجاد کاربر سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(error_code="samba_user_create_failed", error_message="خطا در ایجاد کاربر سامبا.", exc=exc, request_data=request_data, save_to_db=save_to_db, )
 
     @extend_schema(parameters=[OpenApiParameter(name="username", type=str, location="path", required=True, description="نام کاربر سامبا"),
                                OpenApiParameter(name="action", type=str, required=True, enum=["enable", "disable", "change_password"], description="عملیات مورد نظر: فعال‌سازی، غیرفعال‌سازی یا تغییر رمز"), ] + QuerySaveToDB,
@@ -216,34 +175,17 @@ class SambaUserView(APIView, SambaUserValidationMixin):
             elif action == "change_password":
                 new_password = get_request_param(request, "new_password", str, None)
                 if not new_password:
-                    return StandardErrorResponse(error_code="missing_new_password",
-                                                 error_message="رمز عبور جدید اجباری است.",
-                                                 status=400,
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+                    return StandardErrorResponse(error_code="missing_new_password", error_message="رمز عبور جدید اجباری است.", status=400, request_data=request_data, save_to_db=save_to_db, )
                 manager.change_samba_user_password(username, new_password)
                 message = f"رمز عبور کاربر '{username}' با موفقیت تغییر کرد."
             else:
-                return StandardErrorResponse(error_code="invalid_action",
-                                             error_message="مقدار action باید یکی از مقادیر 'enable', 'disable' یا 'change_password' باشد.",
-                                             status=400,
-                                             request_data=request_data,
-                                             save_to_db=save_to_db,
-                                             )
-
-            return StandardResponse(message=message,
-                                    request_data=request_data,
-                                    save_to_db=save_to_db, )
+                return StandardErrorResponse(error_code="invalid_action", error_message="مقدار action باید یکی از مقادیر 'enable', 'disable' یا 'change_password' باشد.", status=400, request_data=request_data, save_to_db=save_to_db, )
+            return StandardResponse(message=message, request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_user_operation_failed",
-                                                 error_message="خطا در انجام عملیات روی کاربر سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_user_operation_failed", error_message="خطا در انجام عملیات روی کاربر سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
-    @extend_schema(
-        parameters=[OpenApiParameter(name="username", type=str, location="path", required=True,
-                                     description="نام کاربر سامبا"), ] + QuerySaveToDB, responses={200: StandardResponse})
+    @extend_schema(parameters=[OpenApiParameter(name="username", type=str, location="path", required=True, description="نام کاربر سامبا"), ] + QuerySaveToDB,
+                   responses={200: StandardResponse})
     def delete(self, request: Request, username: str) -> Response:
         """
         حذف کاربر سامبا:
@@ -265,23 +207,13 @@ class SambaUserView(APIView, SambaUserValidationMixin):
             if "Failed to find" in e.stderr or "does not exist" in e.stderr:
                 pass
             else:
-                return build_standard_error_response(exc=e,
-                                                     error_code="samba_user_samba_db_delete_failed",
-                                                     error_message="خطا در حذف کاربر از پایگاه داده سامبا.",
-                                                     request_data=request_data,
-                                                     save_to_db=save_to_db, )
+                return build_standard_error_response(exc=e, error_code="samba_user_samba_db_delete_failed", error_message="خطا در حذف کاربر از پایگاه داده سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
         try:
             manager.delete_samba_user_from_system(username)
-            return StandardResponse(message=f"کاربر '{username}' با موفقیت حذف شد.",
-                                    request_data=request_data,
-                                    save_to_db=save_to_db, )
+            return StandardResponse(request_data=request_data, message=f"کاربر '{username}' با موفقیت حذف شد.", save_to_db=save_to_db, )
         except CLICommandError as e:
-            return build_standard_error_response(exc=e,
-                                                 error_code="samba_user_system_delete_failed",
-                                                 error_message="خطا در حذف کاربر از سیستم لینوکس.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=e, error_code="samba_user_system_delete_failed", error_message="خطا در حذف کاربر از سیستم لینوکس.", request_data=request_data, save_to_db=save_to_db)
 
 
 # ========== Group View ==========
@@ -307,27 +239,13 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 if prop_key and prop_key.lower() != "all":
                     value = manager.get_samba_group_property(groupname, prop_key)
                     if value is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="property_not_found",
-                                                     error_message=f"پراپرتی '{prop_key}' در گروه '{groupname}' یافت نشد.")
-                    return StandardResponse(data={prop_key: value},
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در گروه '{groupname}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(data={prop_key: value}, message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
                 else:
                     data = manager.get_samba_groups(groupname=groupname)
                     if data is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="group_not_found",
-                                                     error_message=f"گروه '{groupname}' یافت نشد.")
-                    return StandardResponse(data=data,
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message="جزئیات گروه سامبا با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(status=404, error_code="group_not_found", error_message=f"گروه '{groupname}' یافت نشد.", request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(data=data, message="جزئیات گروه سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
             else:
                 data = manager.get_samba_groups()
                 if prop_key and prop_key.lower() != "all":
@@ -344,22 +262,12 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                             filtered.append({"groupname": "unknown", prop_key: None})
                     data = filtered
 
-                return StandardResponse(data=data,
-                                        request_data=request_data,
-                                        save_to_db=save_to_db,
-                                        message="لیست گروه‌های سامبا با موفقیت بازیابی شد.")
+                return StandardResponse(data=data, message="لیست گروه‌های سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
 
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db,
-                                                 error_code="samba_group_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات گروه(ها) سامبا.")
+            return build_standard_error_response(exc=exc, error_message="خطا در دریافت اطلاعات گروه(ها) سامبا.", request_data=request_data, save_to_db=save_to_db, error_code="samba_group_fetch_failed", )
 
-    @extend_schema(
-        request={"application/json": {"type": "object",
-                                      "properties": {**BodyParameterSaveToDB["properties"]},
-                                      "required": []}})
+    @extend_schema(request={"application/json": {"type": "object", "properties": {**BodyParameterSaveToDB["properties"]}, "required": []}})
     def post(self, request: Request, groupname: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -371,20 +279,11 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
 
         try:
             SambaManager().create_samba_group(groupname)
-            return StandardResponse(message=f"گروه سامبا '{groupname}' با موفقیت ایجاد شد.",
-                                    request_data=request_data,
-                                    save_to_db=save_to_db,
-                                    status=201, )
+            return StandardResponse(status=201, message=f"گروه سامبا '{groupname}' با موفقیت ایجاد شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_group_create_failed",
-                                                 error_message="خطا در ایجاد گروه سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_group_create_failed", error_message="خطا در ایجاد گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
-    @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True,
-                                                description="نام گروه سامبا"), ] + QuerySaveToDB, responses={200: StandardResponse}
-                   )
+    @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True, description="نام گروه سامبا"), ] + QuerySaveToDB)
     def delete(self, request: Request, groupname: str) -> Response:
         """
         حذف یک گروه سامبا از سیستم.
@@ -399,17 +298,9 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
         try:
             manager = SambaManager()
             manager.delete_samba_group(groupname)
-            return StandardResponse(
-                message=f"گروه '{groupname}' با موفقیت حذف شد.",
-                request_data=request_data,
-                save_to_db=save_to_db,
-            )
+            return StandardResponse(message=f"گروه '{groupname}' با موفقیت حذف شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_group_delete_failed",
-                                                 error_message="خطا در حذف گروه سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_group_delete_failed", error_message="خطا در حذف گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
 
 # ========== Sharepoint View ==========
