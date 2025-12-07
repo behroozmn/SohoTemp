@@ -347,8 +347,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
 # ========== Sharepoint View ==========
 class SambaSharepointView(APIView, SambaSharepointValidationMixin):
 
-    @extend_schema(parameters=[OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False),
-                               ParamProperty, ParamOnlyActive, ] + QuerySaveToDB)
+    @extend_schema(parameters=[OpenApiParameter(name="sharepoint_name", type=str, location="path", required=False), ParamProperty, ParamOnlyActive, ] + QuerySaveToDB)
     def get(self, request: Request, sharepoint_name: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
@@ -368,27 +367,14 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                 if prop_key and prop_key.lower() != "all":
                     value = manager.get_samba_sharepoint_property(sharepoint_name, prop_key)
                     if value is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="property_not_found",
-                                                     error_message=f"پراپرتی '{prop_key}' در مسیر اشتراکی '{sharepoint_name}' یافت نشد.")
-                    return StandardResponse(data={prop_key: value},
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(status=404, error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در مسیر اشتراکی '{sharepoint_name}' یافت نشد.", request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db,
+                                            data={prop_key: value})
                 else:
                     data = manager.get_samba_sharepoints(sharepoint_name=sharepoint_name, only_active_shares=only_active, )
                     if data is None:
-                        return StandardErrorResponse(request_data=request_data,
-                                                     save_to_db=save_to_db,
-                                                     status=404,
-                                                     error_code="share_not_found",
-                                                     error_message=f"مسیر اشتراکی '{sharepoint_name}' یافت نشد.")
-                    return StandardResponse(data=data,
-                                            request_data=request_data,
-                                            save_to_db=save_to_db,
-                                            message="جزئیات مسیر اشتراکی سامبا با موفقیت بازیابی شد.")
+                        return StandardErrorResponse(status=404, error_code="share_not_found", error_message=f"مسیر اشتراکی '{sharepoint_name}' یافت نشد.", request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(data=data, message="جزئیات مسیر اشتراکی سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
             else:
                 data = manager.get_samba_sharepoints(only_active_shares=only_active)
                 if prop_key and prop_key.lower() != "all":
@@ -405,38 +391,26 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                             filtered.append({"sharepoint_name": "unknown", prop_key: None})
                     data = filtered
 
-                return StandardResponse(data=data,
-                                        request_data=request_data,
-                                        save_to_db=save_to_db,
-                                        message="لیست مسیرهای اشتراکی سامبا با موفقیت بازیابی شد.")
+                return StandardResponse(data=data, message="لیست مسیرهای اشتراکی سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
 
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db,
-                                                 error_code="samba_share_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات مسیر(های) اشتراکی سامبا.")
+            return build_standard_error_response(exc=exc, error_code="samba_share_fetch_failed", error_message="خطا در دریافت اطلاعات مسیر(های) اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db)
 
     @extend_schema(
-        request={"application/json": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string"},
-                "valid_users": {"type": "array", "items": {"type": "string"}},
-                "valid_groups": {"type": "array", "items": {"type": "string"}},
-                "read_only": {"type": "boolean", "default": False},
-                "guest_ok": {"type": "boolean", "default": False},
-                "browseable": {"type": "boolean", "default": True},
-                "max_connections": {"type": "integer"},
-                "create_mask": {"type": "string", "default": "0644"},
-                "directory_mask": {"type": "string", "default": "0755"},
-                "inherit_permissions": {"type": "boolean", "default": False},
-                "expiration_time": {"type": "string"},
-                **BodyParameterSaveToDB["properties"]
-            },
-            "required": ["path"]
-        }}
-    )
+        request={"application/json": {"type": "object",
+                                      "properties": {"path": {"type": "string"},
+                                                     "valid_users": {"type": "array", "items": {"type": "string"}},
+                                                     "valid_groups": {"type": "array", "items": {"type": "string"}},
+                                                     "read_only": {"type": "boolean", "default": False},
+                                                     "guest_ok": {"type": "boolean", "default": False},
+                                                     "browseable": {"type": "boolean", "default": True},
+                                                     "max_connections": {"type": "integer"},
+                                                     "create_mask": {"type": "string", "default": "0644"},
+                                                     "directory_mask": {"type": "string", "default": "0755"},
+                                                     "inherit_permissions": {"type": "boolean", "default": False},
+                                                     "expiration_time": {"type": "string"},
+                                                     **BodyParameterSaveToDB["properties"]},
+                                      "required": ["path"]}})
     def post(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -463,20 +437,11 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                                                    directory_mask=get_request_param(request, "directory_mask", str, "0755"),
                                                    inherit_permissions=get_request_param(request, "inherit_permissions", bool, False),
                                                    expiration_time=get_request_param(request, "expiration_time", str, None), )
-            return StandardResponse(message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت ایجاد شد.",
-                                    request_data=request_data,
-                                    save_to_db=save_to_db,
-                                    status=201, )
+            return StandardResponse(status=201, message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت ایجاد شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_share_create_failed",
-                                                 error_message="خطا در ایجاد مسیر اشتراکی سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_share_create_failed", error_message="خطا در ایجاد مسیر اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
-    @extend_schema(
-        request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}}
-    )
+    @extend_schema(request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}})
     def put(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
@@ -486,15 +451,9 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
 
         try:
             SambaManager().update_samba_sharepoint(sharepoint_name, **request_data)
-            return StandardResponse(message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت به‌روزرسانی شد.",
-                                    request_data=request_data,
-                                    save_to_db=save_to_db, )
+            return StandardResponse(message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت به‌روزرسانی شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_share_update_failed",
-                                                 error_message="خطا در به‌روزرسانی مسیر اشتراکی سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_share_update_failed", error_message="خطا در به‌روزرسانی مسیر اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
     @extend_schema()
     def delete(self, request: Request, sharepoint_name: str) -> Response:
@@ -508,8 +467,4 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
             SambaManager().delete_samba_sharepoint(sharepoint_name)
             return StandardResponse(message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت حذف شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_share_delete_failed",
-                                                 error_message="خطا در حذف مسیر اشتراکی سامبا.",
-                                                 request_data=request_data,
-                                                 save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_share_delete_failed", error_message="خطا در حذف مسیر اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db, )
