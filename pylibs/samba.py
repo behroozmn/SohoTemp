@@ -64,13 +64,16 @@ class SambaManager:
             else:
                 return users
 
-    def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, contain_system_groups: bool = True, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات گروه‌های سامبا.
 
         Args:
             groupname: نام گروه خاص. اگر None باشد، تمام گروه‌ها برگردانده می‌شوند.
             property_name: نام یک پراپرتی خاص برای بازیابی.
+            contain_system_groups: اگر True باشد، همه گروه‌ها (شامل سیستمی) برگردانده می‌شوند.
+                                   اگر False باشد، فقط گروه‌های کاربری (GID >= 1000) برگردانده می‌شوند.
+                                   گروه 'nogroup' همیشه به عنوان گروه سیستمی در نظر گرفته می‌شود.
 
         Returns:
             - dict: اگر groupname مشخص باشد و گروه یافت شود.
@@ -88,6 +91,27 @@ class SambaManager:
             raise
 
         groups = self._parse_getent_group_output(stdout)
+
+        # فیلتر گروه‌های غیرسیستمی (اگر درخواست شده باشد)
+        if not contain_system_groups:
+            filtered_groups = []
+            for g in groups:
+                gname = g.get("name")
+                gid_str = g.get("gid")
+
+                if gname == "nogroup":  continue  # گروه nogroup همیشه سیستمی است
+
+                # گروههای زیر طبق قاعده در زمره سیستمی قرار گرفته است
+                if gname == "smbadmin" or gname == "smbgroup" or gname == "smbuser" or gname == "system" or gname == "user":
+                    continue
+                try:
+                    gid = int(gid_str) if gid_str is not None else -1
+                    if gid >= 1000:
+                        filtered_groups.append(g)
+                except (ValueError, TypeError):
+                    # اگر GID نامعتبر بود، به عنوان سیستمی در نظر بگیر
+                    continue
+            groups = filtered_groups
 
         if groupname:
             group = next((g for g in groups if g["name"] == groupname), None)
@@ -345,15 +369,6 @@ class SambaManager:
         epoch_days = (dt - datetime(1970, 1, 1)).days
         run_cli_command(["/usr/bin/smbpasswd", "-e", "-E", str(epoch_days), username], use_sudo=True)
 
-    def set_group_expiration(self, groupname: str, expiration_date: str) -> None:
-        """
-        سامبا از انقضای گروه پشتیبانی نمی‌کند. این متد فقط برای سازگاری است.
-
-        Raises:
-            NotImplementedError: همیشه این استثنا رخ می‌دهد.
-        """
-        raise NotImplementedError("سامبا از انقضای گروه پشتیبانی نمی‌کند.")
-
     def set_sharepoint_expiration(self, sharepoint_name: str, expiration_time: str) -> None:
         """
         تعیین زمان انقضا برای مسیر اشتراکی (در کامنت smb.conf).
@@ -553,3 +568,45 @@ class SambaManager:
         if share and isinstance(share, dict):
             return share.get(prop_key)
         return None
+
+    def _is_system_group(self, groupname: str) -> bool:
+        """بررسی اینکه آیا گروه یک گروه سیستمی است یا خیر."""
+        try:
+            stdout, _ = run_cli_command(["/usr/bin/getent", "group", groupname], use_sudo=True)
+            if not stdout.strip():
+                return True  # گروه وجود ندارد → سیستمی در نظر گرفته شود
+            parts = stdout.strip().split(":")
+            if len(parts) >= 3:
+                gid = int(parts[2])
+                return gid < 1000
+            return True
+        except (ValueError, IndexError, CLICommandError):
+            return True
+
+    def add_user_to_group(self, username: str, groupname: str) -> None:
+        """
+        افزودن یک کاربر به یک گروه سامبا.
+
+        Args:
+            username: نام کاربر.
+            groupname: نام گروه.
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای دستور usermod.
+        """
+        cmd = ["/usr/sbin/usermod", "-a", "-G", groupname, username]
+        run_cli_command(cmd, use_sudo=True)
+
+    def remove_user_from_group(self, username: str, groupname: str) -> None:
+        """
+        حذف یک کاربر از یک گروه سامبا.
+
+        Args:
+            username: نام کاربر.
+            groupname: نام گروه.
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای دستور gpasswd.
+        """
+        cmd = ["/usr/bin/gpasswd", "-d", username, groupname]
+        run_cli_command(cmd, use_sudo=True)

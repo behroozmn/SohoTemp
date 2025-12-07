@@ -89,12 +89,13 @@ class SambaUserView(APIView, SambaUserValidationMixin):
                     value = manager.get_samba_user_property(username, prop_key)
                     if value is None:
                         return StandardErrorResponse(error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در کاربر '{username}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
-                    return StandardResponse(data={prop_key: value}, message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db,
+                                            data={prop_key: value}, )
                 else:
                     data = manager.get_samba_users(username=username)
                     if data is None:
                         return StandardErrorResponse(error_code="user_not_found", error_message=f"کاربر '{username}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
-                    return StandardResponse(message="جزئیات کاربر سامبا با موفقیت بازیابی شد.", data=data, request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(data=data, message="جزئیات کاربر سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
             else:
                 data = manager.get_samba_users()
                 if prop_key and prop_key.lower() != "all":
@@ -220,10 +221,12 @@ class SambaUserView(APIView, SambaUserValidationMixin):
 class SambaGroupView(APIView, SambaGroupValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=False),
+                               OpenApiParameter(name="contain_system_groups", type=bool, location="query", required=False),
                                ParamProperty, ] + QuerySaveToDB)
     def get(self, request: Request, groupname: Optional[str] = None) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
+        contain_system_groups = get_request_param(request, "contain_system_groups", bool, True)
         if prop_key:
             prop_key = prop_key.strip()
         request_data = dict(request.query_params)
@@ -240,14 +243,15 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                     value = manager.get_samba_group_property(groupname, prop_key)
                     if value is None:
                         return StandardErrorResponse(error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در گروه '{groupname}' یافت نشد.", status=404, request_data=request_data, save_to_db=save_to_db, )
-                    return StandardResponse(data={prop_key: value}, message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
+                    return StandardResponse(message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db,
+                                            data={"groupname": groupname, prop_key: value})
                 else:
-                    data = manager.get_samba_groups(groupname=groupname)
+                    data = manager.get_samba_groups(groupname=groupname, contain_system_groups=contain_system_groups)
                     if data is None:
                         return StandardErrorResponse(status=404, error_code="group_not_found", error_message=f"گروه '{groupname}' یافت نشد.", request_data=request_data, save_to_db=save_to_db, )
                     return StandardResponse(data=data, message="جزئیات گروه سامبا با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db, )
             else:
-                data = manager.get_samba_groups()
+                data = manager.get_samba_groups(contain_system_groups=contain_system_groups)
                 if prop_key and prop_key.lower() != "all":
                     filtered = []
                     for group_dict in data:
@@ -283,6 +287,47 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
         except Exception as exc:
             return build_standard_error_response(exc=exc, error_code="samba_group_create_failed", error_message="خطا در ایجاد گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
+    @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True,
+                                                description="نام گروه سامبا"),
+                               OpenApiParameter(name="action", type=str, required=True, enum=["add_user", "remove_user"], description="عملیات مورد نظر: افزودن یا حذف کاربر"), ] + QuerySaveToDB,
+                   request={"application/json": {"type": "object",
+                                                 "properties": {"username": {"type": "string", "description": "نام کاربر"},
+                                                                **BodyParameterSaveToDB["properties"]},
+                                                 "required": ["username"]}}, )
+    def put(self, request: Request, groupname: str) -> Response:
+        """افزودن یا حذف یک کاربر از یک گروه سامبا."""
+        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        action = get_request_param(request, "action", str, None)
+        username = get_request_param(request, "username", str, None)
+        request_data = dict(request.data)
+
+        # اعتبارسنجی وجود گروه
+        error_resp = self._validate_samba_group_exists(groupname, save_to_db, request_data, must_exist=True)
+        if error_resp:
+            return error_resp
+
+        # اعتبارسنجی وجود کاربر
+        user_error = SambaUserValidationMixin()._validate_samba_user_exists(username, save_to_db, request_data, must_exist=True)
+        if user_error:
+            return user_error
+
+        if not username:
+            return StandardErrorResponse(status=400, error_code="missing_username", error_message="نام کاربر اجباری است.", request_data=request_data, save_to_db=save_to_db, )
+
+        try:
+            if action == "add_user":
+                SambaManager().add_user_to_group(username, groupname)
+                message = f"کاربر '{username}' با موفقیت به گروه '{groupname}' اضافه شد."
+            elif action == "remove_user":
+                SambaManager().remove_user_from_group(username, groupname)
+                message = f"کاربر '{username}' با موفقیت از گروه '{groupname}' حذف شد."
+            else:
+                return StandardErrorResponse(status=400, error_code="invalid_action", error_message="مقدار action باید یکی از مقادیر 'add_user' یا 'remove_user' باشد.", request_data=request_data, save_to_db=save_to_db, )
+            return StandardResponse(message=message, request_data=request_data, save_to_db=save_to_db, )
+        except Exception as exc:
+            return build_standard_error_response(exc=exc,
+                                                 error_code="samba_group_member_operation_failed", error_message="خطا در انجام عملیات روی اعضای گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
+
     @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True, description="نام گروه سامبا"), ] + QuerySaveToDB)
     def delete(self, request: Request, groupname: str) -> Response:
         """
@@ -296,8 +341,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
             return error_resp
 
         try:
-            manager = SambaManager()
-            manager.delete_samba_group(groupname)
+            SambaManager().delete_samba_group(groupname)
             return StandardResponse(message=f"گروه '{groupname}' با موفقیت حذف شد.", request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
             return build_standard_error_response(exc=exc, error_code="samba_group_delete_failed", error_message="خطا در حذف گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
