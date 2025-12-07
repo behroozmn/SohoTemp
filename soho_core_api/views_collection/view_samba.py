@@ -287,12 +287,10 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
         except Exception as exc:
             return build_standard_error_response(exc=exc, error_code="samba_group_create_failed", error_message="خطا در ایجاد گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
-    @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True,
-                                                description="نام گروه سامبا"),
+    @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True, description="نام گروه سامبا"),
                                OpenApiParameter(name="action", type=str, required=True, enum=["add_user", "remove_user"], description="عملیات مورد نظر: افزودن یا حذف کاربر"), ] + QuerySaveToDB,
                    request={"application/json": {"type": "object",
-                                                 "properties": {"username": {"type": "string", "description": "نام کاربر"},
-                                                                **BodyParameterSaveToDB["properties"]},
+                                                 "properties": {"username": {"type": "string", "description": "نام کاربر"}, **BodyParameterSaveToDB["properties"]},
                                                  "required": ["username"]}}, )
     def put(self, request: Request, groupname: str) -> Response:
         """افزودن یا حذف یک کاربر از یک گروه سامبا."""
@@ -325,8 +323,7 @@ class SambaGroupView(APIView, SambaGroupValidationMixin):
                 return StandardErrorResponse(status=400, error_code="invalid_action", error_message="مقدار action باید یکی از مقادیر 'add_user' یا 'remove_user' باشد.", request_data=request_data, save_to_db=save_to_db, )
             return StandardResponse(message=message, request_data=request_data, save_to_db=save_to_db, )
         except Exception as exc:
-            return build_standard_error_response(exc=exc,
-                                                 error_code="samba_group_member_operation_failed", error_message="خطا در انجام عملیات روی اعضای گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_group_member_operation_failed", error_message="خطا در انجام عملیات روی اعضای گروه سامبا.", request_data=request_data, save_to_db=save_to_db, )
 
     @extend_schema(parameters=[OpenApiParameter(name="groupname", type=str, location="path", required=True, description="نام گروه سامبا"), ] + QuerySaveToDB)
     def delete(self, request: Request, groupname: str) -> Response:
