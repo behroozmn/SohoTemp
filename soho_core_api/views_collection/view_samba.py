@@ -369,7 +369,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                     if value is None:
                         return StandardErrorResponse(status=404, error_code="property_not_found", error_message=f"پراپرتی '{prop_key}' در مسیر اشتراکی '{sharepoint_name}' یافت نشد.", request_data=request_data, save_to_db=save_to_db, )
                     return StandardResponse(message=f"پراپرتی '{prop_key}' با موفقیت بازیابی شد.", request_data=request_data, save_to_db=save_to_db,
-                                            data={prop_key: value})
+                                            data={"sharepoint": sharepoint_name,prop_key: value})
                 else:
                     data = manager.get_samba_sharepoints(sharepoint_name=sharepoint_name, only_active_shares=only_active, )
                     if data is None:
