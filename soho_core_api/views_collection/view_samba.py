@@ -459,7 +459,6 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
     def delete(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
-
         error = self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, must_exist=True)
         if error: return error
 

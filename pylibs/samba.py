@@ -215,6 +215,7 @@ class SambaManager:
             read_only: اگر True باشد، فقط خواندنی است.
             guest_ok: اگر True باشد، دسترسی مهمان فعال است.
             browseable: اگر True باشد، در لیست‌های اشتراک قابل مشاهده است.
+            available: دردسترس
             max_connections: حداکثر تعداد اتصال همزمان (اختیاری).
             create_mask: ماسک دسترسی فایل‌های جدید (پیش‌فرض: "0644").
             directory_mask: ماسک دسترسی دایرکتوری‌های جدید (پیش‌فرض: "0755").
@@ -259,10 +260,34 @@ class SambaManager:
         """
         shares = self._parse_smb_conf()
         share = next((s for s in shares if s["name"] == name), None)
+        print(f"shares:{shares}")
+        print(f"share:{share}")
         if not share:
             raise ValueError(f"مسیر اشتراکی '{name}' یافت نشد.")
 
-        share.update(kwargs)
+        # ✅ پردازش مقادیر ورودی
+        processed_kwargs = {}
+        print(f"kwargs:{kwargs}")
+        for key, value in kwargs.items():
+            # --- 1. تبدیل لیست‌ها به رشته
+            if key == "valid users" and isinstance(value, list):
+                processed_kwargs[key] = ", ".join(str(v) for v in value)
+            elif key == "valid groups" and isinstance(value, list):
+                processed_kwargs[key] = ", ".join(str(v) for v in value)
+            # --- 2. تبدیل مقادیر بولین به رشته
+            elif key in ("read only", "guest ok", "browseable", "inherit permissions", "available"):
+                if isinstance(value, bool):
+                    processed_kwargs[key] = "yes" if value else "no"
+                elif isinstance(value, str):
+                    processed_kwargs[key] = value.lower()
+                else:
+                    # در صورت غیر bool یا str، فرض کن "no"
+                    processed_kwargs[key] = "no"
+            # --- 3. بقیه مقادیر بدون تغییر
+            else:
+                processed_kwargs[key] = value
+
+        share.update(processed_kwargs)
         new_section = self._build_share_section_from_dict(share)
         self._replace_share_in_conf(name, new_section)
 
