@@ -426,8 +426,7 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
         if error: return error
 
         try:
-            SambaManager().create_samba_sharepoint(name=sharepoint_name,
-                                                   path=path,
+            SambaManager().create_samba_sharepoint(name=sharepoint_name, path=path,
                                                    valid_users=get_request_param(request, "valid_users", list, None),
                                                    valid_groups=get_request_param(request, "valid_groups", list, None),
                                                    read_only=get_request_param(request, "read_only", bool, False),
@@ -438,10 +437,10 @@ class SambaSharepointView(APIView, SambaSharepointValidationMixin):
                                                    create_mask=get_request_param(request, "create_mask", str, "0644"),
                                                    directory_mask=get_request_param(request, "directory_mask", str, "0755"),
                                                    inherit_permissions=get_request_param(request, "inherit_permissions", bool, False),
-                                                   expiration_time=get_request_param(request, "expiration_time", str, None), )
-            return StandardResponse(status=201, message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت ایجاد شد.", request_data=request_data, save_to_db=save_to_db, )
+                                                   expiration_time=get_request_param(request, "expiration_time", str, None))
+            return StandardResponse(status=201, message=f"مسیر اشتراکی '{sharepoint_name}' با موفقیت ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as exc:
-            return build_standard_error_response(exc=exc, error_code="samba_share_create_failed", error_message="خطا در ایجاد مسیر اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db, )
+            return build_standard_error_response(exc=exc, error_code="samba_share_create_failed", error_message="خطا در ایجاد مسیر اشتراکی سامبا.", request_data=request_data, save_to_db=save_to_db)
 
     @extend_schema(request={"application/json": {"type": "object", "additionalProperties": {"type": "string"}}})
     def put(self, request: Request, sharepoint_name: str) -> Response:

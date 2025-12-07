@@ -270,7 +270,7 @@ class SambaManager:
 
         # ✅ پردازش مقادیر ورودی
         processed_kwargs = {}
-        print(f"kwargs:{kwargs}")
+        # print(f"kwargs:{kwargs}")
         for key, value in kwargs.items():
             # --- 1. تبدیل لیست‌ها به رشته
             if key == "valid users" and isinstance(value, list):
