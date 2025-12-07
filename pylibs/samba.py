@@ -19,12 +19,7 @@ class SambaManager:
     def __init__(self) -> None:
         pass
 
-    def get_samba_users(
-        self,
-        username: Optional[str] = None,
-        *,
-        property_name: Optional[str] = None,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_users(self, username: Optional[str] = None, *, property_name: Optional[str] = None, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات کاربران سامبا.
 
@@ -69,12 +64,7 @@ class SambaManager:
             else:
                 return users
 
-    def get_samba_groups(
-        self,
-        groupname: Optional[str] = None,
-        *,
-        property_name: Optional[str] = None,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_groups(self, groupname: Optional[str] = None, *, property_name: Optional[str] = None, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات گروه‌های سامبا.
 
@@ -112,13 +102,7 @@ class SambaManager:
             else:
                 return groups
 
-    def get_samba_sharepoints(
-        self,
-        sharepoint_name: Optional[str] = None,
-        *,
-        property_name: Optional[str] = None,
-        only_active_shares: bool = False,
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
+    def get_samba_sharepoints(self, sharepoint_name: Optional[str] = None, *, property_name: Optional[str] = None, only_active_shares: bool = False, ) -> Union[List[Dict[str, Any]], Dict[str, Any], str, None]:
         """
         دریافت اطلاعات مسیرهای اشتراکی سامبا از smb.conf.
 
@@ -269,11 +253,7 @@ class SambaManager:
         Raises:
             CLICommandError: در صورت خطا در تغییر رمز.
         """
-        run_cli_command(
-            ["/usr/bin/smbpasswd", "-s", username],
-            input=f"{new_password}\n{new_password}\n",
-            use_sudo=True
-        )
+        run_cli_command(["/usr/bin/smbpasswd", "-s", username], input=f"{new_password}\n{new_password}\n", use_sudo=True)
 
     def enable_samba_user(self, username: str) -> None:
         """
