@@ -4,10 +4,10 @@ from rest_framework.routers import SimpleRouter
 from soho_core_api.views_collection.view_samba import SambaUserViewSet, SambaGroupViewSet, SambaSharepointViewSet
 
 router = SimpleRouter()
-router.register(r"samba/users", SambaUserViewSet, basename="samba-user")
-router.register(r"samba/groups", SambaGroupViewSet, basename="samba-group")
-router.register(r"samba/sharepoints", SambaSharepointViewSet, basename="samba-sharepoint")
+router.register(r"users", SambaUserViewSet, basename="samba-user")
+router.register(r"groups", SambaGroupViewSet, basename="samba-group")
+router.register(r"sharepoints", SambaSharepointViewSet, basename="samba-sharepoint")
 
 urlpatterns = [
-    path("api/", include(router.urls)),
+    path("", include(router.urls)),
 ]

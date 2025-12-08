@@ -179,7 +179,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         request={"type": "object", "properties": {
             "password": {"type": "string"}, "full_name": {"type": "string"},
             "expiration_date": {"type": "string", "format": "date"},
-            "save_to_db": {"type": "boolean", "default": False}
+            "save_to_db": {"type": "boolean", "default": True}
         }, "required": ["password"]},
         responses={201: StandardResponse}
     )
@@ -197,6 +197,11 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         exp = get_request_param(request, "expiration_date", str)
         try:
             SambaManager().create_samba_user(username, pw, full_name, exp)
+            # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
+            if save_to_db:
+                user_data = SambaManager().get_samba_users(username=username)
+                if user_data:
+                    _sync_samba_users_to_db([user_data])
             return StandardResponse(status=201, message=f"کاربر '{username}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_user_create_failed", "خطا در ایجاد کاربر", request_data, save_to_db)
@@ -245,6 +250,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
             m = SambaManager()
             m.delete_samba_user_from_samba_db(username)
             m.delete_samba_user_from_system(username)
+            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaUser.objects.filter(username=username).delete()
             return StandardResponse(f"کاربر '{username}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
@@ -312,10 +318,10 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, False): return err
         try:
             SambaManager().create_samba_group(groupname)
-            if save_to_db:
-                g = SambaManager().get_samba_groups(groupname=groupname)
-                if g:
-                    _sync_samba_groups_to_db([g])
+            if save_to_db: # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
+                group_data = SambaManager().get_samba_groups(groupname=groupname)
+                if group_data:
+                    _sync_samba_groups_to_db([group_data])
             return StandardResponse(status=201, message=f"گروه '{groupname}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_group_create_failed", "خطا در ایجاد گروه", request_data, save_to_db)
@@ -360,6 +366,7 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
         try:
             SambaManager().delete_samba_group(groupname)
+            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaGroup.objects.filter(name=groupname).delete()
             return StandardResponse(f"گروه '{groupname}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
@@ -459,10 +466,11 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
                 expiration_time=get_request_param(request, "expiration_time", str),
                 available=get_request_param(request, "available", bool, True),
             )
+            # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
             if save_to_db:
-                s = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
-                if s:
-                    _sync_samba_sharepoints_to_db([s])
+                share_data = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
+                if share_data:
+                    _sync_samba_sharepoints_to_db([share_data])
             return StandardResponse(status=201, message=f"مسیر '{sharepoint_name}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_share_create_failed", "خطا در ایجاد مسیر", request_data, save_to_db)
@@ -493,6 +501,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
         try:
             SambaManager().delete_samba_sharepoint(sharepoint_name)
+            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaSharepoint.objects.filter(name=sharepoint_name).delete()
             return StandardResponse(f"مسیر '{sharepoint_name}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
