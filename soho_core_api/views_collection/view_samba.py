@@ -65,9 +65,9 @@ ParamContainSystemGroups = OpenApiParameter(
     description="شامل گروه‌های سیستمی باشد یا خیر"
 )
 
-
 # ========== Utility Sync Functions ==========
-def _sync_samba_users_to_db(users: List[Dict]):
+def _sync_samba_users_to_db(users: List[Dict[str, Any]]) -> None:
+    """همگام‌سازی لیست کاربران سامبا با جدول دیتابیس."""
     for u in users:
         SambaUser.objects.update_or_create(
             username=u.get("Unix username", ""),
@@ -87,8 +87,8 @@ def _sync_samba_users_to_db(users: List[Dict]):
             }
         )
 
-
-def _sync_samba_groups_to_db(groups: List[Dict]):
+def _sync_samba_groups_to_db(groups: List[Dict[str, Any]]) -> None:
+    """همگام‌سازی لیست گروه‌های سامبا با جدول دیتابیس."""
     for g in groups:
         SambaGroup.objects.update_or_create(
             name=g["name"],
@@ -100,8 +100,8 @@ def _sync_samba_groups_to_db(groups: List[Dict]):
             }
         )
 
-
-def _sync_samba_sharepoints_to_db(shares: List[Dict]):
+def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
+    """همگام‌سازی لیست مسیرهای اشتراکی سامبا با جدول دیتابیس."""
     for s in shares:
         SambaSharepoint.objects.update_or_create(
             name=s["name"],
@@ -124,9 +124,12 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict]):
             }
         )
 
-
 # ========== ViewSets ==========
 class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
+    """
+    مدیریت کاربران سامبا از طریق API.
+    """
+
     lookup_field = "username"
 
     @extend_schema(
@@ -134,6 +137,9 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         responses={200: inline_serializer("SambaUserList", {"data": serializers.JSONField()})}
     )
     def list(self, request: Request) -> Response:
+        """
+        دریافت لیست تمام کاربران سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -142,10 +148,13 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
             manager = SambaManager()
             data = manager.get_samba_users()
             if prop_key and prop_key.lower() != "all":
+                # ✅ فرمت خروجی: {"username": "...", "property": value}
                 filtered = [{"username": u.get("Unix username"), prop_key: u.get(prop_key)} for u in data]
                 data = filtered
             if save_to_db:
-                _sync_samba_users_to_db(data if not prop_key or prop_key.lower() == "all" else manager.get_samba_users())
+                # فقط در حالت all یا بدون prop، داده‌ها به دیتابیس ذخیره می‌شوند
+                users_to_sync = data if not prop_key or prop_key.lower() == "all" else manager.get_samba_users()
+                _sync_samba_users_to_db(users_to_sync)
             return StandardResponse(data=data, message="لیست کاربران سامبا با موفقیت بازیابی شد.",
                                     request_data=request_data, save_to_db=save_to_db)
         except Exception as exc:
@@ -158,6 +167,9 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         responses={200: inline_serializer("SambaUserDetail", {"data": serializers.JSONField()})}
     )
     def retrieve(self, request: Request, username: str) -> Response:
+        """
+        دریافت اطلاعات یک کاربر سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -173,10 +185,13 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
                 val = user_data.get(prop_key)
                 if val is None:
                     return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
+                # ✅ فرمت خروجی برای property خاص
                 return StandardResponse({"username": username, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
             return StandardResponse(user_data, request_data=request_data, save_to_db=save_to_db)
         except Exception as exc:
-            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed", error_message="خطا در دریافت اطلاعات کاربر سامبا.", request_data=request_data, save_to_db=save_to_db)
+            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed",
+                                                 error_message="خطا در دریافت اطلاعات کاربر سامبا.",
+                                                 request_data=request_data, save_to_db=save_to_db)
 
     @extend_schema(
         request={"type": "object", "properties": {
@@ -188,6 +203,9 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         responses={201: StandardResponse}
     )
     def create(self, request: Request) -> Response:
+        """
+        ایجاد یک کاربر جدید سامبا.
+        """
         username = request.data.get("username")
         if not username:
             return StandardErrorResponse("missing_username", "نام کاربر اجباری است.", 400, dict(request.data), False)
@@ -217,19 +235,22 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_user(self, request: Request, username: str) -> Response:
+        """
+        به‌روزرسانی یک کاربر سامبا (فعال/غیرفعال یا تغییر رمز).
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        action = get_request_param(request, "action", str)
+        action_name = get_request_param(request, "action", str)
         request_data = dict(request.data)
         if err := self._validate_samba_user_exists(username, save_to_db, request_data, True): return err
         try:
             m = SambaManager()
-            if action == "enable":
+            if action_name == "enable":
                 m.enable_samba_user(username)
                 msg = f"کاربر '{username}' فعال شد."
-            elif action == "disable":
+            elif action_name == "disable":
                 m.disable_samba_user(username)
                 msg = f"کاربر '{username}' غیرفعال شد."
-            elif action == "change_password":
+            elif action_name == "change_password":
                 if not (np := get_request_param(request, "new_password", str)):
                     return StandardErrorResponse("missing_new_password", "رمز جدید اجباری است.", 400, request_data, save_to_db)
                 m.change_samba_user_password(username, np)
@@ -246,6 +267,9 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter("username", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, username: str) -> Response:
+        """
+        حذف یک کاربر سامبا (هم از سامبا و هم از سیستم).
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
         if err := self._validate_samba_user_exists(username, save_to_db, request_data, True): return err
@@ -253,7 +277,6 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
             m = SambaManager()
             m.delete_samba_user_from_samba_db(username)
             m.delete_samba_user_from_system(username)
-            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaUser.objects.filter(username=username).delete()
             return StandardResponse(f"کاربر '{username}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
@@ -262,12 +285,18 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
 
 
 class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
+    """
+    مدیریت گروه‌های سامبا از طریق API.
+    """
     lookup_field = "groupname"
 
     @extend_schema(
         parameters=[ParamProperty, ParamContainSystemGroups] + QuerySaveToDB
     )
     def list(self, request: Request) -> Response:
+        """
+        دریافت لیست تمام گروه‌های سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -277,7 +306,8 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
             m = SambaManager()
             data = m.get_samba_groups(contain_system_groups=contain_sys)
             if prop_key and prop_key.lower() != "all":
-                data = [{g["name"]: g.get(prop_key)} for g in data]
+                filtered = [{"groupname": g["name"], prop_key: g.get(prop_key)} for g in data]
+                data = filtered
             if save_to_db:
                 full_data = m.get_samba_groups(contain_system_groups=contain_sys)
                 _sync_samba_groups_to_db(full_data)
@@ -289,6 +319,9 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         parameters=[OpenApiParameter("groupname", str, "path", True), ParamProperty, ParamContainSystemGroups] + QuerySaveToDB
     )
     def retrieve(self, request: Request, groupname: str) -> Response:
+        """
+        دریافت اطلاعات یک گروه سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -317,6 +350,9 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         }, "required": ["groupname"]}
     )
     def create(self, request: Request) -> Response:
+        """
+        ایجاد یک گروه جدید سامبا.
+        """
         groupname = request.data.get("groupname")
         if not groupname:
             return StandardErrorResponse("missing_groupname", "نام گروه اجباری است.", 400, dict(request.data), False)
@@ -341,8 +377,11 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_group(self, request: Request, groupname: str) -> Response:
+        """
+        به‌روزرسانی یک گروه سامبا (اضافه/حذف کاربر).
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
-        action = get_request_param(request, "action", str)
+        action_name = get_request_param(request, "action", str)
         username = get_request_param(request, "username", str)
         request_data = dict(request.data)
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
@@ -351,10 +390,10 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         if err := SambaUserValidationMixin()._validate_samba_user_exists(username, save_to_db, request_data, True): return err
         try:
             m = SambaManager()
-            if action == "add_user":
+            if action_name == "add_user":
                 m.add_user_to_group(username, groupname)
                 msg = f"کاربر '{username}' به گروه اضافه شد."
-            elif action == "remove_user":
+            elif action_name == "remove_user":
                 m.remove_user_from_group(username, groupname)
                 msg = f"کاربر '{username}' از گروه حذف شد."
             else:
@@ -369,6 +408,9 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter("groupname", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, groupname: str) -> Response:
+        """
+        حذف یک گروه سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
@@ -382,12 +424,18 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
 
 
 class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
+    """
+    مدیریت مسیرهای اشتراکی سامبا از طریق API.
+    """
     lookup_field = "sharepoint_name"
 
     @extend_schema(
         parameters=[ParamProperty, ParamOnlyActive] + QuerySaveToDB
     )
     def list(self, request: Request) -> Response:
+        """
+        دریافت لیست تمام مسیرهای اشتراکی سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -397,7 +445,8 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
             m = SambaManager()
             data = m.get_samba_sharepoints(only_active_shares=only_active)
             if prop_key and prop_key.lower() != "all":
-                data = [{s["name"]: s.get(prop_key)} for s in data]
+                filtered = [{"sharepoint_name": s["name"], prop_key: s.get(prop_key)} for s in data]
+                data = filtered
             if save_to_db:
                 full_data = m.get_samba_sharepoints(only_active_shares=only_active)
                 _sync_samba_sharepoints_to_db(full_data)
@@ -409,6 +458,9 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         parameters=[OpenApiParameter("sharepoint_name", str, "path", True), ParamProperty, ParamOnlyActive] + QuerySaveToDB
     )
     def retrieve(self, request: Request, sharepoint_name: str) -> Response:
+        """
+        دریافت اطلاعات یک مسیر اشتراکی سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         prop_key = get_request_param(request, "property", str, None)
         if prop_key: prop_key = prop_key.strip()
@@ -449,6 +501,9 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         }, "required": ["sharepoint_name", "path"]}
     )
     def create(self, request: Request) -> Response:
+        """
+        ایجاد یک مسیر اشتراکی جدید سامبا.
+        """
         sharepoint_name = request.data.get("sharepoint_name")
         if not sharepoint_name:
             return StandardErrorResponse("missing_sharepoint_name", "نام مسیر اشتراکی اجباری است.", 400, dict(request.data), False)
@@ -487,6 +542,9 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_sharepoint(self, request: Request, sharepoint_name: str) -> Response:
+        """
+        به‌روزرسانی یک مسیر اشتراکی سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.data)
         if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
@@ -502,6 +560,9 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter("sharepoint_name", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, sharepoint_name: str) -> Response:
+        """
+        حذف یک مسیر اشتراکی سامبا.
+        """
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
         if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
