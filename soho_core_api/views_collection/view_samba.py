@@ -114,6 +114,7 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
             }
         )
 
+# TODO:// ignore save_to_db  when create or delete or update
 
 # ========== ViewSets ==========
 class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
@@ -344,6 +345,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         حذف یک کاربر سامبا (هم از سامبا و هم از سیستم).
         """
+        # TODO:// validation: if have user or group or sharepoint return prompt
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
         validation_err = self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
@@ -583,6 +585,7 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         حذف یک گروه سامبا.
         """
+        # TODO:// validation: if have user or group or sharepoint return prompt
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
         validation_err = self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True)
@@ -833,6 +836,8 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         """
         حذف یک مسیر اشتراکی سامبا.
         """
+        # TODO:// validation: if have user or group or sharepoint return prompt
+
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
         validation_err = self._validate_samba_sharepoint_exists(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
