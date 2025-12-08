@@ -9,10 +9,12 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExampl
 from rest_framework import serializers
 from django.utils import timezone
 
+# Core utilities
 from pylibs import (
     get_request_param,
     build_standard_error_response,
     QuerySaveToDB,
+    BodyParameterSaveToDB,
     StandardResponse,
     StandardErrorResponse,
     CLICommandError,
@@ -24,7 +26,6 @@ from pylibs.mixins import (
     SambaSharepointValidationMixin,
 )
 
-# ========== Models ==========
 from soho_core_api.models import SambaUser, SambaGroup, SambaSharepoint
 
 # ========== OpenAPI Parameters ==========
@@ -64,6 +65,7 @@ ParamContainSystemGroups = OpenApiParameter(
     description="شامل گروه‌های سیستمی باشد یا خیر"
 )
 
+
 # ========== Utility Sync Functions ==========
 def _sync_samba_users_to_db(users: List[Dict]):
     for u in users:
@@ -85,6 +87,7 @@ def _sync_samba_users_to_db(users: List[Dict]):
             }
         )
 
+
 def _sync_samba_groups_to_db(groups: List[Dict]):
     for g in groups:
         SambaGroup.objects.update_or_create(
@@ -96,6 +99,7 @@ def _sync_samba_groups_to_db(groups: List[Dict]):
                 "last_update": timezone.now(),
             }
         )
+
 
 def _sync_samba_sharepoints_to_db(shares: List[Dict]):
     for s in shares:
@@ -119,6 +123,7 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict]):
                 "last_update": timezone.now(),
             }
         )
+
 
 # ========== ViewSets ==========
 class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
@@ -168,19 +173,18 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
                 val = user_data.get(prop_key)
                 if val is None:
                     return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                return StandardResponse({prop_key: val}, request_data=request_data, save_to_db=save_to_db)
+                return StandardResponse({"username": username, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
             return StandardResponse(user_data, request_data=request_data, save_to_db=save_to_db)
         except Exception as exc:
-            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات کاربر سامبا.",
-                                                 request_data=request_data, save_to_db=save_to_db)
+            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed", error_message="خطا در دریافت اطلاعات کاربر سامبا.", request_data=request_data, save_to_db=save_to_db)
 
     @extend_schema(
         request={"type": "object", "properties": {
-            "password": {"type": "string"}, "full_name": {"type": "string"},
-            "expiration_date": {"type": "string", "format": "date"},
-            "save_to_db": {"type": "boolean", "default": True}
-        }, "required": ["password"]},
+            "username": {"type": "string"},
+            "password": {"type": "string"},
+            "full_name": {"type": "string"},
+            **BodyParameterSaveToDB["properties"]
+        }, "required": ["username", "password"]},
         responses={201: StandardResponse}
     )
     def create(self, request: Request) -> Response:
@@ -197,7 +201,6 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         exp = get_request_param(request, "expiration_date", str)
         try:
             SambaManager().create_samba_user(username, pw, full_name, exp)
-            # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 user_data = SambaManager().get_samba_users(username=username)
                 if user_data:
@@ -209,7 +212,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
     @extend_schema(
         methods=["PUT"],
         parameters=[OpenApiParameter("action", str, "query", True, enum=["enable", "disable", "change_password"])] + QuerySaveToDB,
-        request={"type": "object", "properties": {"new_password": {"type": "string"}, "save_to_db": {"type": "boolean"}}},
+        request={"type": "object", "properties": {"new_password": {"type": "string"}, **BodyParameterSaveToDB["properties"]}},
         responses={200: StandardResponse}
     )
     @action(detail=True, methods=["put"], url_path="update")
@@ -302,12 +305,17 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
                 val = g.get(prop_key)
                 if val is None:
                     return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                return StandardResponse({prop_key: val}, request_data=request_data, save_to_db=save_to_db)
+                return StandardResponse({"groupname": groupname, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
             return StandardResponse(g, request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_group_fetch_failed", "خطا در دریافت گروه", request_data, save_to_db)
 
-    @extend_schema(request={"type": "object", "properties": {"groupname": {"type": "string"}, "save_to_db": {"type": "boolean", "default": False}}})
+    @extend_schema(
+        request={"type": "object", "properties": {
+            "groupname": {"type": "string"},
+            **BodyParameterSaveToDB["properties"]
+        }, "required": ["groupname"]}
+    )
     def create(self, request: Request) -> Response:
         groupname = request.data.get("groupname")
         if not groupname:
@@ -318,10 +326,10 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, False): return err
         try:
             SambaManager().create_samba_group(groupname)
-            if save_to_db: # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
-                group_data = SambaManager().get_samba_groups(groupname=groupname)
-                if group_data:
-                    _sync_samba_groups_to_db([group_data])
+            if save_to_db:
+                g = SambaManager().get_samba_groups(groupname=groupname)
+                if g:
+                    _sync_samba_groups_to_db([g])
             return StandardResponse(status=201, message=f"گروه '{groupname}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_group_create_failed", "خطا در ایجاد گروه", request_data, save_to_db)
@@ -329,7 +337,7 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
     @extend_schema(
         methods=["PUT"],
         parameters=[OpenApiParameter("action", str, "query", True, enum=["add_user", "remove_user"])] + QuerySaveToDB,
-        request={"type": "object", "properties": {"username": {"type": "string"}, "save_to_db": {"type": "boolean"}}},
+        request={"type": "object", "properties": {"username": {"type": "string"}, **BodyParameterSaveToDB["properties"]}, "required": ["username"]}
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_group(self, request: Request, groupname: str) -> Response:
@@ -366,7 +374,6 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
         try:
             SambaManager().delete_samba_group(groupname)
-            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaGroup.objects.filter(name=groupname).delete()
             return StandardResponse(f"گروه '{groupname}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
@@ -418,7 +425,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
                 val = s.get(prop_key)
                 if val is None:
                     return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                return StandardResponse({prop_key: val}, request_data=request_data, save_to_db=save_to_db)
+                return StandardResponse({"sharepoint_name": sharepoint_name, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
             return StandardResponse(s, request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_share_fetch_failed", "خطا در دریافت مسیر", request_data, save_to_db)
@@ -438,8 +445,8 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
             "inherit_permissions": {"type": "boolean", "default": False},
             "expiration_time": {"type": "string"},
             "available": {"type": "boolean", "default": True},
-            "save_to_db": {"type": "boolean", "default": False},
-        }, "required": ["path"]}
+            **BodyParameterSaveToDB["properties"]
+        }, "required": ["sharepoint_name", "path"]}
     )
     def create(self, request: Request) -> Response:
         sharepoint_name = request.data.get("sharepoint_name")
@@ -466,18 +473,17 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
                 expiration_time=get_request_param(request, "expiration_time", str),
                 available=get_request_param(request, "available", bool, True),
             )
-            # ✅ ذخیره در دیتابیس اگر درخواست شده باشد
             if save_to_db:
-                share_data = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
-                if share_data:
-                    _sync_samba_sharepoints_to_db([share_data])
+                s = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
+                if s:
+                    _sync_samba_sharepoints_to_db([s])
             return StandardResponse(status=201, message=f"مسیر '{sharepoint_name}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
         except Exception as e:
             return build_standard_error_response(e, "samba_share_create_failed", "خطا در ایجاد مسیر", request_data, save_to_db)
 
     @extend_schema(
         methods=["PUT"],
-        request={"type": "object", "additionalProperties": {"type": "string"}, "properties": {"save_to_db": {"type": "boolean"}}}
+        request={"type": "object", "additionalProperties": {"type": "string"}, "properties": BodyParameterSaveToDB["properties"]}
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_sharepoint(self, request: Request, sharepoint_name: str) -> Response:
@@ -494,14 +500,13 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         except Exception as e:
             return build_standard_error_response(e, "samba_share_update_failed", "خطا در به‌روزرسانی", request_data, save_to_db)
 
-    @extend_schema()
+    @extend_schema(parameters=[OpenApiParameter("sharepoint_name", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, sharepoint_name: str) -> Response:
         save_to_db = get_request_param(request, "save_to_db", bool, False)
         request_data = dict(request.query_params)
         if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
         try:
             SambaManager().delete_samba_sharepoint(sharepoint_name)
-            # ✅ حذف از دیتابیس اگر درخواست شده باشد
             if save_to_db:
                 SambaSharepoint.objects.filter(name=sharepoint_name).delete()
             return StandardResponse(f"مسیر '{sharepoint_name}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
