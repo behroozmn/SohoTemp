@@ -161,29 +161,45 @@ class SambaManager:
             else:
                 return shares
 
-    def create_samba_user(self, username: str, password: str, full_name: Optional[str] = None, expiration_date: Optional[str] = None, ) -> None:
+    def create_samba_user(self, username: str, password: str, full_name: Optional[str] = None, expiration_date: Optional[str] = None) -> None:
         """
-        ایجاد یک کاربر جدید سامبا.
-
-        Args:
-            username: نام کاربری یونیکس (کوچک، بدون فاصله).
-            password: رمز عبور کاربر سامبا.
-            full_name: نام کامل (اختیاری).
-            expiration_date: تاریخ انقضا به فرمت "YYYY-MM-DD" (اختیاری).
-
-        Raises:
-            CLICommandError: در صورت خطا در ایجاد کاربر لینوکس یا تنظیم رمز سامبا.
+        ایجاد یک کاربر جدید سامبا با مدیریت هوشمند گروه‌های هم‌نام.
         """
+        # بررسی وجود گروه با نام کاربر
+        group_exists = False
         try:
-            run_cli_command(["/usr/bin/id", username], use_sudo=True)
+            run_cli_command(["/usr/bin/getent", "group", username], use_sudo=True)
+            group_exists = True
         except CLICommandError:
-            cmd = ["/usr/sbin/useradd", "-m", username]
-            if full_name:
-                cmd.extend(["-c", full_name])
+            # گروه یافت نشد → ایجاد خودکار توسط useradd مجاز است
+            pass
+
+        # ساخت کاربر
+        cmd = ["/usr/sbin/useradd", "-m"]
+        if group_exists:
+            # اگر گروه وجود دارد، کاربر را به آن اضافه کن
+            cmd.extend(["-g", username])
+        if full_name:
+            cmd.extend(["-c", full_name])
+        cmd.append(username)
+
+        try:
             run_cli_command(cmd, use_sudo=True)
+        except CLICommandError as e:
+            if "already exists" in str(e):
+                # کاربر از قبل وجود دارد → ادامه بده (برای smbpasswd)
+                pass
+            else:
+                raise
 
-        run_cli_command(["/usr/bin/smbpasswd", "-a", "-s", username], input=f"{password}\n{password}\n", use_sudo=True)
+        # تنظیم رمز عبور سامبا
+        run_cli_command(
+            ["/usr/bin/smbpasswd", "-a", "-s", username],
+            input=f"{password}\n{password}\n",
+            use_sudo=True
+        )
 
+        # تنظیم تاریخ انقضا (در صورت نیاز)
         if expiration_date:
             self.set_user_expiration(username, expiration_date)
 
