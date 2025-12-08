@@ -495,6 +495,54 @@ class SambaUserValidationMixin:
             )
         return None
 
+    def _is_user_used_in_any_sharepoint(self, username: str) -> bool:
+        """
+        بررسی می‌کند که آیا کاربر در هر مسیر اشتراکی‌ای به عنوان valid user استفاده شده است.
+        """
+        manager = SambaManager()
+        shares = manager.get_samba_sharepoints()
+        for share in shares:
+            valid_users = share.get("valid users")
+            if valid_users:
+                # valid_users ممکن است رشته باشد، مثلاً "user1, user2"
+                users_list = [u.strip() for u in valid_users.split(",")] if isinstance(valid_users, str) else []
+                if username in users_list:
+                    return True
+        return False
+
+    def _is_user_member_of_any_group(self, username: str) -> bool:
+        """
+        بررسی می‌کند که آیا کاربر عضو هر گروهی است (اعم از سیستمی یا کاربری).
+        """
+        manager = SambaManager()
+        groups = manager.get_samba_groups(contain_system_groups=True)
+        for group in groups:
+            members = group.get("members", [])
+            if username in members:
+                return True
+        return False
+
+    def validate_user_deletion_allowed(self, username: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی اینکه آیا اجازه حذف کاربر وجود دارد یا خیر.
+        """
+        if self._is_user_used_in_any_sharepoint(username):
+            return StandardErrorResponse(
+                error_code="samba_user_used_in_sharepoint",
+                error_message=f"کاربر '{username}' در حداقل یک مسیر اشتراکی استفاده شده و قابل حذف نیست.",
+                status=403,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if self._is_user_member_of_any_group(username):
+            return StandardErrorResponse(
+                error_code="samba_user_member_of_group",
+                error_message=f"کاربر '{username}' عضو حداقل یک گروه است و قابل حذف نیست.",
+                status=403,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
 
 # ---------- Samba Group Validation Mixin ----------
 class SambaGroupValidationMixin:
@@ -551,6 +599,33 @@ class SambaGroupValidationMixin:
             )
         return None
 
+    def validate_group_deletion_allowed(self, groupname: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی اینکه آیا اجازه حذف گروه وجود دارد یا خیر.
+        """
+        if self._is_group_used_in_any_sharepoint(groupname):
+            return StandardErrorResponse(
+                error_code="samba_group_used_in_sharepoint",
+                error_message=f"گروه '{groupname}' در حداقل یک مسیر اشتراکی استفاده شده و قابل حذف نیست.",
+                status=403,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+    def _is_group_used_in_any_sharepoint(self, groupname: str) -> bool:
+        """
+        بررسی می‌کند که آیا گروه در هر مسیر اشتراکی‌ای به عنوان valid group استفاده شده است.
+        """
+        manager = SambaManager()
+        shares = manager.get_samba_sharepoints()
+        for share in shares:
+            valid_groups = share.get("valid groups")
+            if valid_groups:
+                groups_list = [g.strip() for g in valid_groups.split(",")] if isinstance(valid_groups, str) else []
+                if groupname in groups_list:
+                    return True
+        return False
 
 # ---------- Samba Sharepoint Validation Mixin ----------
 class SambaSharepointValidationMixin:

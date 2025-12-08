@@ -345,12 +345,15 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         حذف یک کاربر سامبا (هم از سامبا و هم از سیستم).
         """
-        # TODO:// validation: if have user or group or sharepoint return prompt
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        validation_err = self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
-        if validation_err:
-            return validation_err
+        if err := self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True):
+            return err
+
+        # ✅ اعتبارسنجی وابستگی‌ها قبل از حذف
+        if err := self.validate_user_deletion_allowed(username=username, save_to_db=save_to_db, request_data=request_data):
+            return err
+
         try:
             m = SambaManager()
             m.delete_samba_user_from_samba_db(username=username)
@@ -585,12 +588,15 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         حذف یک گروه سامبا.
         """
-        # TODO:// validation: if have user or group or sharepoint return prompt
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        validation_err = self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True)
-        if validation_err:
-            return validation_err
+        if err := self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True):
+            return err
+
+        # ✅ اعتبارسنجی وابستگی‌ها قبل از حذف
+        if err := self.validate_group_deletion_allowed(groupname=groupname, save_to_db=save_to_db, request_data=request_data):
+            return err
+
         try:
             SambaManager().delete_samba_group(groupname=groupname)
             if save_to_db:
