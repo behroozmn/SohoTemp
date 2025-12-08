@@ -108,7 +108,7 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
                 "directory_mask": s.get("directory mask", "0755"),
                 "inherit_permissions": s.get("inherit permissions", "no").lower() == "yes",
                 "expiration_time": s.get("expiration_time", ""),
-                "created_time": s.get("created_time", ""),
+                "created_time": s.get("created_time") or "",
                 "raw_data": s,
                 "last_update": timezone.now(),
             }
@@ -619,13 +619,13 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
 
 # ========== SambaSharepointViewSet ==========
 class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
-    """
-    مدیریت مسیرهای اشتراکی سامبا از طریق API.
-    """
+    """مدیریت مسیرهای اشتراکی سامبا از طریق API."""
     lookup_field = "sharepoint_name"
 
     @extend_schema(parameters=[OpenApiParameter(name="property", type=str, required=False,
-                                                description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها.', enum=["name", "is_custom", "created_time", "path", "create mask", "directory mask", "max connections", "read only", "available", "guest ok", "browseable", "inherit permissions", "valid users", "valid groups"]), ParamOnlyActive] + QuerySaveToDB)
+                                                description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها.',
+                                                enum=["all", "name", "is_custom", "created_time", "path", "create mask", "directory mask", "max connections", "read only", "available",
+                                                      "guest ok", "browseable", "inherit permissions", "valid users", "valid groups"]), ParamOnlyActive] + QuerySaveToDB)
     def list(self, request: Request) -> Response:
         """
         دریافت لیست تمام مسیرهای اشتراکی سامبا.

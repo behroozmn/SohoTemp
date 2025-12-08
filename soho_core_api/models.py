@@ -254,7 +254,7 @@ class SambaSharepoint(models.Model):
     directory_mask = models.CharField(max_length=10, default="0755")
     inherit_permissions = models.BooleanField(default=False)
     expiration_time = models.CharField(max_length=100, blank=True)
-    created_time = models.CharField(max_length=30, blank=True)
+    created_time = models.CharField(max_length=30, blank=True, null=True)
     last_update = models.DateTimeField(auto_now=True)
     raw_data = models.JSONField(default=dict)
 
