@@ -302,8 +302,8 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
                 m.disable_samba_user(username=username)
                 msg = f"کاربر '{username}' غیرفعال شد."
             elif action_name == "change_password":
-                np = get_request_param(request=request, param_name="new_password", return_type=str, default=None)
-                if not np:
+                new_password = get_request_param(request=request, param_name="new_password", return_type=str, default=None)
+                if not new_password:
                     return StandardErrorResponse(
                         error_code="missing_new_password",
                         error_message="رمز جدید اجباری است.",
@@ -311,7 +311,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
                         request_data=request_data,
                         save_to_db=save_to_db
                     )
-                m.change_samba_user_password(username=username, new_password=np)
+                m.change_samba_user_password(username=username, new_password=new_password)
                 msg = "رمز عبور تغییر کرد."
             else:
                 return StandardErrorResponse(
