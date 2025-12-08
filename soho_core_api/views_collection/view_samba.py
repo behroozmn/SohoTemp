@@ -140,27 +140,33 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         دریافت لیست تمام کاربران سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
         if prop_key: prop_key = prop_key.strip()
         request_data = dict(request.query_params)
         try:
             manager = SambaManager()
             data = manager.get_samba_users()
             if prop_key and prop_key.lower() != "all":
-                # ✅ فرمت خروجی: {"username": "...", "property": value}
                 filtered = [{"username": u.get("Unix username"), prop_key: u.get(prop_key)} for u in data]
                 data = filtered
             if save_to_db:
-                # فقط در حالت all یا بدون prop، داده‌ها به دیتابیس ذخیره می‌شوند
-                users_to_sync = data if not prop_key or prop_key.lower() == "all" else manager.get_samba_users()
-                _sync_samba_users_to_db(users_to_sync)
-            return StandardResponse(data=data, message="لیست کاربران سامبا با موفقیت بازیابی شد.",
-                                    request_data=request_data, save_to_db=save_to_db)
+                users_to_sync = data if (not prop_key or prop_key.lower() == "all") else manager.get_samba_users()
+                _sync_samba_users_to_db(users=users_to_sync)
+            return StandardResponse(
+                data=data,
+                message="لیست کاربران سامبا با موفقیت بازیابی شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as exc:
-            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا.",
-                                                 request_data=request_data, save_to_db=save_to_db)
+            return build_standard_error_response(
+                exc=exc,
+                error_code="samba_user_fetch_failed",
+                error_message="خطا در دریافت اطلاعات کاربر(ها) سامبا.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         parameters=[OpenApiParameter("username", str, "path", True), ParamProperty] + QuerySaveToDB,
@@ -170,28 +176,52 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         دریافت اطلاعات یک کاربر سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
-        if prop_key: prop_key = prop_key.strip()
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
+        if prop_key:
+            prop_key = prop_key.strip()
         request_data = dict(request.query_params)
         try:
             manager = SambaManager()
             user_data = manager.get_samba_users(username=username)
             if user_data is None:
-                return StandardErrorResponse("user_not_found", f"کاربر '{username}' یافت نشد.", 404, request_data, save_to_db)
+                return StandardErrorResponse(
+                    error_code="user_not_found",
+                    error_message=f"کاربر '{username}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
             if save_to_db:
-                _sync_samba_users_to_db([user_data])
+                _sync_samba_users_to_db(users=[user_data])
             if prop_key and prop_key.lower() != "all":
                 val = user_data.get(prop_key)
                 if val is None:
-                    return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                # ✅ فرمت خروجی برای property خاص
-                return StandardResponse({"username": username, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
-            return StandardResponse(user_data, request_data=request_data, save_to_db=save_to_db)
+                    return StandardErrorResponse(
+                        error_code="property_not_found",
+                        error_message=f"پراپرتی '{prop_key}' یافت نشد.",
+                        status=404,
+                        request_data=request_data,
+                        save_to_db=save_to_db
+                    )
+                return StandardResponse(
+                    data={"username": username, prop_key: val},
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
+            return StandardResponse(
+                data=user_data,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as exc:
-            return build_standard_error_response(exc=exc, error_code="samba_user_fetch_failed",
-                                                 error_message="خطا در دریافت اطلاعات کاربر سامبا.",
-                                                 request_data=request_data, save_to_db=save_to_db)
+            return build_standard_error_response(
+                exc=exc,
+                error_code="samba_user_fetch_failed",
+                error_message="خطا در دریافت اطلاعات کاربر سامبا.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         request={"type": "object", "properties": {
@@ -208,24 +238,52 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         username = request.data.get("username")
         if not username:
-            return StandardErrorResponse("missing_username", "نام کاربر اجباری است.", 400, dict(request.data), False)
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+            return StandardErrorResponse(
+                error_code="missing_username",
+                error_message="نام کاربر اجباری است.",
+                status=400,
+                request_data=dict(request.data),
+                save_to_db=False
+            )
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        if err := self._validate_samba_username_format(username, save_to_db, request_data): return err
-        if err := self._validate_samba_user_exists(username, save_to_db, request_data, False): return err
-        if not (pw := get_request_param(request, "password", str)):
-            return StandardErrorResponse("missing_password", "رمز عبور اجباری است.", 400, request_data, save_to_db)
-        full_name = get_request_param(request, "full_name", str)
-        exp = get_request_param(request, "expiration_date", str)
+        validation_err = self._validate_samba_username_format(username=username, save_to_db=save_to_db, request_data=request_data)
+        if validation_err:
+            return validation_err
+        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=False)
+        if validation_err:
+            return validation_err
+        pw = get_request_param(request=request, param_name="password", return_type=str, default=None)
+        if not pw:
+            return StandardErrorResponse(
+                error_code="missing_password",
+                error_message="رمز عبور اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+        full_name = get_request_param(request=request, param_name="full_name", return_type=str, default=None)
+        exp = get_request_param(request=request, param_name="expiration_date", return_type=str, default=None)
         try:
-            SambaManager().create_samba_user(username, pw, full_name, exp)
+            SambaManager().create_samba_user(username=username, password=pw, full_name=full_name, expiration_date=exp)
             if save_to_db:
                 user_data = SambaManager().get_samba_users(username=username)
                 if user_data:
-                    _sync_samba_users_to_db([user_data])
-            return StandardResponse(status=201, message=f"کاربر '{username}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_users_to_db(users=[user_data])
+            return StandardResponse(
+                status=201,
+                message=f"کاربر '{username}' ایجاد شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_user_create_failed", "خطا در ایجاد کاربر", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_user_create_failed",
+                error_message="خطا در ایجاد کاربر",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         methods=["PUT"],
@@ -238,52 +296,90 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         به‌روزرسانی یک کاربر سامبا (فعال/غیرفعال یا تغییر رمز).
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        action_name = get_request_param(request, "action", str)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        action_name = get_request_param(request=request, param_name="action", return_type=str, default=None)
         request_data = dict(request.data)
-        if err := self._validate_samba_user_exists(username, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
             m = SambaManager()
             if action_name == "enable":
-                m.enable_samba_user(username)
+                m.enable_samba_user(username=username)
                 msg = f"کاربر '{username}' فعال شد."
             elif action_name == "disable":
-                m.disable_samba_user(username)
+                m.disable_samba_user(username=username)
                 msg = f"کاربر '{username}' غیرفعال شد."
             elif action_name == "change_password":
-                if not (np := get_request_param(request, "new_password", str)):
-                    return StandardErrorResponse("missing_new_password", "رمز جدید اجباری است.", 400, request_data, save_to_db)
-                m.change_samba_user_password(username, np)
+                np = get_request_param(request=request, param_name="new_password", return_type=str, default=None)
+                if not np:
+                    return StandardErrorResponse(
+                        error_code="missing_new_password",
+                        error_message="رمز جدید اجباری است.",
+                        status=400,
+                        request_data=request_data,
+                        save_to_db=save_to_db
+                    )
+                m.change_samba_user_password(username=username, new_password=np)
                 msg = "رمز عبور تغییر کرد."
             else:
-                return StandardErrorResponse("invalid_action", "عملیات نامعتبر.", 400, request_data, save_to_db)
+                return StandardErrorResponse(
+                    error_code="invalid_action",
+                    error_message="عملیات نامعتبر.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
             if save_to_db:
                 user_data = m.get_samba_users(username=username)
                 if user_data:
-                    _sync_samba_users_to_db([user_data])
-            return StandardResponse(message=msg, request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_users_to_db(users=[user_data])
+            return StandardResponse(
+                message=msg,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_user_op_failed", "خطا در عملیات کاربر", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_user_op_failed",
+                error_message="خطا در عملیات کاربر",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(parameters=[OpenApiParameter("username", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, username: str) -> Response:
         """
         حذف یک کاربر سامبا (هم از سامبا و هم از سیستم).
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        if err := self._validate_samba_user_exists(username, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
             m = SambaManager()
-            m.delete_samba_user_from_samba_db(username)
-            m.delete_samba_user_from_system(username)
+            m.delete_samba_user_from_samba_db(username=username)
+            m.delete_samba_user_from_system(username=username)
             if save_to_db:
                 SambaUser.objects.filter(username=username).delete()
-            return StandardResponse(f"کاربر '{username}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
+            return StandardResponse(
+                message=f"کاربر '{username}' حذف شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_del_sys_failed", "خطا در حذف از سیستم", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_del_sys_failed",
+                error_message="خطا در حذف از سیستم",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
 
+# ========== SambaGroupViewSet ==========
 class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
     """
     مدیریت گروه‌های سامبا از طریق API.
@@ -297,10 +393,11 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         دریافت لیست تمام گروه‌های سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
-        if prop_key: prop_key = prop_key.strip()
-        contain_sys = get_request_param(request, "contain_system_groups", bool, True)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
+        if prop_key:
+            prop_key = prop_key.strip()
+        contain_sys = get_request_param(request=request, param_name="contain_system_groups", return_type=bool, default=True)
         request_data = dict(request.query_params)
         try:
             m = SambaManager()
@@ -310,10 +407,20 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
                 data = filtered
             if save_to_db:
                 full_data = m.get_samba_groups(contain_system_groups=contain_sys)
-                _sync_samba_groups_to_db(full_data)
-            return StandardResponse(data, request_data=request_data, save_to_db=save_to_db)
+                _sync_samba_groups_to_db(groups=full_data)
+            return StandardResponse(
+                data=data,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_group_fetch_failed", "خطا در دریافت گروه‌ها", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_group_fetch_failed",
+                error_message="خطا در دریافت گروه‌ها",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         parameters=[OpenApiParameter("groupname", str, "path", True), ParamProperty, ParamContainSystemGroups] + QuerySaveToDB
@@ -322,26 +429,53 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         دریافت اطلاعات یک گروه سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
-        if prop_key: prop_key = prop_key.strip()
-        contain_sys = get_request_param(request, "contain_system_groups", bool, True)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
+        if prop_key:
+            prop_key = prop_key.strip()
+        contain_sys = get_request_param(request=request, param_name="contain_system_groups", return_type=bool, default=True)
         request_data = dict(request.query_params)
         try:
             m = SambaManager()
             g = m.get_samba_groups(groupname=groupname, contain_system_groups=contain_sys)
             if g is None:
-                return StandardErrorResponse("group_not_found", f"گروه '{groupname}' یافت نشد.", 404, request_data, save_to_db)
+                return StandardErrorResponse(
+                    error_code="group_not_found",
+                    error_message=f"گروه '{groupname}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
             if save_to_db:
-                _sync_samba_groups_to_db([g])
+                _sync_samba_groups_to_db(groups=[g])
             if prop_key and prop_key.lower() != "all":
                 val = g.get(prop_key)
                 if val is None:
-                    return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                return StandardResponse({"groupname": groupname, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
-            return StandardResponse(g, request_data=request_data, save_to_db=save_to_db)
+                    return StandardErrorResponse(
+                        error_code="property_not_found",
+                        error_message=f"پراپرتی '{prop_key}' یافت نشد.",
+                        status=404,
+                        request_data=request_data,
+                        save_to_db=save_to_db
+                    )
+                return StandardResponse(
+                    data={"groupname": groupname, prop_key: val},
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
+            return StandardResponse(
+                data=g,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_group_fetch_failed", "خطا در دریافت گروه", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_group_fetch_failed",
+                error_message="خطا در دریافت گروه",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         request={"type": "object", "properties": {
@@ -355,20 +489,41 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         groupname = request.data.get("groupname")
         if not groupname:
-            return StandardErrorResponse("missing_groupname", "نام گروه اجباری است.", 400, dict(request.data), False)
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+            return StandardErrorResponse(
+                error_code="missing_groupname",
+                error_message="نام گروه اجباری است.",
+                status=400,
+                request_data=dict(request.data),
+                save_to_db=False
+            )
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        if err := self._validate_samba_groupname_format(groupname, save_to_db, request_data): return err
-        if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, False): return err
+        validation_err = self._validate_samba_groupname_format(groupname=groupname, save_to_db=save_to_db, request_data=request_data)
+        if validation_err:
+            return validation_err
+        validation_err = self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=False)
+        if validation_err:
+            return validation_err
         try:
-            SambaManager().create_samba_group(groupname)
+            SambaManager().create_samba_group(groupname=groupname)
             if save_to_db:
                 g = SambaManager().get_samba_groups(groupname=groupname)
                 if g:
-                    _sync_samba_groups_to_db([g])
-            return StandardResponse(status=201, message=f"گروه '{groupname}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_groups_to_db(groups=[g])
+            return StandardResponse(
+                status=201,
+                message=f"گروه '{groupname}' ایجاد شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_group_create_failed", "خطا در ایجاد گروه", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_group_create_failed",
+                error_message="خطا در ایجاد گروه",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         methods=["PUT"],
@@ -380,66 +535,104 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
         """
         به‌روزرسانی یک گروه سامبا (اضافه/حذف کاربر).
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        action_name = get_request_param(request, "action", str)
-        username = get_request_param(request, "username", str)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        action_name = get_request_param(request=request, param_name="action", return_type=str, default=None)
+        username = get_request_param(request=request, param_name="username", return_type=str, default=None)
         request_data = dict(request.data)
-        if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         if not username:
-            return StandardErrorResponse("missing_username", "نام کاربر اجباری است.", 400, request_data, save_to_db)
-        if err := SambaUserValidationMixin()._validate_samba_user_exists(username, save_to_db, request_data, True): return err
+            return StandardErrorResponse(
+                error_code="missing_username",
+                error_message="نام کاربر اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+        validation_err = SambaUserValidationMixin()._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
             m = SambaManager()
             if action_name == "add_user":
-                m.add_user_to_group(username, groupname)
+                m.add_user_to_group(username=username, groupname=groupname)
                 msg = f"کاربر '{username}' به گروه اضافه شد."
             elif action_name == "remove_user":
-                m.remove_user_from_group(username, groupname)
+                m.remove_user_from_group(username=username, groupname=groupname)
                 msg = f"کاربر '{username}' از گروه حذف شد."
             else:
-                return StandardErrorResponse("invalid_action", "عملیات نامعتبر.", 400, request_data, save_to_db)
+                return StandardErrorResponse(
+                    error_code="invalid_action",
+                    error_message="عملیات نامعتبر.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
             if save_to_db:
                 g = m.get_samba_groups(groupname=groupname)
                 if g:
-                    _sync_samba_groups_to_db([g])
-            return StandardResponse(msg, request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_groups_to_db(groups=[g])
+            return StandardResponse(
+                message=msg,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_group_op_failed", "خطا در عملیات گروه", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_group_op_failed",
+                error_message="خطا در عملیات گروه",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(parameters=[OpenApiParameter("groupname", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, groupname: str) -> Response:
         """
         حذف یک گروه سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        if err := self._validate_samba_group_exists(groupname, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
-            SambaManager().delete_samba_group(groupname)
+            SambaManager().delete_samba_group(groupname=groupname)
             if save_to_db:
                 SambaGroup.objects.filter(name=groupname).delete()
-            return StandardResponse(f"گروه '{groupname}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
+            return StandardResponse(
+                message=f"گروه '{groupname}' حذف شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_group_del_failed", "خطا در حذف گروه", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_group_del_failed",
+                error_message="خطا در حذف گروه",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
 
+# ========== SambaSharepointViewSet ==========
 class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
     """
     مدیریت مسیرهای اشتراکی سامبا از طریق API.
     """
     lookup_field = "sharepoint_name"
 
-    @extend_schema(
-        parameters=[ParamProperty, ParamOnlyActive] + QuerySaveToDB
-    )
+    @extend_schema(parameters=[ParamProperty, ParamOnlyActive] + QuerySaveToDB)
     def list(self, request: Request) -> Response:
         """
         دریافت لیست تمام مسیرهای اشتراکی سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
-        if prop_key: prop_key = prop_key.strip()
-        only_active = get_request_param(request, "only_active", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
+        if prop_key:
+            prop_key = prop_key.strip()
+        only_active = get_request_param(request=request, param_name="only_active", return_type=bool, default=False)
         request_data = dict(request.query_params)
         try:
             m = SambaManager()
@@ -449,38 +642,71 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
                 data = filtered
             if save_to_db:
                 full_data = m.get_samba_sharepoints(only_active_shares=only_active)
-                _sync_samba_sharepoints_to_db(full_data)
-            return StandardResponse(data, request_data=request_data, save_to_db=save_to_db)
+                _sync_samba_sharepoints_to_db(shares=full_data)
+            return StandardResponse(
+                data=data,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_share_fetch_failed", "خطا در دریافت مسیرها", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_share_fetch_failed",
+                error_message="خطا در دریافت مسیرها",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
-    @extend_schema(
-        parameters=[OpenApiParameter("sharepoint_name", str, "path", True), ParamProperty, ParamOnlyActive] + QuerySaveToDB
-    )
+    @extend_schema(parameters=[OpenApiParameter("sharepoint_name", str, "path", True), ParamProperty, ParamOnlyActive] + QuerySaveToDB)
     def retrieve(self, request: Request, sharepoint_name: str) -> Response:
         """
         دریافت اطلاعات یک مسیر اشتراکی سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        prop_key = get_request_param(request, "property", str, None)
-        if prop_key: prop_key = prop_key.strip()
-        only_active = get_request_param(request, "only_active", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
+        prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
+        if prop_key:
+            prop_key = prop_key.strip()
+        only_active = get_request_param(request=request, param_name="only_active", return_type=bool, default=False)
         request_data = dict(request.query_params)
         try:
             m = SambaManager()
             s = m.get_samba_sharepoints(sharepoint_name=sharepoint_name, only_active_shares=only_active)
             if s is None:
-                return StandardErrorResponse("share_not_found", f"مسیر '{sharepoint_name}' یافت نشد.", 404, request_data, save_to_db)
+                return StandardErrorResponse(
+                    error_code="share_not_found",
+                    error_message=f"مسیر '{sharepoint_name}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
             if save_to_db:
-                _sync_samba_sharepoints_to_db([s])
+                _sync_samba_sharepoints_to_db(shares=[s])
             if prop_key and prop_key.lower() != "all":
                 val = s.get(prop_key)
                 if val is None:
-                    return StandardErrorResponse("property_not_found", f"پراپرتی '{prop_key}' یافت نشد.", 404, request_data, save_to_db)
-                return StandardResponse({"sharepoint_name": sharepoint_name, prop_key: val}, request_data=request_data, save_to_db=save_to_db)
-            return StandardResponse(s, request_data=request_data, save_to_db=save_to_db)
+                    return StandardErrorResponse(
+                        error_code="property_not_found",
+                        error_message=f"پراپرتی '{prop_key}' یافت نشد.",
+                        status=404,
+                        request_data=request_data, save_to_db=save_to_db)
+                return StandardResponse(
+                    data={"sharepoint_name": sharepoint_name, prop_key: val},
+                    request_data=request_data,
+                    save_to_db=save_to_db
+                )
+            return StandardResponse(
+                data=s,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_share_fetch_failed", "خطا در دریافت مسیر", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_share_fetch_failed",
+                error_message="خطا در دریافت مسیر",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         request={"type": "object", "properties": {
@@ -506,35 +732,76 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         """
         sharepoint_name = request.data.get("sharepoint_name")
         if not sharepoint_name:
-            return StandardErrorResponse("missing_sharepoint_name", "نام مسیر اشتراکی اجباری است.", 400, dict(request.data), False)
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+            return StandardErrorResponse(
+                error_code="missing_sharepoint_name",
+                error_message="نام مسیر اشتراکی اجباری است.",
+                status=400,
+                request_data=dict(request.data),
+                save_to_db=False
+            )
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        if err := self._validate_samba_sharepoint_name_format(sharepoint_name, save_to_db, request_data): return err
-        if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, False): return err
-        if not (path := get_request_param(request, "path", str)):
-            return StandardErrorResponse("missing_path", "مسیر اجباری است.", 400, request_data, save_to_db)
+        validation_err = self._validate_samba_sharepoint_name_format(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data)
+        if validation_err:
+            return validation_err
+        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=False)
+        if validation_err:
+            return validation_err
+        path = get_request_param(request=request, param_name="path", return_type=str, default=None)
+        if not path:
+            return StandardErrorResponse(
+                error_code="missing_path",
+                error_message="مسیر اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
+        valid_users = get_request_param(request=request, param_name="valid_users", return_type=list, default=None)
+        valid_groups = get_request_param(request=request, param_name="valid_groups", return_type=list, default=None)
+        read_only = get_request_param(request=request, param_name="read_only", return_type=bool, default=False)
+        guest_ok = get_request_param(request=request, param_name="guest_ok", return_type=bool, default=False)
+        browseable = get_request_param(request=request, param_name="browseable", return_type=bool, default=True)
+        max_connections = get_request_param(request=request, param_name="max_connections", return_type=int, default=None)
+        create_mask = get_request_param(request=request, param_name="create_mask", return_type=str, default="0644")
+        directory_mask = get_request_param(request=request, param_name="directory_mask", return_type=str, default="0755")
+        inherit_permissions = get_request_param(request=request, param_name="inherit_permissions", return_type=bool, default=False)
+        expiration_time = get_request_param(request=request, param_name="expiration_time", return_type=str, default=None)
+        available = get_request_param(request=request, param_name="available", return_type=bool, default=True)
+
         try:
             SambaManager().create_samba_sharepoint(
-                name=sharepoint_name, path=path,
-                valid_users=get_request_param(request, "valid_users", list),
-                valid_groups=get_request_param(request, "valid_groups", list),
-                read_only=get_request_param(request, "read_only", bool, False),
-                guest_ok=get_request_param(request, "guest_ok", bool, False),
-                browseable=get_request_param(request, "browseable", bool, True),
-                max_connections=get_request_param(request, "max_connections", int),
-                create_mask=get_request_param(request, "create_mask", str, "0644"),
-                directory_mask=get_request_param(request, "directory_mask", str, "0755"),
-                inherit_permissions=get_request_param(request, "inherit_permissions", bool, False),
-                expiration_time=get_request_param(request, "expiration_time", str),
-                available=get_request_param(request, "available", bool, True),
+                name=sharepoint_name,
+                path=path,
+                valid_users=valid_users,
+                valid_groups=valid_groups,
+                read_only=read_only,
+                guest_ok=guest_ok,
+                browseable=browseable,
+                max_connections=max_connections,
+                create_mask=create_mask,
+                directory_mask=directory_mask,
+                inherit_permissions=inherit_permissions,
+                expiration_time=expiration_time,
+                available=available,
             )
             if save_to_db:
                 s = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
                 if s:
-                    _sync_samba_sharepoints_to_db([s])
-            return StandardResponse(status=201, message=f"مسیر '{sharepoint_name}' ایجاد شد.", request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_sharepoints_to_db(shares=[s])
+            return StandardResponse(
+                status=201,
+                message=f"مسیر '{sharepoint_name}' ایجاد شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_share_create_failed", "خطا در ایجاد مسیر", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_share_create_failed",
+                error_message="خطا در ایجاد مسیر",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(
         methods=["PUT"],
@@ -545,31 +812,55 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         """
         به‌روزرسانی یک مسیر اشتراکی سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
-            SambaManager().update_samba_sharepoint(sharepoint_name, **request_data)
+            SambaManager().update_samba_sharepoint(sharepoint_name=sharepoint_name, **request_data)
             if save_to_db:
                 s = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
                 if s:
-                    _sync_samba_sharepoints_to_db([s])
-            return StandardResponse(f"مسیر '{sharepoint_name}' به‌روزرسانی شد.", request_data=request_data, save_to_db=save_to_db)
+                    _sync_samba_sharepoints_to_db(shares=[s])
+            return StandardResponse(
+                message=f"مسیر '{sharepoint_name}' به‌روزرسانی شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_share_update_failed", "خطا در به‌روزرسانی", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_share_update_failed",
+                error_message="خطا در به‌روزرسانی",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
 
     @extend_schema(parameters=[OpenApiParameter("sharepoint_name", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, sharepoint_name: str) -> Response:
         """
         حذف یک مسیر اشتراکی سامبا.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
+        save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        if err := self._validate_samba_sharepoint_exists(sharepoint_name, save_to_db, request_data, True): return err
+        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        if validation_err:
+            return validation_err
         try:
-            SambaManager().delete_samba_sharepoint(sharepoint_name)
+            SambaManager().delete_samba_sharepoint(sharepoint_name=sharepoint_name)
             if save_to_db:
                 SambaSharepoint.objects.filter(name=sharepoint_name).delete()
-            return StandardResponse(f"مسیر '{sharepoint_name}' حذف شد.", request_data=request_data, save_to_db=save_to_db)
+            return StandardResponse(
+                message=f"مسیر '{sharepoint_name}' حذف شد.",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
         except Exception as e:
-            return build_standard_error_response(e, "samba_share_del_failed", "خطا در حذف مسیر", request_data, save_to_db)
+            return build_standard_error_response(
+                exc=e,
+                error_code="samba_share_del_failed",
+                error_message="خطا در حذف مسیر",
+                request_data=request_data,
+                save_to_db=save_to_db
+            )
