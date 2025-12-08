@@ -431,7 +431,7 @@ class FilesystemValidationMixin:
 
 # ---------- Samba User Validation Mixin ----------
 class SambaUserValidationMixin:
-    def _validate_samba_user_exists(self, username: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
+    def validate_samba_user_exists(self, username: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
         if must_exist:
             manager = SambaManager()
             user = manager.get_samba_users(username=username)

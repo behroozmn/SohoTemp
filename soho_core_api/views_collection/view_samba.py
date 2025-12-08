@@ -1,31 +1,18 @@
 # soho_core_api/views/view_samba.py
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+from django.utils import timezone
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
+from rest_framework import serializers
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
-from rest_framework import serializers
-from django.utils import timezone
 
 # Core utilities
-from pylibs import (
-    get_request_param,
-    build_standard_error_response,
-    QuerySaveToDB,
-    BodyParameterSaveToDB,
-    StandardResponse,
-    StandardErrorResponse,
-    CLICommandError,
-)
+from pylibs import (get_request_param, build_standard_error_response, QuerySaveToDB, BodyParameterSaveToDB, StandardResponse, StandardErrorResponse, )
+from pylibs.mixins import (SambaUserValidationMixin, SambaGroupValidationMixin, SambaSharepointValidationMixin, )
 from pylibs.samba import SambaManager
-from pylibs.mixins import (
-    SambaUserValidationMixin,
-    SambaGroupValidationMixin,
-    SambaSharepointValidationMixin,
-)
-
 from soho_core_api.models import SambaUser, SambaGroup, SambaSharepoint
 
 # ========== OpenAPI Parameters ==========
@@ -65,6 +52,7 @@ ParamContainSystemGroups = OpenApiParameter(
     description="شامل گروه‌های سیستمی باشد یا خیر"
 )
 
+
 # ========== Utility Sync Functions ==========
 def _sync_samba_users_to_db(users: List[Dict[str, Any]]) -> None:
     """همگام‌سازی لیست کاربران سامبا با جدول دیتابیس."""
@@ -87,6 +75,7 @@ def _sync_samba_users_to_db(users: List[Dict[str, Any]]) -> None:
             }
         )
 
+
 def _sync_samba_groups_to_db(groups: List[Dict[str, Any]]) -> None:
     """همگام‌سازی لیست گروه‌های سامبا با جدول دیتابیس."""
     for g in groups:
@@ -99,6 +88,7 @@ def _sync_samba_groups_to_db(groups: List[Dict[str, Any]]) -> None:
                 "last_update": timezone.now(),
             }
         )
+
 
 def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
     """همگام‌سازی لیست مسیرهای اشتراکی سامبا با جدول دیتابیس."""
@@ -123,6 +113,7 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
                 "last_update": timezone.now(),
             }
         )
+
 
 # ========== ViewSets ==========
 class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
@@ -250,7 +241,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         validation_err = self._validate_samba_username_format(username=username, save_to_db=save_to_db, request_data=request_data)
         if validation_err:
             return validation_err
-        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=False)
+        validation_err = self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=False)
         if validation_err:
             return validation_err
         pw = get_request_param(request=request, param_name="password", return_type=str, default=None)
@@ -299,7 +290,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         action_name = get_request_param(request=request, param_name="action", return_type=str, default=None)
         request_data = dict(request.data)
-        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        validation_err = self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
         if validation_err:
             return validation_err
         try:
@@ -355,7 +346,7 @@ class SambaUserViewSet(viewsets.ViewSet, SambaUserValidationMixin):
         """
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        validation_err = self._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        validation_err = self.validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
         if validation_err:
             return validation_err
         try:
@@ -550,7 +541,7 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
                 request_data=request_data,
                 save_to_db=save_to_db
             )
-        validation_err = SambaUserValidationMixin()._validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        validation_err = SambaUserValidationMixin().validate_samba_user_exists(username=username, save_to_db=save_to_db, request_data=request_data, must_exist=True)
         if validation_err:
             return validation_err
         try:
@@ -741,10 +732,10 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
             )
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        validation_err = self._validate_samba_sharepoint_name_format(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data)
+        validation_err = self._validate_samba_sharepoint_name_format(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data)
         if validation_err:
             return validation_err
-        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=False)
+        validation_err = self._validate_samba_sharepoint_exists(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=False)
         if validation_err:
             return validation_err
         path = get_request_param(request=request, param_name="path", return_type=str, default=None)
@@ -814,7 +805,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         """
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
-        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        validation_err = self._validate_samba_sharepoint_exists(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
         if validation_err:
             return validation_err
         try:
@@ -844,11 +835,11 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         """
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
-        validation_err = self._validate_samba_sharepoint_exists(sharepoint_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
+        validation_err = self._validate_samba_sharepoint_exists(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
         if validation_err:
             return validation_err
         try:
-            SambaManager().delete_samba_sharepoint(sharepoint_name=sharepoint_name)
+            SambaManager().delete_samba_sharepoint(name=sharepoint_name)
             if save_to_db:
                 SambaSharepoint.objects.filter(name=sharepoint_name).delete()
             return StandardResponse(
