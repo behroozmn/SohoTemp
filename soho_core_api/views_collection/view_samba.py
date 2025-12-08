@@ -114,6 +114,7 @@ def _sync_samba_sharepoints_to_db(shares: List[Dict[str, Any]]) -> None:
             }
         )
 
+
 # TODO:// ignore save_to_db  when create or delete or update
 
 # ========== ViewSets ==========
@@ -623,7 +624,8 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
     """
     lookup_field = "sharepoint_name"
 
-    @extend_schema(parameters=[ParamProperty, ParamOnlyActive] + QuerySaveToDB)
+    @extend_schema(parameters=[OpenApiParameter(name="property", type=str, required=False,
+                                                description='نام یک پراپرتی خاص (مثل "Logoff time") یا "all" برای دریافت تمام پراپرتی‌ها.', enum=["name", "is_custom", "created_time", "path", "create mask", "directory mask", "max connections", "read only", "available", "guest ok", "browseable", "inherit permissions", "valid users", "valid groups"]), ParamOnlyActive] + QuerySaveToDB)
     def list(self, request: Request) -> Response:
         """
         دریافت لیست تمام مسیرهای اشتراکی سامبا.
@@ -657,7 +659,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
                 save_to_db=save_to_db
             )
 
-    @extend_schema(parameters=[OpenApiParameter("sharepoint_name", str, "path", True), ParamProperty, ParamOnlyActive] + QuerySaveToDB)
+    @extend_schema(parameters=[OpenApiParameter(name="sharepoint_name", type=str, location="path", default=True), ParamProperty, ParamOnlyActive] + QuerySaveToDB)
     def retrieve(self, request: Request, sharepoint_name: str) -> Response:
         """
         دریافت اطلاعات یک مسیر اشتراکی سامبا.
