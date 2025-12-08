@@ -1,16 +1,13 @@
-from django.urls import path
-from soho_core_api.views_collection.view_samba import SambaUserView, SambaGroupView, SambaSharepointView
+# soho_core_api/urls.py
+from django.urls import path, include
+from rest_framework.routers import SimpleRouter
+from soho_core_api.views_collection.view_samba import SambaUserViewSet, SambaGroupViewSet, SambaSharepointViewSet
+
+router = SimpleRouter()
+router.register(r"samba/users", SambaUserViewSet, basename="samba-user")
+router.register(r"samba/groups", SambaGroupViewSet, basename="samba-group")
+router.register(r"samba/sharepoints", SambaSharepointViewSet, basename="samba-sharepoint")
 
 urlpatterns = [
-    # ========== User Endpoints ==========
-    path("users/", SambaUserView.as_view(), name="samba-user-list"),
-    path("users/<str:username>/", SambaUserView.as_view(), name="samba-user-detail"),
-
-    # ========== Group Endpoints ==========
-    path("groups/", SambaGroupView.as_view(), name="samba-group-list"),
-    path("groups/<str:groupname>/", SambaGroupView.as_view(), name="samba-group-detail"),
-
-    # ========== Sharepoint Endpoints ==========
-    path("sharepoints/", SambaSharepointView.as_view(), name="samba-sharepoint-list"),
-    path("sharepoints/<str:sharepoint_name>/", SambaSharepointView.as_view(), name="samba-sharepoint-detail"),
+    path("api/", include(router.urls)),
 ]

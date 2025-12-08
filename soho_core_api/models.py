@@ -209,3 +209,54 @@ class Filesystems(models.Model):
 
     def __str__(self):
         return f"Filesystems({self.name})"
+
+
+# soho_core_api/models.py
+class SambaUser(models.Model):
+    username = models.CharField(max_length=32, unique=True, db_index=True)
+    full_name = models.CharField(max_length=255, blank=True)
+    account_flags = models.CharField(max_length=50, blank=True)
+    user_sid = models.CharField(max_length=100, blank=True)
+    primary_group_sid = models.CharField(max_length=100, blank=True)
+    home_directory = models.CharField(max_length=255, blank=True)
+    logon_script = models.CharField(max_length=255, blank=True)
+    profile_path = models.CharField(max_length=255, blank=True)
+    domain = models.CharField(max_length=100, blank=True)
+    logoff_time = models.CharField(max_length=100, blank=True)  # raw string from pdbedit
+    password_last_set = models.CharField(max_length=100, blank=True)
+    last_update = models.DateTimeField(auto_now=True)
+    raw_data = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = 'samba_users'
+
+class SambaGroup(models.Model):
+    name = models.CharField(max_length=32, unique=True, db_index=True)
+    gid = models.CharField(max_length=10, blank=True)
+    members = models.JSONField(default=list)
+    last_update = models.DateTimeField(auto_now=True)
+    raw_data = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = 'samba_groups'
+
+class SambaSharepoint(models.Model):
+    name = models.CharField(max_length=64, unique=True, db_index=True)
+    path = models.CharField(max_length=512)
+    read_only = models.BooleanField(default=False)
+    guest_ok = models.BooleanField(default=False)
+    browseable = models.BooleanField(default=True)
+    available = models.BooleanField(default=True)
+    valid_users = models.JSONField(default=list)
+    valid_groups = models.JSONField(default=list)
+    max_connections = models.IntegerField(null=True)
+    create_mask = models.CharField(max_length=10, default="0644")
+    directory_mask = models.CharField(max_length=10, default="0755")
+    inherit_permissions = models.BooleanField(default=False)
+    expiration_time = models.CharField(max_length=100, blank=True)
+    created_time = models.CharField(max_length=30, blank=True)
+    last_update = models.DateTimeField(auto_now=True)
+    raw_data = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = 'samba_sharepoints'
