@@ -277,6 +277,9 @@ class SambaManager:
             ValueError: اگر مسیر اشتراکی یافت نشود.
             OSError, IOError: در صورت خطا در دسترسی به smb.conf.
         """
+        print(f"name:{name} - kwargs:{kwargs}")
+
+        print("11111111111111111")
         shares = self._parse_smb_conf()
         share = next((s for s in shares if s["name"] == name), None)
         print(f"shares:{shares}")
@@ -421,7 +424,7 @@ class SambaManager:
             sharepoint_name: نام مسیر اشتراکی.
             expiration_time: زمان انقضا (هر فرمت رشته‌ای قابل قبول است).
         """
-        self.update_samba_sharepoint(sharepoint_name, expiration_time=expiration_time)
+        self.update_samba_sharepoint(name=sharepoint_name, expiration_time=expiration_time)
 
     # ----------------------------
     # Internal Helper Methods

@@ -820,7 +820,10 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
         if validation_err:
             return validation_err
         try:
-            SambaManager().update_samba_sharepoint(sharepoint_name=sharepoint_name, **request_data)
+            print(f"sharepoint_name:{sharepoint_name} - request_data:{request_data}")
+            obj=SambaManager()
+            obj.update_samba_sharepoint(name=sharepoint_name, **request_data)
+
             if save_to_db:
                 s = SambaManager().get_samba_sharepoints(sharepoint_name=sharepoint_name)
                 if s:
