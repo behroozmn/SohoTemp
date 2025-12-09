@@ -9,7 +9,7 @@ from pylibs.disk import DiskManager
 from pylibs.zpool import ZpoolManager
 from pylibs.fileSystem import FilesystemManager
 from typing import Union, Optional, Dict, Any, List
-from pylibs import StandardErrorResponse, logger, CLICommandError
+from pylibs import StandardErrorResponse, logger, CLICommandError, run_cli_command
 from typing import Optional, Dict, Any
 from pylibs.samba import SambaManager
 
@@ -611,6 +611,14 @@ class SambaGroupValidationMixin:
                 request_data=request_data,
                 save_to_db=save_to_db,
             )
+        if self._is_primary_group_of_any_user(groupname):
+            return StandardErrorResponse(
+                error_code="samba_group_is_primary",
+                error_message=f"گروه '{groupname}' گروه اصلی یک کاربر است و قابل حذف نیست.",
+                status=403,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
         return None
 
     def _is_group_used_in_any_sharepoint(self, groupname: str) -> bool:
@@ -626,6 +634,60 @@ class SambaGroupValidationMixin:
                 if groupname in groups_list:
                     return True
         return False
+
+    def _is_group_empty(self, groupname: str) -> bool:
+        """
+        بررسی می‌کند که آیا گروه هیچ عضوی ندارد (خالی است).
+        """
+        manager = SambaManager()
+        group = manager.get_samba_groups(groupname=groupname)
+        if group is None:
+            return True  # گروه وجود ندارد → حذف مجاز است (البته معمولاً این حالت قبل از این چک می‌شود)
+        members = group.get("members", [])
+        return len(members) == 0
+
+    def validate_group_is_empty_for_deletion(self, groupname: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی اینکه گروه باید خالی باشد تا قابل حذف باشد.
+        """
+        if not self._is_group_empty(groupname):
+            return StandardErrorResponse(
+                error_code="samba_group_not_empty",
+                error_message=f"گروه '{groupname}' دارای اعضا است و قابل حذف نیست.",
+                status=403,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+    def _is_primary_group_of_any_user(self, groupname: str) -> bool:
+        """
+        بررسی می‌کند که آیا گروه مورد نظر گروه اصلی (primary group) هیچ کاربری است.
+        این کار با بررسی خروجی `getent passwd` انجام می‌شود.
+        """
+        try:
+            stdout, _ = run_cli_command(["/usr/bin/getent", "passwd"], use_sudo=True)
+            for line in stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.split(":")
+                if len(parts) >= 4:
+                    username = parts[0]
+                    primary_gid_str = parts[3]
+                    # دریافت نام گروه از طریق GID
+                    try:
+                        group_info, _ = run_cli_command(["/usr/bin/getent", "group", primary_gid_str], use_sudo=True)
+                        if group_info.strip():
+                            group_name_from_gid = group_info.split(":")[0]
+                            if group_name_from_gid == groupname:
+                                return True
+                    except CLICommandError:
+                        # اگر گروهی با آن GID وجود نداشت، نادیده بگیر
+                        continue
+            return False
+        except Exception as e:
+            logger.warning(f"خطا در بررسی primary group برای گروه '{groupname}': {e}")
+            return False  # در صورت خطا، اجازه حذف نده
 
 # ---------- Samba Sharepoint Validation Mixin ----------
 class SambaSharepointValidationMixin:

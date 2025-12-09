@@ -586,16 +586,18 @@ class SambaGroupViewSet(viewsets.ViewSet, SambaGroupValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter("groupname", str, "path", True)] + QuerySaveToDB)
     def destroy(self, request: Request, groupname: str) -> Response:
-        """
-        حذف یک گروه سامبا.
-        """
+        """حذف یک گروه سامبا."""
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.query_params)
         if err := self._validate_samba_group_exists(groupname=groupname, save_to_db=save_to_db, request_data=request_data, must_exist=True):
             return err
 
-        # ✅ اعتبارسنجی وابستگی‌ها قبل از حذف
+        # ✅ 1. بررسی اینکه گروه در sharepoint استفاده نشده باشد
         if err := self.validate_group_deletion_allowed(groupname=groupname, save_to_db=save_to_db, request_data=request_data):
+            return err
+
+        # ✅ 2. بررسی اینکه گروه خالی باشد (عضوی نداشته باشد)
+        if err := self.validate_group_is_empty_for_deletion(groupname=groupname, save_to_db=save_to_db, request_data=request_data):
             return err
 
         try:
@@ -661,9 +663,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
 
     @extend_schema(parameters=[OpenApiParameter(name="sharepoint_name", type=str, location="path", default=True), ParamProperty, ParamOnlyActive] + QuerySaveToDB)
     def retrieve(self, request: Request, sharepoint_name: str) -> Response:
-        """
-        دریافت اطلاعات یک مسیر اشتراکی سامبا.
-        """
+        """دریافت اطلاعات یک مسیر اشتراکی سامبا."""
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         prop_key = get_request_param(request=request, param_name="property", return_type=str, default=None)
         if prop_key:
@@ -811,9 +811,7 @@ class SambaSharepointViewSet(viewsets.ViewSet, SambaSharepointValidationMixin):
     )
     @action(detail=True, methods=["put"], url_path="update")
     def update_sharepoint(self, request: Request, sharepoint_name: str) -> Response:
-        """
-        به‌روزرسانی یک مسیر اشتراکی سامبا.
-        """
+        """به‌روزرسانی یک مسیر اشتراکی سامبا."""
         save_to_db = get_request_param(request=request, param_name="save_to_db", return_type=bool, default=False)
         request_data = dict(request.data)
         validation_err = self._validate_samba_sharepoint_exists(share_name=sharepoint_name, save_to_db=save_to_db, request_data=request_data, must_exist=True)
