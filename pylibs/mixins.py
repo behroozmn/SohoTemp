@@ -772,16 +772,6 @@ class CPUValidationMixin:
     """
 
     @staticmethod
-    def validate_core_id(core_id: Optional[int]) -> None:
-        if core_id is None:
-            return
-        logical_cores: int = psutil.cpu_count(logical=True) or 1
-        if not (0 <= core_id < logical_cores):
-            raise ValueError(
-                f"شماره هسته نامعتبر است. مقدار مجاز بین 0 تا {logical_cores - 1} است."
-            )
-
-    @staticmethod
     def validate_fields(fields: Optional[List[str]]) -> None:
         if not fields:
             return
