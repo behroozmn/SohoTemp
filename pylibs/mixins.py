@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import os
 from typing import Tuple, Optional, Union, Dict, Any, List
-
+import psutil
 from pylibs.disk import DiskManager
 from pylibs.zpool import ZpoolManager
 from pylibs.fileSystem import FilesystemManager
@@ -544,6 +544,7 @@ class SambaUserValidationMixin:
             )
         return None
 
+
 # ---------- Samba Group Validation Mixin ----------
 class SambaGroupValidationMixin:
     def _validate_samba_group_exists(self, groupname: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
@@ -689,6 +690,7 @@ class SambaGroupValidationMixin:
             logger.warning(f"خطا در بررسی primary group برای گروه '{groupname}': {e}")
             return False  # در صورت خطا، اجازه حذف نده
 
+
 # ---------- Samba Sharepoint Validation Mixin ----------
 class SambaSharepointValidationMixin:
     def _validate_samba_sharepoint_exists(self, share_name: str, save_to_db: bool, request_data: dict, must_exist: bool = True) -> Optional[StandardErrorResponse]:
@@ -754,3 +756,42 @@ class SambaSharepointValidationMixin:
                 save_to_db=save_to_db,
             )
         return None
+
+
+
+
+class CPUValidationMixin:
+    """
+    میکسینی برای اعتبارسنجی ورودی‌های مرتبط با درخواست‌های اطلاعات CPU در سطح ViewSet.
+
+    این میکسین دو روش اصلی برای اعتبارسنجی ارائه می‌دهد:
+    - ``validate_core_id``: اعتبارسنجی شناسه هسته (core_id) بر اساس تعداد واقعی هسته‌های منطقی سیستم.
+    - ``validate_fields``: اعتبارسنجی لیست فیلدهای درخواستی بر اساس مجموعه‌ای از فیلدهای مجاز.
+
+    ⚠️ توجه: این میکسین **فقط در لایه ViewSet** استفاده می‌شود.
+    """
+
+    @staticmethod
+    def validate_core_id(core_id: Optional[int]) -> None:
+        if core_id is None:
+            return
+        logical_cores: int = psutil.cpu_count(logical=True) or 1
+        if not (0 <= core_id < logical_cores):
+            raise ValueError(
+                f"شماره هسته نامعتبر است. مقدار مجاز بین 0 تا {logical_cores - 1} است."
+            )
+
+    @staticmethod
+    def validate_fields(fields: Optional[List[str]]) -> None:
+        if not fields:
+            return
+        valid_fields = {
+            "vendor_id", "model_name", "architecture", "cpu_op_mode", "byte_order",
+            "cpu_count_physical", "cpu_count_logical", "threads_per_core", "cores_per_socket",
+            "sockets", "flags", "hypervisor", "virtualization",
+            "usage_percent_total", "frequency_total", "per_core_usage", "per_core_frequency",
+        }
+        invalid = set(fields) - valid_fields
+        if invalid:
+            raise ValueError(f"فیلدهای نامعتبر: {', '.join(sorted(invalid))}")
+
