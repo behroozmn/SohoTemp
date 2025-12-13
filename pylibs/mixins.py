@@ -758,8 +758,6 @@ class SambaSharepointValidationMixin:
         return None
 
 
-
-
 class CPUValidationMixin:
     """
     میکسینی برای اعتبارسنجی ورودی‌های مرتبط با درخواست‌های اطلاعات CPU در سطح ViewSet.
@@ -785,3 +783,17 @@ class CPUValidationMixin:
         if invalid:
             raise ValueError(f"فیلدهای نامعتبر: {', '.join(sorted(invalid))}")
 
+
+class MemoryValidationMixin:
+    @staticmethod
+    def validate_fields(fields: Optional[List[str]]) -> None:
+        if not fields:
+            return
+        valid = {
+            "total_memory_range", "block_size_bytes", "online_memory_blocks", "offline_memory_blocks",
+            "total_bytes", "available_bytes", "used_bytes", "free_bytes",
+            "usage_percent", "psutil_usage_percent",
+        }
+        invalid = set(fields) - valid
+        if invalid:
+            raise ValueError(f"فیلدهای نامعتبر حافظه: {', '.join(sorted(invalid))}")

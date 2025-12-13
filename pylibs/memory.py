@@ -1,73 +1,113 @@
-from typing import Dict, List, Any, Optional  # تایپ‌هینت برای خوانایی بهتر
-import psutil  # psutil برای خواندن آمار سیستم
-from django.http import JsonResponse
-import subprocess
+# soho_core_api/managers/memory_manager.py
+"""
+جمع‌آوری اطلاعات حافظه با استفاده از lsmem و /proc/meminfo.
+"""
+import os
+import json
+from typing import Dict, Any, List, Optional
+import psutil
+from pylibs import run_cli_command, CLICommandError
 
 
+class MemoryManager:
+    """
+    کلاس جامع برای دریافت اطلاعات RAM از lsmem و /proc/meminfo.
+    """
 
-class Memory:
-    def __init__(self):
+    def __init__(self) -> None:
+        self._lsmem_data: List[Dict[str, Any]] = self._parse_lsmem()
+        self._meminfo_dict: Dict[str, int] = self._parse_proc_meminfo()
+
+    def _parse_lsmem(self) -> List[Dict[str, Any]]:
+        """تحلیل خروجی JSON lsmem."""
         try:
-            self._mem = psutil.virtual_memory()
-        except Exception as e:
-            raise RuntimeError("ERROR in getting data from system") from e
+            stdout, _ = run_cli_command(["lsmem", "--bytes", "--json"])
+            data = json.loads(stdout)
+            return data.get("memory", [])
+        except (CLICommandError, json.JSONDecodeError, KeyError):
+            return []
 
-    def get(self, *fields: str) -> Dict[str, Optional[Any]]:
-        """فقط فیلدهای تعیین شده را برمی‌گرداند."""
-        data = self._mem
-        result = {}
+    def _parse_proc_meminfo(self) -> Dict[str, int]:
+        """تحلیل فایل /proc/meminfo (مقادیر به بایت)."""
+        meminfo = {}
+        if not os.path.exists("/proc/meminfo"):
+            return meminfo
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if ":" in line:
+                    key, val = line.split(":", 1)
+                    try:
+                        # مقدار به کیلوبایت است — به بایت تبدیل می‌شود
+                        value_kb = int(val.strip().split()[0])
+                        meminfo[key.strip()] = value_kb * 1024
+                    except (ValueError, IndexError):
+                        continue
+        return meminfo
 
-        for field in fields:
-            result[field] = data.get(field, None)
+    def _get_hardware_info(self) -> Dict[str, Any]:
+        """استخراج اطلاعات بلاک‌های حافظه از lsmem."""
+        blocks = []
+        total_online = 0
+        total_offline = 0
 
-        return result
+        for block in self._lsmem_data:
+            size_str = block.get("size", "0")
+            try:
+                size_bytes = int(size_str)
+            except (ValueError, TypeError):
+                size_bytes = 0
 
-    def to_dict(self) -> Dict[str, Any]:
-        """تمام فیلدها را به صورت دیکشنری برمی‌گرداند."""
-        return self._mem._asdict()
+            info = {
+                "range": block.get("range", "unknown"),
+                "size_bytes": size_bytes,
+                "state": block.get("state", "unknown"),
+                "removable": block.get("removable", "unknown"),
+                "device": block.get("device"),
+            }
+            blocks.append(info)
 
-    def total(self) -> int:
-        return self._mem.total  # total physical psutil.virtual_memory()ory available.
+            if block.get("state") == "online":
+                total_online += size_bytes
+            elif block.get("state") == "offline":
+                total_offline += size_bytes
 
-    def available(self) -> int:
-        # the memory that can be given instantly to processes without the system going into swap.
-        # This is calculated by summing different memory values depending on the platform and it is supposed to be used to monitor actual memory usage in a cross-platform fashion.
-        return self._mem.available
+        return {
+            "memory_blocks": blocks,
+            "total_online_memory_bytes": total_online,
+            "total_offline_memory_bytes": total_offline,
+        }
 
-    def used(self) -> int:
-        return self._mem.used  # memory used, calculated differently depending on the platform and designed for informational purposes only: macOS: active + wired BSD: active + wired + cached Linux: total - free
+    def _get_usage_info(self) -> Dict[str, Any]:
+        """محاسبه استفاده از حافظه بر اساس /proc/meminfo."""
+        mem = self._meminfo_dict
+        total = mem.get("MemTotal", 0)
+        free = mem.get("MemFree", 0)
+        buffers = mem.get("Buffers", 0)
+        cached = mem.get("Cached", 0)
+        available = free + buffers + cached
+        used = total - available
+        usage_percent = round((used / total) * 100, 2) if total > 0 else 0.0
 
-    def free(self) -> int:
-        # memory not being used at all(zeroed) that is readily available
-        # NOTE: this doesn't reflect the actual memory available (use 'available' instead)
-        return self._mem.free
+        try:
+            psutil_percent = psutil.virtual_memory().percent
+        except Exception:
+            psutil_percent = None
 
-    def percent(self) -> float:
-        """درصد استفاده از رم"""
-        # calculated as (total - available) / total * 100
-        return self._mem.percent
+        return {
+            "total_bytes": total,
+            "available_bytes": available,
+            "used_bytes": used,
+            "free_bytes": free,
+            "usage_percent": usage_percent,
+            "psutil_usage_percent": psutil_percent,
+        }
 
-    def active(self) -> Optional[int]:
-        """فقط در لینوکس/ماک وجود دارد"""
-        # active(UNIX): memory [currently in use] or [very recently used], and so it is in RAM.
-        return getattr(self._mem, 'active', None)
+    def gather_info(self, fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        hw = self._get_hardware_info()
+        usage = self._get_usage_info()
+        full_data = {**hw, **usage}
 
-    def inactive(self) -> Optional[int]:
-        """فقط در لینوکس/ماک وجود دارد"""
-        # inactive(UNIX): memory that is marked as not used.
-        return getattr(self._mem, 'inactive', None)
+        if not fields:
+            return full_data
 
-    def buffers(self) -> Optional[int]:
-        """فقط در لینوکس وجود دارد"""
-        # buffers(BSD,Linux): cache for things like file system metadata.
-        return getattr(self._mem, 'buffers', None)
-
-    def cached(self) -> Optional[int]:
-        """فقط در لینوکس/ماک وجود دارد"""
-        # cached(BSD,macOS): cache for various things.
-        return getattr(self._mem, 'cached', None)
-
-    def shared(self) -> Optional[int]:
-        """فقط در لینوکس وجود دارد"""
-        # shared(BSD): memory that may be simultaneously accessed by multiple processes.
-        return getattr(self._mem, 'shared', None)
+        return {k: v for k, v in full_data.items() if k in fields}
