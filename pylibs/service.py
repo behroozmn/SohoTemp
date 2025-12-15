@@ -22,7 +22,7 @@ class ServiceManager:
     """
 
     # ✅ تنظیمات سراسری (global exclusions/inclusions)
-    _global_included_units: Optional[Set[str]] = "ssh"
+    _global_included_units: Optional[Set[str]] = None
     _global_excluded_units: Set[str] = set()
 
     @classmethod
@@ -173,13 +173,7 @@ class ServiceManager:
 
     def list_units(self, state_filter: Optional[str] = None) -> List[Dict[str, str]]:
         """
-        لیست تمام یونیت‌های موجود با امکان فیلتر بر اساس وضعیت.
-
-        Args:
-            state_filter: فیلتر وضعیت (active, inactive, failed, running, exited, dead, ...) یا None
-
-        Returns:
-            List[Dict]: لیست یونیت‌ها با فیلدهای: unit, load, active, sub, description
+        لیست **یونیت‌های مجاز** با امکان فیلتر بر اساس وضعیت.
         """
         try:
             output = self._run_systemctl(["list-units", "--all", "--no-pager"])
@@ -187,14 +181,17 @@ class ServiceManager:
             return []
 
         units = []
-        lines = output.strip().split("\n")[1:]  # پرش از سرستون
+        lines = output.strip().split("\n")[1:]
         for line in lines:
             if not line.strip():
                 continue
-            parts = re.split(r"\s{2,}", line.strip())  # جداکننده 2 فاصله یا بیشتر
+            parts = re.split(r"\s{2,}", line.strip())
             if len(parts) < 4:
                 continue
             unit = parts[0]
+            # ✅ فقط یونیت‌های مجاز را اضافه کن
+            if not self._is_unit_allowed(unit):
+                continue
             load = parts[1]
             active = parts[2]
             sub = parts[3]
@@ -257,3 +254,15 @@ class ServiceManager:
         """بررسی اینکه آیا یونیت در حال اجراست یا خیر."""
         status = self.get_status(unit_name)
         return status["active_state"] == "active"
+
+
+# ========== تنظیم لیست مجاز سرویس‌ها ==========
+ALLOWED_SERVICES = {
+    "networking.service",
+    "nginx.service",
+    "smbd.service",
+    "soho_core_api.service",
+    "ssh.service",
+}
+
+ServiceManager.set_global_filter(included=list(ALLOWED_SERVICES))
