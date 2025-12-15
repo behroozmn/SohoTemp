@@ -828,47 +828,43 @@ class DjangoUserViewSet(viewsets.ViewSet, DjangoUserValidationMixin):
             OpenApiExample(
                 name="درخواست لاگ‌اوت موفق",
                 value={"refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.xxxxx"},
-                description="ارسال توکن refresh برای blacklist کردن و خروج کاربر."
+                description="ارسال توکن refresh برای blacklist کردن."
             )
-        ],
-        description="لاگ‌اوت کاربر جاری و blacklist کردن توکن refresh. نیاز به احراز هویت ندارد."
+        ]
     )
     @action(detail=False, methods=["post"], url_path="logout")
     def logout(self, request: Request) -> Response:
-        """
-        لاگ‌اوت کاربر جاری و blacklist کردن توکن refresh.
-        """
-        request_data = dict(request.data)
-        refresh_token = request_data.get("refresh")
+        refresh_token: object  = request.data.get("refresh")
 
         if not refresh_token:
             return StandardErrorResponse(
                 error_code="missing_refresh_token",
                 error_message="پارامتر 'refresh' الزامی است.",
                 status=400,
-                request_data=request_data,
+                request_data=dict(request.data),
+                save_to_db=False,
+            )
+
+        # ✅ اطمینان از اینکه refresh_token یک رشته است
+        if not isinstance(refresh_token, str):
+            return StandardErrorResponse(
+                error_code="invalid_refresh_token_type",
+                error_message="مقدار 'refresh' باید یک رشته (string) باشد.",
+                status=400,
+                request_data=dict(request.data),
                 save_to_db=False,
             )
 
         try:
-            # blacklist کردن توکن refresh
-            token = RefreshToken(refresh_token)
+            token = RefreshToken(refresh_token)  # type: ignore
             token.blacklist()
-
-            # لاگ‌اوت session جنگو (برای امنیت بیشتر، در صورت استفاده از session)
-            # ✅ نکته: از request._request استفاده نمی‌کنیم — فقط JWT مهم است
-            # اگر session مورد استفاده باشد، می‌توان این خط را فعال کرد:
-            # django_logout(request._request)
-
             return Response(status=status.HTTP_205_RESET_CONTENT)
-
         except Exception as e:
-            logger.warning(f"Invalid refresh token during logout: {e}")
+            logger.warning(f"Invalid refresh token on logout: {e}")
             return StandardErrorResponse(
                 error_code="invalid_refresh_token",
                 error_message="توکن refresh نامعتبر است.",
                 status=400,
-                request_data=request_data,
+                request_data=dict(request.data),
                 save_to_db=False,
-                exception=e,
             )
