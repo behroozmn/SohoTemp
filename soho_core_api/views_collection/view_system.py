@@ -819,22 +819,11 @@ class DjangoUserViewSet(viewsets.ViewSet, DjangoUserValidationMixin):
                                                  request_data=request_data,
                                                  save_to_db=False, )
 
-    @extend_schema(
-        request={"type": "object", "properties": {
-            "refresh": {"type": "string", "description": "توکن refresh جهت blacklist کردن."}
-        }, "required": ["refresh"]},
-        responses={205: None},
-        examples=[
-            OpenApiExample(
-                name="درخواست لاگ‌اوت موفق",
-                value={"refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.xxxxx"},
-                description="ارسال توکن refresh برای blacklist کردن."
-            )
-        ]
-    )
-    @action(detail=False, methods=["post"], url_path="logout")
+    @extend_schema(request={"type": "object", "properties": {"refresh": {"type": "string", "description": "توکن refresh جهت blacklist کردن."}}, "required": ["refresh"]},
+                   examples=[OpenApiExample(name="درخواست لاگ‌اوت موفق", value={"refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.xxxxx"}, description="ارسال توکن refresh برای blacklist کردن.")])
+    @action(detail=False, methods=["get"], url_path="logout")
     def logout(self, request: Request) -> Response:
-        refresh_token: object  = request.data.get("refresh")
+        refresh_token: object = request.data.get("refresh")
 
         if not refresh_token:
             return StandardErrorResponse(
