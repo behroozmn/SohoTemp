@@ -28,11 +28,8 @@ urlpatterns = [
     path("api/disk/", include("soho_core_api.urls_collection.url_disk")),
     path("api/auth/", include("soho_core_api.urls_collection.url_auth")),
     path("api/system/", include("soho_core_api.urls_collection.url_system")),
-    # path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
-    # path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
     path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
-    # path("api/os/", include("soho_core_api.urls_collection.url_system_os")),
     path("api/web/", include("soho_core_api.urls_collection.url_system_web")),
 ]
