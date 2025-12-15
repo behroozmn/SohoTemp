@@ -798,6 +798,7 @@ class MemoryValidationMixin:
         if invalid:
             raise ValueError(f"فیلدهای نامعتبر حافظه: {', '.join(sorted(invalid))}")
 
+
 class NetworkValidationMixin:
     """
     Mixin برای اعتبارسنجی نام کارت شبکه و ساختار تنظیمات.
@@ -863,4 +864,53 @@ class NetworkValidationMixin:
                     request_data=request_data,
                     save_to_db=save_to_db,
                 )
+        return None
+
+
+class ServiceValidationMixin:
+    """
+    Mixin برای اعتبارسنجی نام یونیت و عملیات‌های مجاز روی سرویس‌ها.
+    """
+
+    def validate_unit_name(self, unit_name: str, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        بررسی وجود یونیت systemd در سیستم.
+        """
+        try:
+            from pylibs.service import ServiceManager
+            manager = ServiceManager()
+            # بررسی اولیه: آیا systemctl آن را می‌شناسد؟
+            status = manager.get_status(unit_name)
+            if status["load_state"] == "not-found":
+                return StandardErrorResponse(
+                    error_code="unit_not_found",
+                    error_message=f"یونیت systemd '{unit_name}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=False,
+                )
+        except Exception as e:
+            return StandardErrorResponse(
+                error_code="unit_validation_failed",
+                error_message="خطا در بررسی وجود یونیت systemd.",
+                status=500,
+                request_data=request_data,
+                save_to_db=False,
+                exception=e,
+            )
+        return None
+
+    def validate_service_action(self, action: str, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی action مجاز برای سرویس.
+        """
+        valid_actions = {"start", "stop", "restart", "reload", "enable", "disable", "mask", "unmask"}
+        if action not in valid_actions:
+            return StandardErrorResponse(
+                error_code="invalid_service_action",
+                error_message=f"عملیات '{action}' معتبر نیست. مقادیر مجاز: {', '.join(valid_actions)}",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+            )
         return None

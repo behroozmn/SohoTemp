@@ -10,5 +10,4 @@ urlpatterns = [
     path("user/delete/<str:username>/", view_system_os.UserDeleteView.as_view()),
 
     path("power/<str:action>/", view_system_os.OSpowerView.as_view(), name="os-power"),
-
 ]

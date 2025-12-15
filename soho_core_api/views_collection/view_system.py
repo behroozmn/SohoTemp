@@ -1,4 +1,4 @@
-# soho_core_api/views_collection/view_hardware.py
+# soho_core_api/views_collection/view_system.py
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample

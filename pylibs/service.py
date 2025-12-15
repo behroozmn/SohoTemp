@@ -1,121 +1,259 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import subprocess
-from typing import Any, Dict, Optional, List
-
-
-def ok(data: Any, details: Any = None) -> Dict[str, Any]:
-    return {
-        "ok": True,
-        "error": None,
-        "data": data,
-        "details": details or {}
-    }
-
-
-def fail(message: str, code: str = "service_error", extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {
-        "ok": False,
-        "error": {"code": code, "message": message, "extra": extra or {}},
-        "data": None,
-        "details": {}
-    }
+# soho_core_api/pylibs/service.py
+from __future__ import annotations
+import re
+from typing import Dict, List, Optional, Set, Union
+from pylibs import CLICommandError, run_cli_command
 
 
 class ServiceManager:
-    def __init__(self) -> None:
-        pass
+    """
+    مدیریت جامع سرویس‌های سیستم‌عامل بر پایه systemd.
 
-    def _run(self, cmd: List[str]) -> subprocess.CompletedProcess:
-        """اجرای دستور systemctl با خطاهای مناسب"""
-        try:
-            return subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False  # ما خودمان وضعیت را بررسی می‌کنیم
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Command timed out")
+    این کلاس تمام عملیات رایج روی یونیت‌های systemd (مانند start, stop, status, enable, mask و ...)
+    را پوشش می‌دهد و امکان فیلتر کردن، مشاهده وابستگی‌ها و بازیابی PID و وضعیت سرویس را فراهم می‌کند.
 
-    def list_services(self) -> Dict[str, Any]:
+    ویژگی‌های کلیدی:
+    - پشتیبانی از توابع `start`, `stop`, `restart`, `reload`, `enable`, `disable`, `mask`, `unmask`
+    - بازیابی وضعیت فعلی سرویس (active, inactive, failed, ...)
+    - دریافت شماره پردازه (Main PID) سرویس در صورت فعال بودن
+    - لیست‌کردن تمام یونیت‌ها با امکان فیلتر بر اساس وضعیت (running, enabled, failed و ...)
+    - مشاهده وابستگی‌های سرویس (`Wants`, `WantedBy`, `Requires`, `After`, `Before`, ...)
+    - امکان تنظیم لیست‌های `included_units` و `excluded_units` برای سرورهای خاص (non-global)
+    """
+
+    # ✅ تنظیمات سراسری (global exclusions/inclusions)
+    _global_included_units: Optional[Set[str]] = "ssh"
+    _global_excluded_units: Set[str] = set()
+
+    @classmethod
+    def set_global_filter(cls, included: Optional[List[str]] = None, excluded: Optional[List[str]] = None) -> None:
         """
-        لیست تمام سرویس‌های systemd همراه با وضعیت و PID (اگر فعال باشد)
+        تنظیم فیلترهای سراسری برای تمام نمونه‌های ServiceManager.
+
+        Args:
+            included: لیست یونیت‌هایی که مجاز به مدیریت هستند (بقیه ignore می‌شوند).
+                      اگر None باشد، هیچ محدودیتی اعمال نمی‌شود.
+            excluded: لیست یونیت‌هایی که **هرگز** نباید مدیریت شوند.
+        """
+        cls._global_included_units = set(included) if included else None
+        cls._global_excluded_units = set(excluded) if excluded else set()
+
+    def __init__(self, included_units: Optional[List[str]] = None, excluded_units: Optional[List[str]] = None):
+        """
+        سازنده اختیاری برای فیلترهای محلی (برای یک نمونه خاص).
+
+        Args:
+            included_units: لیست یونیت‌های قابل مدیریت برای این نمونه.
+            excluded_units: لیست یونیت‌های غیرقابل مدیریت برای این نمونه.
+        """
+        self._local_included = set(included_units) if included_units else None
+        self._local_excluded = set(excluded_units) if excluded_units else set()
+
+    def _is_unit_allowed(self, unit_name: str) -> bool:
+        """
+        بررسی اینکه آیا یک یونیت مجاز به مدیریت است یا خیر (با در نظر گرفتن فیلترهای سراسری و محلی).
+
+        Args:
+            unit_name (str): نام یونیت (مانند `nginx.service`)
+
+        Returns:
+            bool: True اگر مدیریت مجاز باشد، در غیر این صورت False
+        """
+        # 1. اگر در excluded سراسری یا محلی باشد → غیرمجاز
+        if unit_name in self._global_excluded_units or unit_name in self._local_excluded:
+            return False
+        # 2. اگر included سراسری تنظیم شده باشد → فقط اگر در آن باشد مجاز است
+        if self._global_included_units is not None:
+            if unit_name not in self._global_included_units:
+                return False
+        # 3. اگر included محلی تنظیم شده باشد → فقط اگر در آن باشد مجاز است
+        if self._local_included is not None:
+            if unit_name not in self._local_included:
+                return False
+        return True
+
+    def _run_systemctl(self, args: List[str]) -> str:
+        """
+        اجرای دستور systemctl با مدیریت خطا.
+
+        Args:
+            args: آرگومان‌های systemctl (مثال: ["status", "nginx.service"])
+
+        Returns:
+            str: stdout دستور
+
+        Raises:
+            CLICommandError: در صورت خطا در اجرای systemctl
+        """
+        return run_cli_command(["/usr/bin/systemctl"] + args, use_sudo=True)[0]
+
+    def _get_unit_property(self, unit_name: str, property_name: str) -> Optional[str]:
+        """
+        دریافت یک خاصیت خاص از یونیت systemd با استفاده از `systemctl show`.
+
+        Args:
+            unit_name (str): نام یونیت
+            property_name (str): نام خاصیت (مثال: "ActiveState", "MainPID", "Id")
+
+        Returns:
+            Optional[str]: مقدار خاصیت یا None اگر یونیت وجود نداشته باشد
         """
         try:
-            # دریافت لیست سرویس‌ها با جزئیات
-            result = self._run(["/usr/bin/sudo","/usr/bin/systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"])
+            output = self._run_systemctl(["show", "--property", property_name, unit_name])
+            # نتیجه شبیه: "ActiveState=active"
+            if "=" in output:
+                return output.split("=", 1)[1].strip()
+            return None
+        except CLICommandError:
+            return None
 
-            if result.returncode != 0:
-                return fail(f"Failed to list services: {result.stderr.strip()}")
+    def get_status(self, unit_name: str) -> Dict[str, Union[str, int, bool, None]]:
+        """
+        دریافت وضعیت کامل یک یونیت systemd.
 
-            services = {}
-            for line in result.stdout.strip().splitlines():
-                if not line.strip():
-                    continue
-                parts = line.split()
-                if len(parts) < 4:
-                    continue
+        Args:
+            unit_name (str): نام یونیت (مثال: "nginx.service")
 
-                unit = parts[0]
-                if not unit.endswith(".service"):
-                    continue
-                if not unit in {"networking.service","nginx.service","smbd.service","soho_core_api.service","ssh.service"}:
-                    continue
-                load = parts[1]
-                active = parts[2]
-                sub = parts[3]
-
-                # دریافت PID (اگر فعال باشد)
-                pid = None
-                if active == "active":
-                    try:
-                        pid_result = self._run(["/usr/bin/sudo","/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value"])
-                        if pid_result.returncode == 0:
-                            pid_str = pid_result.stdout.strip()
-                            if pid_str.isdigit():
-                                pid = int(pid_str)
-                    except Exception:
-                        pid = None
-
-                services[unit] = {
-                    "unit": unit,
-                    "load": load,
-                    "active": active,
-                    "sub": sub,
-                    "pid": pid
-                }
-
-            return ok(services, details={"count": len(services)})
-
-        except Exception as e:
-            return fail(f"Exception while listing services: {str(e)}", extra={"exception": str(e)})
-
-    def _control_service(self, action: str, service_name: str) -> Dict[str, Any]:
-        """اجرای start/stop/restart برای یک سرویس"""
-        if not service_name.endswith(".service"):
-            service_name += ".service"
-
+        Returns:
+            Dict شامل:
+                - active_state: وضعیت فعال‌سازی (active, inactive, failed, ...)
+                - load_state: وضعیت بارگذاری فایل یونیت
+                - sub_state: وضعیت زیرمجموعه (running, exited, dead, ...)
+                - main_pid: شماره پردازه اصلی (0 اگر فعال نباشد)
+                - enabled: آیا یونیت در بوت فعال است؟
+        """
+        active = self._get_unit_property(unit_name, "ActiveState") or "unknown"
+        load = self._get_unit_property(unit_name, "LoadState") or "unknown"
+        sub = self._get_unit_property(unit_name, "SubState") or "unknown"
+        pid_raw = self._get_unit_property(unit_name, "MainPID") or "0"
         try:
-            result = self._run(["/usr/bin/sudo","/usr/bin/systemctl", action, service_name])
-            if result.returncode == 0:
-                return ok({"action": action, "service": service_name}, details="Success")
-            else:
-                return fail(
-                    f"Failed to {action} {service_name}: {result.stderr.strip()}",
-                    code=f"service_{action}_failed",
-                    extra={"stdout": result.stdout, "stderr": result.stderr}
-                )
-        except Exception as e:
-            return fail(f"Exception during {action}: {str(e)}", extra={"exception": str(e)})
+            pid = int(pid_raw)
+        except ValueError:
+            pid = 0
+        enabled_raw = self._get_unit_property(unit_name, "UnitFileState")
+        enabled = enabled_raw in ("enabled", "enabled-runtime") if enabled_raw else False
 
-    def start_service(self, service_name: str) -> Dict[str, Any]:
-        return self._control_service("start", service_name)
+        return {
+            "active_state": active,
+            "load_state": load,
+            "sub_state": sub,
+            "main_pid": pid,
+            "enabled": enabled,
+        }
 
-    def stop_service(self, service_name: str) -> Dict[str, Any]:
-        return self._control_service("stop", service_name)
+    def get_dependencies(self, unit_name: str) -> Dict[str, List[str]]:
+        """
+        بازیابی وابستگی‌های یک یونیت systemd.
 
-    def restart_service(self, service_name: str) -> Dict[str, Any]:
-        return self._control_service("restart", service_name)
+        Args:
+            unit_name (str): نام یونیت
+
+        Returns:
+            Dict شامل:
+                - requires: یونیت‌هایی که این یونیت به آن‌ها نیاز دارد
+                - wants: یونیت‌هایی که این یونیت می‌خواهد فعال شوند
+                - after: یونیت‌هایی که این یونیت باید **بعد از** آن‌ها شروع شود
+                - before: یونیت‌هایی که این یونیت باید **قبل از** آن‌ها شروع شود
+                - wanted_by: یونیت‌هایی که این یونیت را در لیست Wants خود دارند
+        """
+        def _get_deps(cmd_flag: str) -> List[str]:
+            try:
+                out = self._run_systemctl([cmd_flag, unit_name])
+                return [line.strip() for line in out.strip().split("\n") if line.strip()]
+            except CLICommandError:
+                return []
+
+        return {
+            "requires": _get_deps("--requires"),
+            "wants": _get_deps("--wants"),
+            "after": _get_deps("--after"),
+            "before": _get_deps("--before"),
+            "wanted_by": _get_deps("--wanted-by"),
+        }
+
+    def list_units(self, state_filter: Optional[str] = None) -> List[Dict[str, str]]:
+        """
+        لیست تمام یونیت‌های موجود با امکان فیلتر بر اساس وضعیت.
+
+        Args:
+            state_filter: فیلتر وضعیت (active, inactive, failed, running, exited, dead, ...) یا None
+
+        Returns:
+            List[Dict]: لیست یونیت‌ها با فیلدهای: unit, load, active, sub, description
+        """
+        try:
+            output = self._run_systemctl(["list-units", "--all", "--no-pager"])
+        except CLICommandError:
+            return []
+
+        units = []
+        lines = output.strip().split("\n")[1:]  # پرش از سرستون
+        for line in lines:
+            if not line.strip():
+                continue
+            parts = re.split(r"\s{2,}", line.strip())  # جداکننده 2 فاصله یا بیشتر
+            if len(parts) < 4:
+                continue
+            unit = parts[0]
+            load = parts[1]
+            active = parts[2]
+            sub = parts[3]
+            desc = parts[4] if len(parts) > 4 else ""
+
+            if state_filter and active != state_filter and sub != state_filter:
+                continue
+
+            units.append({
+                "unit": unit,
+                "load": load,
+                "active": active,
+                "sub": sub,
+                "description": desc,
+            })
+        return units
+
+    # ========== عملیات کنترلی سرویس ==========
+    def start(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["start", unit_name])
+
+    def stop(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["stop", unit_name])
+
+    def restart(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["restart", unit_name])
+
+    def reload(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["reload", unit_name])
+
+    def enable(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["enable", unit_name])
+
+    def disable(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["disable", unit_name])
+
+    def mask(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["mask", unit_name])
+
+    def unmask(self, unit_name: str) -> None:
+        if not self._is_unit_allowed(unit_name):
+            raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
+        self._run_systemctl(["unmask", unit_name])
+
+    def is_active(self, unit_name: str) -> bool:
+        """بررسی اینکه آیا یونیت در حال اجراست یا خیر."""
+        status = self.get_status(unit_name)
+        return status["active_state"] == "active"
