@@ -532,19 +532,25 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
             )
 
 
+# ========== POWER PARAMETERS ==========
+ParamPowerAction = OpenApiParameter(name="action", type=str, required=True, location="query",
+                                    enum=["reboot", "poweroff"],
+                                    description="نوع عملیات سیستمی:\n"
+                                                "• **reboot**: راه‌اندازی مجدد فوری سیستم.\n"
+                                                "• **poweroff**: خاموش‌کردن کامل سیستم.")
+
+
 class PowerViewSet(viewsets.ViewSet, PowerValidationMixin):
     """
     انجام عملیات خاموش‌کردن (poweroff) و راه‌اندازی مجدد (reboot) سیستم.
     """
 
-    @extend_schema(request={"type": "object", "properties": {"action": {"type": "string",
-                                                                        "enum": ["reboot", "poweroff"],
-                                                                        "description": "نوع عملیات: «reboot» برای راه‌اندازی مجدد یا «poweroff» برای خاموش‌کردن."},
-                                                             **BodyParameterSaveToDB["properties"]},
-                            "required": ["action"]},
-                   examples=[OpenApiExample("راه‌اندازی مجدد سیستم", value={"action": "reboot", "save_to_db": False}, description="ارسال درخواست برای ریبوت سرور."),
-                             OpenApiExample("خاموش‌کردن سیستم", value={"action": "poweroff", "save_to_db": False}, description="ارسال درخواست برای خاموش‌کردن سرور."), ],
-                   responses={202: StandardResponse})
+    @extend_schema(parameters=[ParamPowerAction],
+                   examples=[OpenApiExample(name="راه‌اندازی مجدد سیستم", value={"action": "reboot"}, description="ارسال درخواست برای ریبوت فوری سرور.", ),
+                             OpenApiExample(name="خاموش‌کردن سیستم", value={"action": "poweroff"}, description="ارسال درخواست برای خاموش‌کردن کامل سرور.", ), ],
+                   description="اجرای یک عملیات سیستمی خطرناک: ریبوت یا خاموش‌کردن.\n\n"
+                               "⚠️ **هشدار امنیتی**: این endpoint تنها باید به کاربران مجاز داده شود. "
+                               "سیستم بلافاصله پس از دریافت درخواست عملیات را انجام می‌دهد و **هیچ بازگشتی** وجود ندارد.", )
     @action(detail=False, methods=["get"], url_path="execute")
     def execute_power_action(self, request: Request) -> Response:
         """
@@ -552,40 +558,39 @@ class PowerViewSet(viewsets.ViewSet, PowerValidationMixin):
 
         ⚠️ توجه: این عملیات‌ها برگشت‌ناپذیر هستند و سیستم را خاموش یا ریبوت می‌کنند.
         """
-        save_to_db = get_request_param(request, "save_to_db", bool, False)
-        action = get_request_param(request, "action", str, None)
-        request_data = dict(request.data)
+        action_name = get_request_param(request, "action", str, None)
+        request_data = dict(request.query_params)
 
-        if not action:
+        if not action_name:
             return StandardErrorResponse(
                 error_code="missing_action",
                 error_message="پارامتر 'action' الزامی است.",
                 status=400,
                 request_data=request_data,
-                save_to_db=save_to_db,
+                save_to_db=False,
             )
 
         # اعتبارسنجی action
-        err = self.validate_power_action(action=action, request_data=request_data)
+        err = self.validate_power_action(action=action_name, request_data=request_data)
         if err:
             return err
 
         try:
             manager = PowerManager()
-            method = getattr(manager, action)
+            method = getattr(manager, action_name)
             method()  # اجرای poweroff() یا reboot()
 
             return StandardResponse(
                 status=202,
-                message=f"عملیات '{action}' با موفقیت ارسال شد. سیستم در حال {'خاموش‌شدن' if action == 'poweroff' else 'راه‌اندازی مجدد'} است.",
+                message=f"عملیات '{action_name}' با موفقیت ارسال شد. سیستم در حال {'خاموش‌شدن' if action_name == 'poweroff' else 'راه‌اندازی مجدد'} است.",
                 request_data=request_data,
-                save_to_db=save_to_db,
+                save_to_db=False,
             )
         except Exception as e:
             return build_standard_error_response(
                 exc=e,
                 error_code="power_action_failed",
-                error_message=f"خطا در اجرای عملیات '{action}'.",
+                error_message=f"خطا در اجرای عملیات '{action_name}'.",
                 request_data=request_data,
-                save_to_db=save_to_db,
+                save_to_db=False,
             )
