@@ -932,3 +932,72 @@ class PowerValidationMixin:
                 save_to_db=False,
             )
         return None
+
+
+# ---------- Django User Validation Mixin ----------
+class DjangoUserValidationMixin:
+    """میکسین اعتبارسنجی برای کاربران جنگو."""
+
+    def validate_django_user_exists(
+            self, username: str, save_to_db: bool, request_data: Dict[str, Any], must_exist: bool = True
+    ) -> Optional[StandardErrorResponse]:
+        from django.contrib.auth.models import User
+        try:
+            user_exists = User.objects.filter(username=username).exists()
+            if must_exist and not user_exists:
+                return StandardErrorResponse(
+                    error_code="django_user_not_found",
+                    error_message=f"کاربر جنگو '{username}' یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+            if not must_exist and user_exists:
+                return StandardErrorResponse(
+                    error_code="django_user_already_exists",
+                    error_message=f"کاربر جنگو '{username}' از قبل وجود دارد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        except Exception as e:
+            return StandardErrorResponse(
+                error_code="user_validation_failed",
+                error_message="خطا در بررسی وجود کاربر جنگو.",
+                status=500,
+                request_data=request_data,
+                save_to_db=save_to_db,
+                exception=e,
+            )
+        return None
+
+    def validate_username_format(
+            self, username: str, save_to_db: bool, request_data: Dict[str, Any]
+    ) -> Optional[StandardErrorResponse]:
+        if not username or not isinstance(username, str):
+            return StandardErrorResponse(
+                error_code="invalid_username",
+                error_message="نام کاربری نمی‌تواند خالی باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if len(username) > 150:
+            return StandardErrorResponse(
+                error_code="username_too_long",
+                error_message="نام کاربری نباید بیشتر از 150 کاراکتر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        # پشتیبانی از فارسی: فقط نمادهای مجاز را بررسی کن
+        import re
+        if not re.match(r"^[\u0600-\u06FF\w.@+-]+$", username):
+            return StandardErrorResponse(
+                error_code="invalid_username_chars",
+                error_message="نام کاربری فقط می‌تواند شامل حروف فارسی، لاتین، اعداد و نمادهای @ . + - _ باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None

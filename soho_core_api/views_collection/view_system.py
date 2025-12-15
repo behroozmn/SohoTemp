@@ -6,10 +6,11 @@ from rest_framework import viewsets
 from rest_framework.request import Request
 from rest_framework.response import Response
 from pylibs.network import NetworkManager
-from pylibs.mixins import NetworkValidationMixin, PowerValidationMixin
+from pylibs.mixins import NetworkValidationMixin, PowerValidationMixin, DjangoUserValidationMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
 from rest_framework import serializers
 from rest_framework.decorators import action
+
 
 # Core utilities
 from pylibs import (
@@ -23,7 +24,7 @@ from pylibs.mixins import CLICommandError, CPUValidationMixin, MemoryValidationM
 from pylibs.cpu import CPUManager
 from pylibs.memory import MemoryManager
 from pylibs.service import ServiceManager
-from pylibs.system import PowerManager
+from pylibs.system import PowerManager, DjangoUserManager
 
 # ========== CPU ==========
 CPU_PROPERTY_CHOICES = [
@@ -591,6 +592,295 @@ class PowerViewSet(viewsets.ViewSet, PowerValidationMixin):
                 exc=e,
                 error_code="power_action_failed",
                 error_message=f"خطا در اجرای عملیات '{action_name}'.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+
+
+# ========== Django User Parameters ==========
+ParamUsername = OpenApiParameter(
+    name="username", type=str, required=True, location="path", description="نام کاربری جنگو"
+)
+
+ParamActionUser = OpenApiParameter(
+    name="action", type=str, required=True, location="query",
+    enum=["change_password", "update"],
+    description="عملیات مورد نظر: تغییر رمز یا به‌روزرسانی"
+)
+
+BodyDjangoUserCreate = {
+    "type": "object",
+    "properties": {
+        "username": {"type": "string", "description": "نام کاربری (پشتیبانی فارسی)"},
+        "password": {"type": "string", "description": "رمز عبور"},
+        "email": {"type": "string", "format": "email", "description": "ایمیل (اختیاری)"},
+        "first_name": {"type": "string", "description": "نام (فارسی مجاز)"},
+        "last_name": {"type": "string", "description": "نام خانوادگی (فارسی مجاز)"},
+        "is_active": {"type": "boolean", "default": True},
+        "is_staff": {"type": "boolean", "default": False},
+        "is_superuser": {"type": "boolean", "default": False},
+        **BodyParameterSaveToDB["properties"]
+    },
+    "required": ["username", "password"]
+}
+
+BodyDjangoUserUpdate = {
+    "type": "object",
+    "properties": {
+        "email": {"type": "string", "format": "email"},
+        "first_name": {"type": "string"},
+        "last_name": {"type": "string"},
+        "is_active": {"type": "boolean"},
+        "is_staff": {"type": "boolean"},
+        "is_superuser": {"type": "boolean"},
+        **BodyParameterSaveToDB["properties"]
+    }
+}
+
+BodyDjangoUserPassword = {
+    "type": "object",
+    "properties": {
+        "new_password": {"type": "string", "description": "رمز عبور جدید"},
+        **BodyParameterSaveToDB["properties"]
+    },
+    "required": ["new_password"]
+}
+
+
+class DjangoUserViewSet(viewsets.ViewSet, DjangoUserValidationMixin):
+    """مدیریت کاربران داخلی جنگو (Django Users)."""
+    lookup_field = "username"
+
+    @extend_schema(responses={200: inline_serializer("UserList", {"data": serializers.JSONField()})})
+    def list(self, request: Request) -> Response:
+        """لیست تمام کاربران جنگو."""
+        try:
+            manager = DjangoUserManager()
+            data = manager.list_users()
+            return StandardResponse(
+                data=data,
+                message="لیست کاربران جنگو با موفقیت دریافت شد.",
+                request_data=dict(request.query_params),
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="django_user_list_failed",
+                error_message="خطا در دریافت لیست کاربران جنگو.",
+                request_data=dict(request.query_params),
+                save_to_db=False,
+            )
+
+    @extend_schema(
+        parameters=[ParamUsername],
+        responses={200: inline_serializer("UserDetail", {"data": serializers.JSONField()})}
+    )
+    def retrieve(self, request: Request, username: str) -> Response:
+        """دریافت اطلاعات یک کاربر جنگو."""
+        request_data = dict(request.query_params)
+        err = self.validate_django_user_exists(username, save_to_db=False, request_data=request_data, must_exist=True)
+        if err:
+            return err
+        try:
+            manager = DjangoUserManager()
+            data = manager.get_user(username)
+            return StandardResponse(
+                data=data,
+                message=f"اطلاعات کاربر '{username}' با موفقیت دریافت شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="django_user_fetch_failed",
+                error_message=f"خطا در دریافت اطلاعات کاربر '{username}'.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(
+        request=BodyDjangoUserCreate,
+        responses={201: StandardResponse},
+        examples=[
+            OpenApiExample(
+                "ایجاد کاربر جدید",
+                value={
+                    "username": "علیرضا۱۲۳",
+                    "password": "SecurePass!2025",
+                    "first_name": "علیرضا",
+                    "last_name": "رضایی",
+                    "email": "alireza@example.com",
+                    "is_staff": False
+                },
+                description="مثالی از ایجاد کاربر با نام فارسی."
+            )
+        ]
+    )
+    def create(self, request: Request) -> Response:
+        """ایجاد یک کاربر جدید در سیستم جنگو."""
+        username = request.data.get("username")
+        if not username:
+            return StandardErrorResponse(
+                error_code="missing_username",
+                error_message="نام کاربری اجباری است.",
+                status=400,
+                request_data=dict(request.data),
+                save_to_db=False,
+            )
+
+        request_data = dict(request.data)
+        err = self.validate_username_format(username, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+
+        err = self.validate_django_user_exists(username, save_to_db=False, request_data=request_data, must_exist=False)
+        if err:
+            return err
+
+        password = request.data.get("password")
+        if not password:
+            return StandardErrorResponse(
+                error_code="missing_password",
+                error_message="رمز عبور اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+        try:
+            manager = DjangoUserManager()
+            data = manager.create_user(
+                username=username,
+                password=password,
+                email=request.data.get("email"),
+                first_name=request.data.get("first_name"),
+                last_name=request.data.get("last_name"),
+                is_active=request.data.get("is_active", True),
+                is_staff=request.data.get("is_staff", False),
+                is_superuser=request.data.get("is_superuser", False),
+            )
+            return StandardResponse(
+                status=201,
+                data=data,
+                message=f"کاربر '{username}' با موفقیت ایجاد شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="django_user_create_failed",
+                error_message=f"خطا در ایجاد کاربر '{username}'.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(
+        methods=["PUT"],
+        parameters=[ParamUsername, ParamActionUser],
+        request={
+            "change_password": BodyDjangoUserPassword,
+            "update": BodyDjangoUserUpdate,
+        },
+        responses={200: StandardResponse}
+    )
+    @action(detail=True, methods=["put"], url_path="update")
+    def update_user(self, request: Request, username: str) -> Response:
+        """به‌روزرسانی یک کاربر جنگو (تغییر رمز یا سایر فیلدها)."""
+        request_data = dict(request.data)
+        err = self.validate_django_user_exists(username, save_to_db=False, request_data=request_data, must_exist=True)
+        if err:
+            return err
+
+        action_name = get_request_param(request, "action", str, None)
+        if not action_name:
+            return StandardErrorResponse(
+                error_code="missing_action",
+                error_message="پارامتر 'action' الزامی است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+        try:
+            manager = DjangoUserManager()
+            if action_name == "change_password":
+                new_password = request.data.get("new_password")
+                if not new_password:
+                    return StandardErrorResponse(
+                        error_code="missing_new_password",
+                        error_message="رمز جدید اجباری است.",
+                        status=400,
+                        request_data=request_data,
+                        save_to_db=False,
+                    )
+                manager.change_password(username, new_password)
+                message = "رمز عبور با موفقیت تغییر کرد."
+
+            elif action_name == "update":
+                data = manager.update_user(
+                    username=username,
+                    email=request.data.get("email"),
+                    first_name=request.data.get("first_name"),
+                    last_name=request.data.get("last_name"),
+                    is_active=request.data.get("is_active"),
+                    is_staff=request.data.get("is_staff"),
+                    is_superuser=request.data.get("is_superuser"),
+                )
+                return StandardResponse(
+                    data=data,
+                    message=f"کاربر '{username}' با موفقیت به‌روزرسانی شد.",
+                    request_data=request_data,
+                    save_to_db=False,
+                )
+            else:
+                return StandardErrorResponse(
+                    error_code="invalid_action",
+                    error_message="عملیات نامعتبر. مقادیر مجاز: change_password, update",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=False,
+                )
+
+            return StandardResponse(
+                message=message,
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="django_user_update_failed",
+                error_message=f"خطا در به‌روزرسانی کاربر '{username}'.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(parameters=[ParamUsername])
+    def destroy(self, request: Request, username: str) -> Response:
+        """حذف یک کاربر جنگو."""
+        request_data = dict(request.query_params)
+        err = self.validate_django_user_exists(username, save_to_db=False, request_data=request_data, must_exist=True)
+        if err:
+            return err
+
+        try:
+            manager = DjangoUserManager()
+            manager.delete_user(username)
+            return StandardResponse(
+                message=f"کاربر '{username}' با موفقیت حذف شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="django_user_delete_failed",
+                error_message=f"خطا در حذف کاربر '{username}'.",
                 request_data=request_data,
                 save_to_db=False,
             )
