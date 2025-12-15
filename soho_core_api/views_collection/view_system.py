@@ -22,6 +22,7 @@ from pylibs import (
 from pylibs.mixins import CLICommandError, CPUValidationMixin, MemoryValidationMixin
 from pylibs.cpu import CPUManager
 from pylibs.memory import MemoryManager
+from pylibs.service import ServiceManager
 
 # ========== CPU ==========
 CPU_PROPERTY_CHOICES = [
@@ -514,7 +515,7 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
             return err
         try:
             NetworkManager().configure_interface_file(nic_name, request.data)
-            NetworkManager().restart_interface(nic_name)
+            ServiceManager().restart(unit_name="networking.service")
             return StandardResponse(
                 message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.",
                 request_data=request_data,

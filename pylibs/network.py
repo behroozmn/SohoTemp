@@ -265,13 +265,6 @@ class NetworkManager:
         except (OSError, PermissionError) as e:
             raise CLICommandError(command=["write", path], returncode=1, stderr=str(e), stdout="", )
 
-
-    def restart_interface(self, nic_name: str) -> None:
-
-
-        run_cli_command(["/usr/bin/systemctl", "restart", "networking.service"], use_sudo=True)
-
-
     def is_valid_interface_name(self, nic_name: str) -> bool:
         """
         بررسی اینکه آیا نام داده‌شده مربوط به یک کارت شبکهٔ موجود در سیستم است.
