@@ -30,6 +30,6 @@ urlpatterns = [
     path("api/system/", include("soho_core_api.urls_collection.url_system")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
-    path("api/samba/", include("soho_core_api.urls_collection.url_share_samba")),
+    path("api/samba/", include("soho_core_api.urls_collection.url_samba")),
     path("api/web/", include("soho_core_api.urls_collection.url_system_web")),
 ]
