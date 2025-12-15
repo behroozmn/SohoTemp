@@ -938,9 +938,7 @@ class PowerValidationMixin:
 class DjangoUserValidationMixin:
     """میکسین اعتبارسنجی برای کاربران جنگو."""
 
-    def validate_django_user_exists(
-            self, username: str, save_to_db: bool, request_data: Dict[str, Any], must_exist: bool = True
-    ) -> Optional[StandardErrorResponse]:
+    def validate_django_user_exists(self, username: str, save_to_db: bool, request_data: Dict[str, Any], must_exist: bool = True) -> Optional[StandardErrorResponse]:
         from django.contrib.auth.models import User
         try:
             user_exists = User.objects.filter(username=username).exists()
@@ -971,9 +969,7 @@ class DjangoUserValidationMixin:
             )
         return None
 
-    def validate_username_format(
-            self, username: str, save_to_db: bool, request_data: Dict[str, Any]
-    ) -> Optional[StandardErrorResponse]:
+    def validate_username_format(            self, username: str, save_to_db: bool, request_data: Dict[str, Any]    ) -> Optional[StandardErrorResponse]:
         if not username or not isinstance(username, str):
             return StandardErrorResponse(
                 error_code="invalid_username",
