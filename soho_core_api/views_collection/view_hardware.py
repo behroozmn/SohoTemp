@@ -315,30 +315,26 @@ MEMORY_PROPERTY_CHOICES = [
     # ممکن است با محاسبه داخلی اختلاف جزئی داشته باشد به دلیل روش‌های متفاوت محاسبه.
 ]
 
-ParamPropertyMemory = OpenApiParameter(
-    name="property",
-    type=str,
-    required=False,
-    enum=MEMORY_PROPERTY_CHOICES,
-    description="انتخاب یک فیلد خاص از اطلاعات حافظه یا ارسال 'all' برای دریافت همه فیلدها.",
-    examples=[OpenApiExample("همه فیلدها", value="all", description="دریافت تمام فیلدهای اطلاعات حافظه (RAM) به‌صورت یکجا."),
-              OpenApiExample("لیست بلوک‌های فیزیکی حافظه", value="memory_blocks", description=("لیستی از بلوک‌های فیزیکی حافظه که سیستم آن‌ها را شناسایی کرده است.\n"
-                                                                                               "هر بلاک شامل فیلدهای زیر است:\n"
-                                                                                               "- range: محدوده آدرس‌های فیزیکی (مثال: «0-12»)\n"
-                                                                                               "- size_bytes: اندازه بلاک به بایت (عدد خالص)\n"
-                                                                                               "- state: وضعیت — «online» (فعال) یا «offline» (غیرفعال)\n"
-                                                                                               "- removable: آیا بلاک قابل حذف پویا است؟ («yes» یا «no»)\n"
-                                                                                               "- device: دستگاه مرتبط (در صورت وجود، مثلاً برای NVDIMM)")),
-              OpenApiExample("کل حافظه فعال (بایت)", value="total_online_memory_bytes", description="مجموع حافظه‌ی فیزیکی فعال (on) در سیستم، به بایت.\n(فقط بلوک‌هایی که state=online هستند)"),
-              OpenApiExample("کل حافظه غیرفعال (بایت)", value="total_offline_memory_bytes", description="مجموع حافظه‌ی فیزیکی غیرفعال (off) در سیستم، به بایت.\n(بلوک‌هایی که state=offline هستند)"),
-              OpenApiExample("کل «رَم» نصب‌شده (MemTotal به بایت)", value="total_bytes", description="کل حافظه RAM نصب‌شده که هسته لینوکس در دسترس دارد.\n(همان MemTotal در /proc/meminfo) به بایت."),
-              OpenApiExample("حافظه قابل استفاده فعلی (بایت)", value="available_bytes", description=("حافظه‌ی قابل استفاده فعلی بدون نیاز به swap.\n"
-                                                                                                     "محاسبه: MemFree + Buffers + Cached (به بایت).\n"
-                                                                                                     "این بهترین معیار برای «چقدر حافظه آزاد داریم؟» است.")),
-              OpenApiExample("حافظه در حال استفاده (بایت)", value="used_bytes", description="حافظه‌ی در حال استفاده = total_bytes - available_bytes (به بایت)."),
-              OpenApiExample("حافظه کاملاً آزاد (MemFree به بایت)", value="free_bytes", description="حافظه‌ی کاملاً آزاد (فقط MemFree از /proc/meminfo) به بایت.\nمعمولاً کوچک است حتی در سیستم‌های بی‌بار."),
-              OpenApiExample("درصد استفاده بر اساس محاسبه داخلی", value="usage_percent", description="درصد استفاده از حافظه بر اساس فرمول:\n(used_bytes / total_bytes) * 100\nبا دقت دو رقم اعشار."),
-              OpenApiExample("درصد استفاده گزارش‌شده توسط psutil", value="psutil_usage_percent", description="درصد استفاده از حافظه همان‌طور که توسط کتابخانه psutil گزارش شده است.\nمقدار ممکن است با محاسبه داخلی کمی متفاوت باشد."), ], )
+ParamPropertyMemory = OpenApiParameter(name="property", type=str, required=False, enum=MEMORY_PROPERTY_CHOICES,
+                                       description="انتخاب یک فیلد خاص از اطلاعات حافظه یا ارسال 'all' برای دریافت همه فیلدها.",
+                                       examples=[OpenApiExample("همه فیلدها", value="all", description="دریافت تمام فیلدهای اطلاعات حافظه (RAM) به‌صورت یکجا."),
+                                                 OpenApiExample("لیست بلوک‌های فیزیکی حافظه", value="memory_blocks", description=("لیستی از بلوک‌های فیزیکی حافظه که سیستم آن‌ها را شناسایی کرده است.\n"
+                                                                                                                                  "هر بلاک شامل فیلدهای زیر است:\n"
+                                                                                                                                  "- range: محدوده آدرس‌های فیزیکی (مثال: «0-12»)\n"
+                                                                                                                                  "- size_bytes: اندازه بلاک به بایت (عدد خالص)\n"
+                                                                                                                                  "- state: وضعیت — «online» (فعال) یا «offline» (غیرفعال)\n"
+                                                                                                                                  "- removable: آیا بلاک قابل حذف پویا است؟ («yes» یا «no»)\n"
+                                                                                                                                  "- device: دستگاه مرتبط (در صورت وجود، مثلاً برای NVDIMM)")),
+                                                 OpenApiExample("کل حافظه فعال (بایت)", value="total_online_memory_bytes", description="مجموع حافظه‌ی فیزیکی فعال (on) در سیستم، به بایت.\n(فقط بلوک‌هایی که state=online هستند)"),
+                                                 OpenApiExample("کل حافظه غیرفعال (بایت)", value="total_offline_memory_bytes", description="مجموع حافظه‌ی فیزیکی غیرفعال (off) در سیستم، به بایت.\n(بلوک‌هایی که state=offline هستند)"),
+                                                 OpenApiExample("کل «رَم» نصب‌شده (MemTotal به بایت)", value="total_bytes", description="کل حافظه RAM نصب‌شده که هسته لینوکس در دسترس دارد.\n(همان MemTotal در /proc/meminfo) به بایت."),
+                                                 OpenApiExample("حافظه قابل استفاده فعلی (بایت)", value="available_bytes", description=("حافظه‌ی قابل استفاده فعلی بدون نیاز به swap.\n"
+                                                                                                                                        "محاسبه: MemFree + Buffers + Cached (به بایت).\n"
+                                                                                                                                        "این بهترین معیار برای «چقدر حافظه آزاد داریم؟» است.")),
+                                                 OpenApiExample("حافظه در حال استفاده (بایت)", value="used_bytes", description="حافظه‌ی در حال استفاده = total_bytes - available_bytes (به بایت)."),
+                                                 OpenApiExample("حافظه کاملاً آزاد (MemFree به بایت)", value="free_bytes", description="حافظه‌ی کاملاً آزاد (فقط MemFree از /proc/meminfo) به بایت.\nمعمولاً کوچک است حتی در سیستم‌های بی‌بار."),
+                                                 OpenApiExample("درصد استفاده بر اساس محاسبه داخلی", value="usage_percent", description="درصد استفاده از حافظه بر اساس فرمول:\n(used_bytes / total_bytes) * 100\nبا دقت دو رقم اعشار."),
+                                                 OpenApiExample("درصد استفاده گزارش‌شده توسط psutil", value="psutil_usage_percent", description="درصد استفاده از حافظه همان‌طور که توسط کتابخانه psutil گزارش شده است.\nمقدار ممکن است با محاسبه داخلی کمی متفاوت باشد."), ], )
 
 
 class MemoryInfoViewSet(viewsets.ViewSet, MemoryValidationMixin):
@@ -426,10 +422,7 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
                                                  error_code="nic_list_failed",
                                                  error_message="خطا در دریافت لیست کارت‌های شبکه.", )
 
-    @extend_schema(
-        parameters=[ParamNicName, ParamPropertyNetwork],
-        responses={200: inline_serializer("NICProperty", {"data": serializers.JSONField()})}
-    )
+    @extend_schema(parameters=[ParamNicName, ParamPropertyNetwork], responses={200: inline_serializer("NICProperty", {"data": serializers.JSONField()})})
     def retrieve(self, request: Request, nic_name: str) -> Response:
         """
         دریافت تمام یا بخش خاصی از اطلاعات یک کارت شبکه.
@@ -506,64 +499,9 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
         try:
             NetworkManager().configure_interface_file(nic_name, request.data)
             NetworkManager().restart_interface(nic_name)
-            return StandardResponse(
-                message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.",
-                request_data=request_data,
-                save_to_db=False,
-            )
+            return StandardResponse(request_data=request_data, save_to_db=False,
+                                    message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.", )
         except Exception as e:
-            return build_standard_error_response(
-                exc=e,
-                error_code="nic_configure_failed",
-                error_message="خطا در پیکربندی کارت شبکه.",
-                request_data=request_data,
-                save_to_db=False,
-            )
-
-    @extend_schema(parameters=[ParamNicName])
-    @action(detail=True, methods=["post"], url_path="ifup")
-    def ifup(self, request: Request, nic_name: str) -> Response:
-        """فعال‌سازی کارت شبکه."""
-        request_data = dict(request.query_params)
-        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
-        if err:
-            return err
-        try:
-            NetworkManager().ifup(nic_name)
-            return StandardResponse(
-                message=f"کارت شبکه '{nic_name}' فعال شد.",
-                request_data=request_data,
-                save_to_db=False,
-            )
-        except Exception as e:
-            return build_standard_error_response(
-                exc=e,
-                error_code="ifup_failed",
-                error_message="خطا در فعال‌سازی کارت شبکه.",
-                request_data=request_data,
-                save_to_db=False,
-            )
-
-    @extend_schema(parameters=[ParamNicName])
-    @action(detail=True, methods=["post"], url_path="ifdown")
-    def ifdown(self, request: Request, nic_name: str) -> Response:
-        """غیرفعال‌سازی کارت شبکه."""
-        request_data = dict(request.query_params)
-        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
-        if err:
-            return err
-        try:
-            NetworkManager().ifdown(nic_name)
-            return StandardResponse(
-                message=f"کارت شبکه '{nic_name}' غیرفعال شد.",
-                request_data=request_data,
-                save_to_db=False,
-            )
-        except Exception as e:
-            return build_standard_error_response(
-                exc=e,
-                error_code="ifdown_failed",
-                error_message="خطا در غیرفعال‌سازی کارت شبکه.",
-                request_data=request_data,
-                save_to_db=False,
-            )
+            return build_standard_error_response(exc=e, request_data=request_data, save_to_db=False,
+                                                 error_code="nic_configure_failed",
+                                                 error_message="خطا در پیکربندی کارت شبکه.", )

@@ -334,3 +334,6 @@ rm -rf .venv
 python3 -m venv .venv --system-site-packages
 source ./.venv/bin/activate
 ```
+
+
+نکته: فایل کانفیگ /etc/network/interfaces.d/enp3s0 برای ادیت نیاز به دسترسی نوشتن دارد یا اینکه برنامه با دسترسی روت اجرا شود 

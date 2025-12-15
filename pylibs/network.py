@@ -14,7 +14,7 @@ class NetworkManager:
     """
     مدیریت جامع اطلاعات و تنظیمات کارت‌های شبکه (NIC) در سیستم.
 
-    این کلاس از کتابخانه‌های psutil و دستورات سیستمی (مانند `ethtool`، `ifup`/`ifdown`) برای جمع‌آوری اطلاعات سخت‌افزاری،
+    این کلاس از کتابخانه‌های psutil و دستورات سیستمی برای جمع‌آوری اطلاعات سخت‌افزاری،
     آمار ترافیک، آدرس‌های IP و همچنین پیکربندی فایل‌های تنظیمات شبکه استفاده می‌کند.
     """
 
@@ -98,7 +98,11 @@ class NetworkManager:
             "volume": {"bytes_sent": stats["bytes_sent"],
                        "bytes_recv": stats["bytes_recv"], },
             "packets": {"sent": stats["packets_sent"],
-                        "recv": stats["packets_recv"], },
+                        "recv": stats["packets_recv"],
+                        "errin": stats["errin"],
+                        "errout": stats["errout"],
+                        "dropin": stats["dropin"],
+                        "dropout": stats["dropout"], },
             "speed": self._detect_speed(nic_name), }
 
     def _detect_speed(self, nic_name: str) -> Optional[int]:
@@ -261,39 +265,12 @@ class NetworkManager:
         except (OSError, PermissionError) as e:
             raise CLICommandError(command=["write", path], returncode=1, stderr=str(e), stdout="", )
 
-    def ifdown(self, nic_name: str) -> None:
-        """
-        غیرفعال‌سازی یک کارت شبکه با استفاده از دستور سیستمی `ifdown`.
-
-        Args:
-            nic_name (str): نام کارت شبکه.
-        """
-        run_cli_command(["/sbin/ifdown", nic_name], use_sudo=True)
-
-    def ifup(self, nic_name: str) -> None:
-        """
-        فعال‌سازی یک کارت شبکه با استفاده از دستور سیستمی `ifup`.
-
-        Args:
-            nic_name (str): نام کارت شبکه.
-        """
-        run_cli_command(["/sbin/ifup", nic_name], use_sudo=True)
 
     def restart_interface(self, nic_name: str) -> None:
-        """
-        راه‌اندازی مجدد یک کارت شبکه (ifdown → ifup).
 
-        Args:
-            nic_name (str): نام کارت شبکه.
 
-        Notes:
-            - اگر کارت از قبل غیرفعال باشد، `ifdown` خطایی ایجاد نمی‌کند.
-        """
-        try:
-            self.ifdown(nic_name)
-        except CLICommandError:
-            pass
-        self.ifup(nic_name)
+        run_cli_command(["/usr/bin/systemctl", "restart", "networking.service"], use_sudo=True)
+
 
     def is_valid_interface_name(self, nic_name: str) -> bool:
         """
