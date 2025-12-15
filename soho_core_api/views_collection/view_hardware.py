@@ -17,7 +17,7 @@ from pylibs import (
     build_standard_error_response,
     StandardResponse,
     StandardErrorResponse,
-    QuerySaveToDB,
+    QuerySaveToDB, BodyParameterSaveToDB,
 )
 from pylibs.mixins import CLICommandError, CPUValidationMixin, MemoryValidationMixin
 from pylibs.cpu import CPUManager
@@ -404,6 +404,16 @@ ParamPropertyNetwork = OpenApiParameter(name="property", type=str, required=Fals
                                                   OpenApiExample("اطلاعات سخت‌افزاری", value="hardware"),
                                                   OpenApiExample("اطلاعات عمومی", value="general"), ], )
 
+BodyNetworkConfig = {"type": "object",
+                     "properties": {"mode": {"type": "string", "enum": ["dhcp", "static"], "description": "حالت آدرس‌دهی شبکه: «dhcp» برای دریافت خودکار آدرس، «static» برای تنظیم دستی."},
+                                    "ip": {"type": "string", "description": "آدرس IP ثابت (فقط در حالت «static» معتبر است)."},
+                                    "netmask": {"type": "string", "description": "ماسک شبکه (فقط در حالت «static» معتبر است)."},
+                                    "gateway": {"type": "string", "description": "آدرس دروازه پیش‌فرض (فقط در حالت «static» معتبر است)."},
+                                    "dns": {"type": "array", "items": {"type": "string"}, "description": "لیست سرورهای DNS (مثال: [\"8.8.8.8\", \"1.1.1.1\"])."},
+                                    "mtu": {"type": "integer", "description": "اندازه MTU (Maximum Transmission Unit) برای اینترفیس (اختیاری، پیش‌فرض سیستم استفاده می‌شود)."},
+                                    **BodyParameterSaveToDB["properties"]},
+                     "required": ["mode"]}
+
 
 class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
     """مدیریت و دریافت اطلاعات کارت‌های شبکه."""
@@ -478,14 +488,21 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
                                                  error_code="nic_retrieve_failed",
                                                  error_message="خطا در دریافت اطلاعات کارت شبکه.", )
 
-    @extend_schema(request={"type": "object", "properties": {"mode": {"type": "string", "enum": ["dhcp", "static"]},
-                                                             "ip": {"type": "string"},
-                                                             "netmask": {"type": "string"},
-                                                             "gateway": {"type": "string"},
-                                                             "dns": {"type": "array", "items": {"type": "string"}},
-                                                             "mtu": {"type": "integer"}, }},
+    @extend_schema(request=BodyNetworkConfig,
                    parameters=[ParamNicName],
-                   responses={200: StandardResponse})
+                   examples=[OpenApiExample(name="پیکربندی دستی (static)",
+                                            value={"mode": "static",
+                                                   "ip": "172.16.16.190",
+                                                   "netmask": "255.255.255.0",
+                                                   "gateway": "172.16.16.1",
+                                                   "dns": ["172.16.16.1", "8.8.8.8"],
+                                                   "mtu": 1500,
+                                                   "save_to_db": False},
+                                            description="مثالی از پیکربندی کامل یک کارت شبکه با آدرس ثابت.", ),
+                             OpenApiExample(name="پیکربندی خودکار (dhcp)",
+                                            value={"mode": "dhcp", "mtu": 1400, "save_to_db": False},
+                                            description="مثالی از پیکربندی DHCP با تغییر MTU (بقیه فیلدها نادیده گرفته می‌شوند).", ), ],
+                   responses={200: StandardResponse}                   )
     @action(detail=True, methods=["post"], url_path="configure")
     def configure(self, request: Request, nic_name: str) -> Response:
         """پیکربندی کارت شبکه از طریق فایل /etc/network/interfaces.d/"""
@@ -499,9 +516,16 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
         try:
             NetworkManager().configure_interface_file(nic_name, request.data)
             NetworkManager().restart_interface(nic_name)
-            return StandardResponse(request_data=request_data, save_to_db=False,
-                                    message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.", )
+            return StandardResponse(
+                message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
         except Exception as e:
-            return build_standard_error_response(exc=e, request_data=request_data, save_to_db=False,
-                                                 error_code="nic_configure_failed",
-                                                 error_message="خطا در پیکربندی کارت شبکه.", )
+            return build_standard_error_response(
+                exc=e,
+                error_code="nic_configure_failed",
+                error_message="خطا در پیکربندی کارت شبکه.",
+                request_data=request_data,
+                save_to_db=False,
+            )
