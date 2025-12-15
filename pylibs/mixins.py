@@ -914,3 +914,21 @@ class ServiceValidationMixin:
                 save_to_db=False,
             )
         return None
+
+
+class PowerValidationMixin:
+    """
+    Mixin برای اعتبارسنجی عملیات Power (فقط reboot و poweroff مجاز است).
+    """
+
+    def validate_power_action(self, action: str, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        valid_actions = {"reboot", "poweroff"}
+        if action not in valid_actions:
+            return StandardErrorResponse(
+                error_code="invalid_power_action",
+                error_message=f"عملیات '{action}' معتبر نیست. مقادیر مجاز: {', '.join(valid_actions)}",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+            )
+        return None
