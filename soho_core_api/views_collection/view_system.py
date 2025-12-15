@@ -1,15 +1,16 @@
 # soho_core_api/views_collection/view_system.py
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from rest_framework import viewsets
-from rest_framework.request import Request
-from rest_framework.response import Response
 from pylibs.network import NetworkManager
 from pylibs.mixins import NetworkValidationMixin, PowerValidationMixin, DjangoUserValidationMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
 from rest_framework import serializers
 from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.request import Request
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import status
 
 # Core utilities
 from pylibs import (
@@ -17,7 +18,7 @@ from pylibs import (
     build_standard_error_response,
     StandardResponse,
     StandardErrorResponse,
-    QuerySaveToDB, BodyParameterSaveToDB,
+    QuerySaveToDB, BodyParameterSaveToDB, logger,
 )
 from pylibs.mixins import CLICommandError, CPUValidationMixin, MemoryValidationMixin
 from pylibs.cpu import CPUManager
@@ -597,53 +598,37 @@ class PowerViewSet(viewsets.ViewSet, PowerValidationMixin):
 
 
 # ========== Django User Parameters ==========
-ParamUsername = OpenApiParameter(
-    name="username", type=str, required=True, location="path", description="نام کاربری جنگو"
-)
+ParamUsername = OpenApiParameter(name="username", type=str, required=True, location="path", description="نام کاربری جنگو")
 
-ParamActionUser = OpenApiParameter(
-    name="action", type=str, required=True, location="query",
-    enum=["change_password", "update"],
-    description="عملیات مورد نظر: تغییر رمز یا به‌روزرسانی"
-)
+ParamActionUser = OpenApiParameter(name="action", type=str, required=True, location="query",
+                                   enum=["change_password", "update"],
+                                   description="عملیات مورد نظر: تغییر رمز یا به‌روزرسانی")
 
-BodyDjangoUserCreate = {
-    "type": "object",
-    "properties": {
-        "username": {"type": "string", "description": "نام کاربری (پشتیبانی فارسی)"},
-        "password": {"type": "string", "description": "رمز عبور"},
-        "email": {"type": "string", "format": "email", "description": "ایمیل (اختیاری)"},
-        "first_name": {"type": "string", "description": "نام (فارسی مجاز)"},
-        "last_name": {"type": "string", "description": "نام خانوادگی (فارسی مجاز)"},
-        "is_active": {"type": "boolean", "default": True},
-        "is_staff": {"type": "boolean", "default": False},
-        "is_superuser": {"type": "boolean", "default": False},
-        **BodyParameterSaveToDB["properties"]
-    },
-    "required": ["username", "password"]
-}
+BodyDjangoUserCreate = {"type": "object",
+                        "properties": {"username": {"type": "string", "description": "نام کاربری (پشتیبانی فارسی)"},
+                                       "password": {"type": "string", "description": "رمز عبور"},
+                                       "email": {"type": "string", "format": "email", "description": "ایمیل (اختیاری)"},
+                                       "first_name": {"type": "string", "description": "نام (فارسی مجاز)"},
+                                       "last_name": {"type": "string", "description": "نام خانوادگی (فارسی مجاز)"},
+                                       "is_active": {"type": "boolean", "default": True},
+                                       "is_staff": {"type": "boolean", "default": False},
+                                       "is_superuser": {"type": "boolean", "default": False},
+                                       **BodyParameterSaveToDB["properties"]},
+                        "required": ["username", "password"]}
 
-BodyDjangoUserUpdate = {
-    "type": "object",
-    "properties": {
-        "email": {"type": "string", "format": "email"},
-        "first_name": {"type": "string"},
-        "last_name": {"type": "string"},
-        "is_active": {"type": "boolean"},
-        "is_staff": {"type": "boolean"},
-        "is_superuser": {"type": "boolean"},
-        **BodyParameterSaveToDB["properties"]
-    }
-}
+BodyDjangoUserUpdate = {"type": "object",
+                        "properties": {"email": {"type": "string", "format": "email"},
+                                       "first_name": {"type": "string"},
+                                       "last_name": {"type": "string"},
+                                       "is_active": {"type": "boolean"},
+                                       "is_staff": {"type": "boolean"},
+                                       "is_superuser": {"type": "boolean"},
+                                       **BodyParameterSaveToDB["properties"]}}
 
-BodyDjangoUserPassword = {
-    "type": "object",
-    "properties": {
-        "new_password": {"type": "string", "description": "رمز عبور جدید"},
-        **BodyParameterSaveToDB["properties"]
-    },
-    "required": ["new_password"]
-}
+BodyDjangoUserPassword = {"type": "object",
+                          "properties": {"new_password": {"type": "string", "description": "رمز عبور جدید"},
+                                         **BodyParameterSaveToDB["properties"]},
+                          "required": ["new_password"]}
 
 
 class DjangoUserViewSet(viewsets.ViewSet, DjangoUserValidationMixin):
@@ -833,3 +818,57 @@ class DjangoUserViewSet(viewsets.ViewSet, DjangoUserValidationMixin):
                                                  error_message=f"خطا در حذف کاربر '{username}'.",
                                                  request_data=request_data,
                                                  save_to_db=False, )
+
+    @extend_schema(
+        request={"type": "object", "properties": {
+            "refresh": {"type": "string", "description": "توکن refresh جهت blacklist کردن."}
+        }, "required": ["refresh"]},
+        responses={205: None},
+        examples=[
+            OpenApiExample(
+                name="درخواست لاگ‌اوت موفق",
+                value={"refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.xxxxx"},
+                description="ارسال توکن refresh برای blacklist کردن و خروج کاربر."
+            )
+        ],
+        description="لاگ‌اوت کاربر جاری و blacklist کردن توکن refresh. نیاز به احراز هویت ندارد."
+    )
+    @action(detail=False, methods=["post"], url_path="logout")
+    def logout(self, request: Request) -> Response:
+        """
+        لاگ‌اوت کاربر جاری و blacklist کردن توکن refresh.
+        """
+        request_data = dict(request.data)
+        refresh_token = request_data.get("refresh")
+
+        if not refresh_token:
+            return StandardErrorResponse(
+                error_code="missing_refresh_token",
+                error_message="پارامتر 'refresh' الزامی است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+        try:
+            # blacklist کردن توکن refresh
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            # لاگ‌اوت session جنگو (برای امنیت بیشتر، در صورت استفاده از session)
+            # ✅ نکته: از request._request استفاده نمی‌کنیم — فقط JWT مهم است
+            # اگر session مورد استفاده باشد، می‌توان این خط را فعال کرد:
+            # django_logout(request._request)
+
+            return Response(status=status.HTTP_205_RESET_CONTENT)
+
+        except Exception as e:
+            logger.warning(f"Invalid refresh token during logout: {e}")
+            return StandardErrorResponse(
+                error_code="invalid_refresh_token",
+                error_message="توکن refresh نامعتبر است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=False,
+                exception=e,
+            )
