@@ -496,13 +496,12 @@ class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
                                                    "netmask": "255.255.255.0",
                                                    "gateway": "172.16.16.1",
                                                    "dns": ["172.16.16.1", "8.8.8.8"],
-                                                   "mtu": 1500,
-                                                   "save_to_db": False},
+                                                   "mtu": 1500, },
                                             description="مثالی از پیکربندی کامل یک کارت شبکه با آدرس ثابت.", ),
                              OpenApiExample(name="پیکربندی خودکار (dhcp)",
-                                            value={"mode": "dhcp", "mtu": 1400, "save_to_db": False},
+                                            value={"mode": "dhcp", "mtu": 1500},
                                             description="مثالی از پیکربندی DHCP با تغییر MTU (بقیه فیلدها نادیده گرفته می‌شوند).", ), ],
-                   responses={200: StandardResponse}                   )
+                   responses={200: StandardResponse})
     @action(detail=True, methods=["post"], url_path="configure")
     def configure(self, request: Request, nic_name: str) -> Response:
         """پیکربندی کارت شبکه از طریق فایل /etc/network/interfaces.d/"""
