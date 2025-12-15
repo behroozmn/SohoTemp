@@ -29,7 +29,6 @@ urlpatterns = [
     path("api/auth/", include("soho_core_api.urls_collection.url_auth")),
     path("api/hardware/", include("soho_core_api.urls_collection.url_hardware")),
     # path("api/memory/", include("soho_core_api.urls_collection.url_memory")),
-    path("api/net/", include("soho_core_api.urls_collection.url_network")),
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
     # path("api/volume/", include("soho_core_api.urls_collection.url_volume")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
@@ -37,6 +36,4 @@ urlpatterns = [
     path("api/service/", include("soho_core_api.urls_collection.url_service")),
     path("api/os/", include("soho_core_api.urls_collection.url_system_os")),
     path("api/web/", include("soho_core_api.urls_collection.url_system_web")),
-    path("api/dir/", include("soho_core_api.urls_collection.url_file")),
-
 ]

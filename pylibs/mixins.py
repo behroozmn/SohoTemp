@@ -797,3 +797,70 @@ class MemoryValidationMixin:
         invalid = set(fields) - valid
         if invalid:
             raise ValueError(f"فیلدهای نامعتبر حافظه: {', '.join(sorted(invalid))}")
+
+class NetworkValidationMixin:
+    """
+    Mixin برای اعتبارسنجی نام کارت شبکه و ساختار تنظیمات.
+    """
+
+    def validate_nic_exists(self, nic_name: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی وجود کارت شبکه در سیستم.
+        """
+        try:
+            from pylibs.network import NetworkManager
+            if not NetworkManager().is_valid_interface_name(nic_name):
+                return StandardErrorResponse(
+                    error_code="nic_not_found",
+                    error_message=f"کارت شبکه '{nic_name}' در سیستم یافت نشد.",
+                    status=404,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        except Exception as e:
+            return StandardErrorResponse(
+                error_code="nic_validation_failed",
+                error_message="خطا در بررسی وجود کارت شبکه.",
+                status=500,
+                request_data=request_data,
+                save_to_db=save_to_db,
+                exception=e,
+            )
+        return None
+
+    def validate_network_config(self, config: Dict[str, Any], save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی ساختار تنظیمات شبکه برای اینترفیس.
+        """
+        mode = config.get("mode")
+        if mode not in ("dhcp", "static"):
+            return StandardErrorResponse(
+                error_code="invalid_mode",
+                error_message="حالت تنظیمات باید 'dhcp' یا 'static' باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        if mode == "static":
+            ip = config.get("ip")
+            if not ip:
+                return StandardErrorResponse(
+                    error_code="missing_ip",
+                    error_message="در حالت static، آدرس IP اجباری است.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+            # ساده‌ترین اعتبارسنجی IP
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                return StandardErrorResponse(
+                    error_code="invalid_ip",
+                    error_message="آدرس IP نامعتبر است.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        return None

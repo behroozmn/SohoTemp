@@ -1,12 +1,13 @@
-# soho_core_api/urls.py
+# soho_core_api/urls.py (نسخه بهینه‌شده)
 from django.urls import path, include
 from rest_framework.routers import SimpleRouter
-from soho_core_api.views_collection.view_hardware import CPUInfoViewSet, MemoryInfoViewSet
+from soho_core_api.views_collection.view_hardware import CPUInfoViewSet, MemoryInfoViewSet, NetworkInfoViewSet
 
-# ایجاد روتر برای سخت‌افزار
-hardware_router = SimpleRouter()
+router = SimpleRouter()
+router.register(r"cpu", CPUInfoViewSet, basename="cpu-info")
+router.register(r"memory", MemoryInfoViewSet, basename="memory-info")
+router.register(r"network", NetworkInfoViewSet, basename="network")
 
-hardware_router.register(r"cpu", CPUInfoViewSet, basename="cpu-info")
-hardware_router.register(r"memory", MemoryInfoViewSet, basename="memory-info")
-
-urlpatterns = [path("", include(hardware_router.urls)), ]
+urlpatterns = [
+    path("", include(router.urls)),
+]

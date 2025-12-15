@@ -5,6 +5,11 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExampl
 from rest_framework import viewsets
 from rest_framework.request import Request
 from rest_framework.response import Response
+from pylibs.network import NetworkManager
+from pylibs.mixins import NetworkValidationMixin
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, inline_serializer
+from rest_framework import serializers
+from rest_framework.decorators import action
 
 # Core utilities
 from pylibs import (
@@ -386,6 +391,195 @@ class MemoryInfoViewSet(viewsets.ViewSet, MemoryValidationMixin):
                 exc=e,
                 error_code="memory_fetch_failed",
                 error_message="خطا در دریافت اطلاعات حافظه.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+
+# ========== NETWORK ==========
+ParamNicName = OpenApiParameter(name="nic_name", type=str, required=True, location="path", description="نام کارت شبکه (مانند eth0, enp3s0)", )
+
+ParamPropertyNetwork = OpenApiParameter(name="property", type=str, required=False, enum=[
+    "all",
+    "bandwidth",
+    "traffic_summary",
+    "hardware",
+    "general",
+], description="انتخاب نوع اطلاعات مورد نیاز", examples=[
+    OpenApiExample("همه اطلاعات", value="all"),
+    OpenApiExample("پهنای باند", value="bandwidth"),
+    OpenApiExample("خلاصه ترافیک", value="traffic_summary"),
+    OpenApiExample("اطلاعات سخت‌افزاری", value="hardware"),
+    OpenApiExample("اطلاعات عمومی", value="general"),
+], )
+
+
+class NetworkInfoViewSet(viewsets.ViewSet, NetworkValidationMixin):
+    """مدیریت و دریافت اطلاعات کارت‌های شبکه."""
+
+    lookup_field = "nic_name"
+
+    @extend_schema(responses={200: inline_serializer("NICList", {"data": serializers.JSONField()})})
+    def list(self, request: Request) -> Response:
+        """دریافت لیست تمام کارت‌های شبکه."""
+        try:
+            data = NetworkManager().list_nics()
+            return StandardResponse(data=data, request_data=dict(request.query_params), save_to_db=False,
+                                    message="لیست کارت‌های شبکه با موفقیت دریافت شد.", )
+        except Exception as e:
+            return build_standard_error_response(exc=e, request_data=dict(request.query_params), save_to_db=False,
+                                                 error_code="nic_list_failed",
+                                                 error_message="خطا در دریافت لیست کارت‌های شبکه.", )
+
+    @extend_schema(parameters=[ParamNicName], responses={200: inline_serializer("NICAll", {"data": serializers.JSONField()})})
+    def retrieve(self, request: Request, nic_name: str) -> Response:
+        """دریافت تمام اطلاعات یک کارت شبکه."""
+        request_data = dict(request.query_params)
+        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        try:
+            data = NetworkManager().gather_all_info().get(nic_name)
+            if data is None:
+                return StandardErrorResponse(status=500, request_data=request_data, save_to_db=False,
+                                             error_code="nic_retrieve_failed",
+                                             error_message=f"اطلاعات کارت '{nic_name}' قابل بازیابی نیست.", )
+            return StandardResponse(data=data, request_data=request_data, save_to_db=False,
+                                    message=f"اطلاعات کارت '{nic_name}' با موفقیت دریافت شد.", )
+        except Exception as e:
+            return build_standard_error_response(exc=e, request_data=request_data, save_to_db=False,
+                                                 error_code="nic_retrieve_failed",
+                                                 error_message="خطا در دریافت اطلاعات کارت شبکه.", )
+
+    @extend_schema(parameters=[ParamNicName, ParamPropertyNetwork],
+                   responses={200: inline_serializer("NICProperty", {"data": serializers.JSONField()})})
+    @action(detail=False, methods=["get"], url_path="property/(?P<nic_name>[^/.]+)")
+    def get_property(self, request: Request, nic_name: str) -> Response:
+        """دریافت یک دسته خاص از اطلاعات کارت شبکه."""
+        prop = get_request_param(request, "property", str, "all")
+        request_data = dict(request.query_params)
+        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        try:
+            manager = NetworkManager()
+            if prop == "all":
+                data = {
+                    "bandwidth": manager.get_bandwidth(nic_name),
+                    "traffic_summary": manager.get_traffic_summary(nic_name),
+                    "hardware": manager.get_hardware_info(nic_name),
+                    "general": manager.get_general_info(nic_name),
+                }
+            elif prop == "bandwidth":
+                data = manager.get_bandwidth(nic_name)
+            elif prop == "traffic_summary":
+                data = manager.get_traffic_summary(nic_name)
+            elif prop == "hardware":
+                data = manager.get_hardware_info(nic_name)
+            elif prop == "general":
+                data = manager.get_general_info(nic_name)
+            else:
+                return StandardErrorResponse(
+                    error_code="invalid_property",
+                    error_message="property نامعتبر است.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=False,
+                )
+            return StandardResponse(
+                data=data,
+                message=f"اطلاعات '{prop}' برای کارت '{nic_name}' با موفقیت دریافت شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="nic_property_failed",
+                error_message="خطا در دریافت اطلاعات انتخابی کارت شبکه.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(request={"type": "object", "properties": {"mode": {"type": "string", "enum": ["dhcp", "static"]},
+                                                             "ip": {"type": "string"},
+                                                             "netmask": {"type": "string"},
+                                                             "gateway": {"type": "string"},
+                                                             "dns": {"type": "array", "items": {"type": "string"}},
+                                                             "mtu": {"type": "integer"}, }},
+                   parameters=[ParamNicName],
+                   responses={200: StandardResponse})
+    @action(detail=True, methods=["post"], url_path="configure")
+    def configure(self, request: Request, nic_name: str) -> Response:
+        """پیکربندی کارت شبکه از طریق فایل /etc/network/interfaces.d/"""
+        request_data = dict(request.data)
+        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        err = self.validate_network_config(request.data, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        try:
+            NetworkManager().configure_interface_file(nic_name, request.data)
+            NetworkManager().restart_interface(nic_name)
+            return StandardResponse(
+                message=f"کارت شبکه '{nic_name}' با موفقیت پیکربندی و راه‌اندازی مجدد شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="nic_configure_failed",
+                error_message="خطا در پیکربندی کارت شبکه.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(parameters=[ParamNicName])
+    @action(detail=True, methods=["post"], url_path="ifup")
+    def ifup(self, request: Request, nic_name: str) -> Response:
+        """فعال‌سازی کارت شبکه."""
+        request_data = dict(request.query_params)
+        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        try:
+            NetworkManager().ifup(nic_name)
+            return StandardResponse(
+                message=f"کارت شبکه '{nic_name}' فعال شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="ifup_failed",
+                error_message="خطا در فعال‌سازی کارت شبکه.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+
+    @extend_schema(parameters=[ParamNicName])
+    @action(detail=True, methods=["post"], url_path="ifdown")
+    def ifdown(self, request: Request, nic_name: str) -> Response:
+        """غیرفعال‌سازی کارت شبکه."""
+        request_data = dict(request.query_params)
+        err = self.validate_nic_exists(nic_name, save_to_db=False, request_data=request_data)
+        if err:
+            return err
+        try:
+            NetworkManager().ifdown(nic_name)
+            return StandardResponse(
+                message=f"کارت شبکه '{nic_name}' غیرفعال شد.",
+                request_data=request_data,
+                save_to_db=False,
+            )
+        except Exception as e:
+            return build_standard_error_response(
+                exc=e,
+                error_code="ifdown_failed",
+                error_message="خطا در غیرفعال‌سازی کارت شبکه.",
                 request_data=request_data,
                 save_to_db=False,
             )

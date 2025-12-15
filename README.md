@@ -16,7 +16,7 @@ apt install sudo
 
 su user
 sudo -i
-
+sudo apt install ethtools # برای دادن خروجی شبکه در کد
 # Note: نصب ابزارهای عمومی سیستم عامل
 sudo apt install bash-completion vim lshw wget curl build-essential  mlocate net-tools wget 
 
