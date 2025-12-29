@@ -1,7 +1,7 @@
 # soho_core_api/pylibs/service.py
 from __future__ import annotations
 import re
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Union, Any
 from pylibs import CLICommandError, run_cli_command
 
 
@@ -49,43 +49,42 @@ class ServiceManager:
         self._local_included = set(included_units) if included_units else None
         self._local_excluded = set(excluded_units) if excluded_units else set()
 
+    @staticmethod
+    def _normalize_unit_name(name: str) -> str:
+        """تبدیل نام یونیت به فرمت کامل systemd (افزودن .service اگر پسوند نداشت)."""
+        if "." not in name:
+            return name + ".service"
+        return name
+
     def _is_unit_allowed(self, unit_name: str) -> bool:
         """
         بررسی اینکه آیا یک یونیت مجاز به مدیریت است یا خیر (با در نظر گرفتن فیلترهای سراسری و محلی).
+        نام ورودی به‌صورت خودکار نرمالایز می‌شود.
 
         Args:
-            unit_name (str): نام یونیت (مانند `nginx.service`)
+            unit_name (str): نام یونیت (مانند `nginx` یا `nginx.service`)
 
         Returns:
             bool: True اگر مدیریت مجاز باشد، در غیر این صورت False
         """
-        # 1. اگر در excluded سراسری یا محلی باشد → غیرمجاز
-        if unit_name in self._global_excluded_units or unit_name in self._local_excluded:
+        normalized = self._normalize_unit_name(unit_name)
+        if normalized in self._global_excluded_units or normalized in self._local_excluded:
             return False
-        # 2. اگر included سراسری تنظیم شده باشد → فقط اگر در آن باشد مجاز است
-        if self._global_included_units is not None:
-            if unit_name not in self._global_included_units:
-                return False
-        # 3. اگر included محلی تنظیم شده باشد → فقط اگر در آن باشد مجاز است
-        if self._local_included is not None:
-            if unit_name not in self._local_included:
-                return False
+        if self._global_included_units is not None and normalized not in self._global_included_units:
+            return False
+        if self._local_included is not None and normalized not in self._local_included:
+            return False
         return True
 
     def _run_systemctl(self, args: List[str]) -> str:
         """
         اجرای دستور systemctl با مدیریت خطا.
 
-        Args:
-            args: آرگومان‌های systemctl (مثال: ["status", "nginx.service"])
-
-        Returns:
-            str: stdout دستور
-
-        Raises:
-            CLICommandError: در صورت خطا در اجرای systemctl
+        - اگر systemctl خطا دهد (returncode != 0)، run_cli_command خودش CLICommandError raise می‌کند.
+        - در غیر این صورت، stdout را برمی‌گرداند.
         """
-        return run_cli_command(["/usr/bin/systemctl"] + args, use_sudo=True)[0]
+        stdout, stderr = run_cli_command(["/usr/bin/systemctl"] + args, use_sudo=True)
+        return stdout
 
     def _get_unit_property(self, unit_name: str, property_name: str) -> Optional[str]:
         """
@@ -98,9 +97,9 @@ class ServiceManager:
         Returns:
             Optional[str]: مقدار خاصیت یا None اگر یونیت وجود نداشته باشد
         """
+        normalized = self._normalize_unit_name(unit_name)
         try:
-            output = self._run_systemctl(["show", "--property", property_name, unit_name])
-            # نتیجه شبیه: "ActiveState=active"
+            output = self._run_systemctl(["show", "--property", property_name, normalized])
             if "=" in output:
                 return output.split("=", 1)[1].strip()
             return None
@@ -112,7 +111,7 @@ class ServiceManager:
         دریافت وضعیت کامل یک یونیت systemd.
 
         Args:
-            unit_name (str): نام یونیت (مثال: "nginx.service")
+            unit_name (str): نام یونیت (مثال: "nginx")
 
         Returns:
             Dict شامل:
@@ -122,15 +121,16 @@ class ServiceManager:
                 - main_pid: شماره پردازه اصلی (0 اگر فعال نباشد)
                 - enabled: آیا یونیت در بوت فعال است؟
         """
-        active = self._get_unit_property(unit_name, "ActiveState") or "unknown"
-        load = self._get_unit_property(unit_name, "LoadState") or "unknown"
-        sub = self._get_unit_property(unit_name, "SubState") or "unknown"
-        pid_raw = self._get_unit_property(unit_name, "MainPID") or "0"
+        normalized = self._normalize_unit_name(unit_name)
+        active = self._get_unit_property(normalized, "ActiveState") or "unknown"
+        load = self._get_unit_property(normalized, "LoadState") or "unknown"
+        sub = self._get_unit_property(normalized, "SubState") or "unknown"
+        pid_raw = self._get_unit_property(normalized, "MainPID") or "0"
         try:
             pid = int(pid_raw)
         except ValueError:
             pid = 0
-        enabled_raw = self._get_unit_property(unit_name, "UnitFileState")
+        enabled_raw = self._get_unit_property(normalized, "UnitFileState")
         enabled = enabled_raw in ("enabled", "enabled-runtime") if enabled_raw else False
 
         return {
@@ -156,9 +156,11 @@ class ServiceManager:
                 - before: یونیت‌هایی که این یونیت باید **قبل از** آن‌ها شروع شود
                 - wanted_by: یونیت‌هایی که این یونیت را در لیست Wants خود دارند
         """
+        normalized = self._normalize_unit_name(unit_name)
+
         def _get_deps(cmd_flag: str) -> List[str]:
             try:
-                out = self._run_systemctl([cmd_flag, unit_name])
+                out = self._run_systemctl([cmd_flag, normalized])
                 return [line.strip() for line in out.strip().split("\n") if line.strip()]
             except CLICommandError:
                 return []
@@ -189,7 +191,7 @@ class ServiceManager:
             if len(parts) < 4:
                 continue
             unit = parts[0]
-            # ✅ فقط یونیت‌های مجاز را اضافه کن
+            # ✅ فقط یونیت‌های مجاز را اضافه کن (نام خام از systemctl می‌آید و کامل است)
             if not self._is_unit_allowed(unit):
                 continue
             load = parts[1]
@@ -211,44 +213,52 @@ class ServiceManager:
 
     # ========== عملیات کنترلی سرویس ==========
     def start(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["start", unit_name])
+        self._run_systemctl(["start", normalized])
 
     def stop(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["stop", unit_name])
+        self._run_systemctl(["stop", normalized])
 
     def restart(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["restart", unit_name])
+        self._run_systemctl(["restart", normalized])
 
     def reload(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["reload", unit_name])
+        self._run_systemctl(["reload", normalized])
 
     def enable(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["enable", unit_name])
+        self._run_systemctl(["enable", normalized])
 
     def disable(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["disable", unit_name])
+        self._run_systemctl(["disable", normalized])
 
     def mask(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["mask", unit_name])
+        self._run_systemctl(["mask", normalized])
 
     def unmask(self, unit_name: str) -> None:
-        if not self._is_unit_allowed(unit_name):
+        normalized = self._normalize_unit_name(unit_name)
+        if not self._is_unit_allowed(normalized):
             raise PermissionError(f"یونیت '{unit_name}' مجاز به مدیریت نیست.")
-        self._run_systemctl(["unmask", unit_name])
+        self._run_systemctl(["unmask", normalized])
 
     def is_active(self, unit_name: str) -> bool:
         """بررسی اینکه آیا یونیت در حال اجراست یا خیر."""
@@ -257,12 +267,13 @@ class ServiceManager:
 
 
 # ========== تنظیم لیست مجاز سرویس‌ها ==========
+# ⚠️ نام‌ها باید همیشه با پسوند .service باشند
 ALLOWED_SERVICES = {
-    "networking.service",
     "nginx.service",
     "smbd.service",
     "soho_core_api.service",
-    "ssh.service",
+    "ssh.service",  # در Ubuntu/Debian — در RHEL/CentOS باید sshd.service باشد
+    # "networking.service",  # ❌ حذف شده چون در اکثر سیستم‌ها وجود ندارد
 }
 
 ServiceManager.set_global_filter(included=list(ALLOWED_SERVICES))
