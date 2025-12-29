@@ -273,7 +273,8 @@ ALLOWED_SERVICES = {
     "smbd.service",
     "soho_core_api.service",
     "ssh.service",  # در Ubuntu/Debian — در RHEL/CentOS باید sshd.service باشد
-    # "networking.service",  # ❌ حذف شده چون در اکثر سیستم‌ها وجود ندارد
+    "networking.service",  # ❌ حذف شده چون در اکثر سیستم‌ها وجود ندارد
+    "snmpd.service",
 }
 
 ServiceManager.set_global_filter(included=list(ALLOWED_SERVICES))
