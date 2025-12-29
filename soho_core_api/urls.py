@@ -28,4 +28,5 @@ urlpatterns = [
     path("api/zpool/", include("soho_core_api.urls_collection.url_zpool")),
     path("api/filesystem/", include("soho_core_api.urls_collection.url_filesystem")),
     path("api/samba/", include("soho_core_api.urls_collection.url_samba")),
+    path("api/snmp/", include("soho_core_api.urls_collection.url_snmp")),
 ]

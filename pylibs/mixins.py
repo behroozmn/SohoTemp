@@ -12,6 +12,7 @@ from typing import Union, Optional, Dict, Any, List
 from pylibs import StandardErrorResponse, logger, CLICommandError, run_cli_command
 from typing import Optional, Dict, Any
 from pylibs.samba import SambaManager
+from pylibs.snmp import SNMPManager
 
 
 class DiskValidationMixin:
@@ -751,6 +752,100 @@ class SambaSharepointValidationMixin:
             return StandardErrorResponse(
                 error_code="missing_path",
                 error_message="مسیر فیزیکی (path) اجباری است.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        return None
+
+
+# ---------- SNMP Validation Mixin ----------
+class SNMPValidationMixin:
+    def validate_snmp_config(self, config: Dict[str, Any], save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی پیکربندی SNMP.
+        
+        Args:
+            config: دیکشنری حاوی پیکربندی SNMP
+            save_to_db: آیا خطا باید در دیتابیس ذخیره شود؟
+            request_data: داده درخواست اصلی
+            
+        Returns:
+            None در صورت معتبر بودن، در غیر این صورت StandardErrorResponse
+        """
+        # اعتبارسنجی جامعیت (اجباری)
+        community = config.get("community")
+        if not community or not isinstance(community, str) or not community.strip():
+            return StandardErrorResponse(
+                error_code="invalid_community",
+                error_message="جامعیت SNMP اجباری است و باید یک رشته غیر خالی باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        
+        # بررسی طول جامعیت
+        community = community.strip()
+        if len(community) > 64:
+            return StandardErrorResponse(
+                error_code="community_too_long",
+                error_message="جامعیت SNMP نباید بیشتر از 64 کاراکتر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        
+        # اعتبارسنجی پورت (اگر ارائه شده باشد)
+        port = config.get("port", "161")
+        try:
+            port_int = int(port)
+            if port_int < 1 or port_int > 65535:
+                return StandardErrorResponse(
+                    error_code="invalid_port",
+                    error_message="پورت SNMP باید عددی بین 1 تا 65535 باشد.",
+                    status=400,
+                    request_data=request_data,
+                    save_to_db=save_to_db,
+                )
+        except (ValueError, TypeError):
+            return StandardErrorResponse(
+                error_code="invalid_port_format",
+                error_message="پورت SNMP باید یک عدد معتبر باشد.",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        
+        # اعتبارسنجی نسخه SNMP (اگر ارائه شده باشد)
+        version = config.get("version", "2c")
+        if version not in ["1", "2c", "3"]:
+            return StandardErrorResponse(
+                error_code="invalid_snmp_version",
+                error_message="نسخه SNMP باید یکی از مقادیر زیر باشد: 1، 2c، 3",
+                status=400,
+                request_data=request_data,
+                save_to_db=save_to_db,
+            )
+        
+        return None
+
+    def validate_snmp_service_operation(self, operation: str, save_to_db: bool, request_data: Dict[str, Any]) -> Optional[StandardErrorResponse]:
+        """
+        اعتبارسنجی عملیات مجاز روی سرویس SNMP.
+        
+        Args:
+            operation: نام عملیات (start, stop, restart, enable, disable)
+            save_to_db: آیا خطا باید در دیتابیس ذخیره شود؟
+            request_data: داده درخواست اصلی
+            
+        Returns:
+            None در صورت معتبر بودن، در غیر این صورت StandardErrorResponse
+        """
+        valid_operations = {"start", "stop", "restart", "enable", "disable"}
+        if operation not in valid_operations:
+            return StandardErrorResponse(
+                error_code="invalid_snmp_operation",
+                error_message=f"عملیات '{operation}' معتبر نیست. مقادیر مجاز: {', '.join(valid_operations)}",
                 status=400,
                 request_data=request_data,
                 save_to_db=save_to_db,
